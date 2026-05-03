@@ -13,7 +13,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
       await context.queryClient.ensureQueryData(meQueryOptions);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
-        throw redirect({ href: "/login" });
+        throw redirect({ href: "/login", reloadDocument: true });
       }
       throw error;
     }

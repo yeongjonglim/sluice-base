@@ -1,17 +1,16 @@
 import {
   ActionIcon,
   AppShell,
+  Avatar,
   Burger,
   Group,
   Menu,
   NavLink,
-  Text,
   Title,
   useMantineColorScheme,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
-  IconChevronDown,
   IconHeartRateMonitor,
   IconHome,
   IconLogout,
@@ -66,12 +65,7 @@ function AuthedLayout() {
               </ActionIcon>
               <Menu position="bottom-end" withinPortal>
                 <Menu.Target>
-                  <ActionIcon variant="subtle" aria-label="User menu">
-                    <Group gap={4}>
-                      <Text size="sm">{displayName}</Text>
-                      <IconChevronDown size={14} />
-                    </Group>
-                  </ActionIcon>
+                  <Avatar name={displayName} color={"initials"} style={{ cursor: "pointer" }} />
                 </Menu.Target>
                 <Menu.Dropdown>
                   <Menu.Item component="a" href="/logout" leftSection={<IconLogout size={14} />}>
