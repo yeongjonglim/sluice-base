@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
-import type { MeResponse } from "../api/hooks";
+import type { MeResponse } from "@/api/hooks.ts";
 
 interface AuthContextValue {
   user: MeResponse;

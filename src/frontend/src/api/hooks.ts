@@ -1,5 +1,5 @@
 import { QueryCache, QueryClient, useQuery } from "@tanstack/react-query";
-import { ApiError, apiRequest } from "./client";
+import { ApiError, apiRequest } from "@/api/client";
 
 export interface MeResponse {
   sub: string | null;
