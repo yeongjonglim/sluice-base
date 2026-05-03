@@ -9,11 +9,10 @@ internal static class AuthSetup
 {
     private const string CookieName = "sb.auth";
 
-    public static IServiceCollection AddSluiceBaseAuth(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    public static IHostApplicationBuilder AddSluiceBaseAuth(
+        this IHostApplicationBuilder builder)
     {
-        services
+        builder.Services
             .AddAuthentication(options =>
             {
                 options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -35,6 +34,7 @@ internal static class AuthSetup
                         ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                         return Task.CompletedTask;
                     }
+
                     ctx.Response.Redirect(ctx.RedirectUri);
                     return Task.CompletedTask;
                 };
@@ -45,15 +45,16 @@ internal static class AuthSetup
                         ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
                         return Task.CompletedTask;
                     }
+
                     ctx.Response.Redirect(ctx.RedirectUri);
                     return Task.CompletedTask;
                 };
             })
             .AddOpenIdConnect(options =>
             {
-                options.Authority = configuration["Oidc:Authority"];
-                options.ClientId = configuration["Oidc:ClientId"];
-                options.ClientSecret = configuration["Oidc:ClientSecret"];
+                options.Authority = builder.Configuration["Oidc:Authority"];
+                options.ClientId = builder.Configuration["Oidc:ClientId"];
+                options.ClientSecret = builder.Configuration["Oidc:ClientSecret"];
                 options.ResponseType = "code";
                 options.UsePkce = true;
                 options.SaveTokens = true;
@@ -66,7 +67,7 @@ internal static class AuthSetup
 
                 options.CallbackPath = "/signin-oidc";
                 options.SignedOutCallbackPath = "/signout-callback-oidc";
-                options.SignedOutRedirectUri = configuration["Frontend:BaseUrl"] ?? "/";
+                options.SignedOutRedirectUri = builder.Configuration["Frontend:BaseUrl"] ?? "/";
 
                 options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
@@ -77,10 +78,29 @@ internal static class AuthSetup
 
                 options.ClaimActions.MapJsonKey("preferred_username", "preferred_username");
                 options.ClaimActions.MapJsonSubKey("role", "realm_access", "roles");
+
+                options.Events.OnRedirectToIdentityProvider = ctx =>
+                {
+                    if (ctx.Request.Path.StartsWithSegments("/api") &&
+                        !ctx.Request.Path.StartsWithSegments("/api/auth/login"))
+                    {
+                        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        ctx.HandleResponse();
+                        return Task.CompletedTask;
+                    }
+
+                    var frontendBase = builder.Configuration["Frontend:BaseUrl"];
+                    if (!string.IsNullOrEmpty(frontendBase))
+                    {
+                        ctx.ProtocolMessage.RedirectUri = frontendBase.TrimEnd('/') + "/signin-oidc";
+                    }
+
+                    return Task.CompletedTask;
+                };
             });
 
-        services.AddAuthorization();
+        builder.Services.AddAuthorization();
 
-        return services;
+        return builder;
     }
 }

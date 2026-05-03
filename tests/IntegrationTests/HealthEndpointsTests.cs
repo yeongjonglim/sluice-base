@@ -16,4 +16,14 @@ public sealed class HealthEndpointsTests(SluiceBaseStackFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
+
+    [Fact]
+    public async Task Health_Authed_Anonymous_Returns401()
+    {
+        using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
+
+        var response = await client.GetAsync("/api/health/authed");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
 }
