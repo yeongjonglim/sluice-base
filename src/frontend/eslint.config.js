@@ -1,6 +1,6 @@
 import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
-import reactRefresh from "eslint-plugin-react-refresh";
+import { reactRefresh } from "eslint-plugin-react-refresh";
 import jseslint from "@eslint/js";
 import tseslint from "typescript-eslint";
 import { tanstackConfig } from "@tanstack/eslint-config";
@@ -21,7 +21,17 @@ export default defineConfig([
     extends: [
       tseslint.configs.recommended,
       reactHooks.configs.flat.recommended,
-      reactRefresh.configs.vite,
+      reactRefresh.configs.vite({
+        extraHOCs: [
+          "createFileRoute",
+          "createLazyFileRoute",
+          "createRootRoute",
+          "createRootRouteWithContext",
+          "createLink",
+          "createRoute",
+          "createLazyRoute",
+        ],
+      }),
       reactYouMightNotNeedAnEffect.configs.recommended, // https://react.dev/learn/you-might-not-need-an-effect
     ],
     languageOptions: {

@@ -1,6 +1,7 @@
 import { Stack, Text, Title } from "@mantine/core";
 import { createFileRoute } from "@tanstack/react-router";
-import { useAuth } from "@/auth/AuthProvider.tsx";
+
+import { useAuth } from "@/auth/hooks/useAuth.tsx";
 
 export const Route = createFileRoute("/_authed/")({
   component: HomePage,
