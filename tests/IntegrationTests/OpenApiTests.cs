@@ -13,11 +13,11 @@ public class OpenApiTests(SluiceBaseStackFactory factory)
     {
         using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
 
-        var response = await client.GetAsync("/openapi/v1.json");
+        var response = await client.GetAsync("/openapi/v1.json", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
 
-        var body = await response.Content.ReadAsStringAsync();
+        var body = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         using var doc = JsonDocument.Parse(body);
 
         Assert.Equal("3.1.1", doc.RootElement.GetProperty("openapi").GetString());

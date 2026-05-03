@@ -12,7 +12,7 @@ public sealed class HealthEndpointsTests(SluiceBaseStackFactory factory)
     {
         var client = factory.InitialisedApp.CreateHttpClient("api", "https");
 
-        var response = await client.GetAsync("/api/health");
+        var response = await client.GetAsync("/api/health", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
@@ -22,7 +22,7 @@ public sealed class HealthEndpointsTests(SluiceBaseStackFactory factory)
     {
         using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
 
-        var response = await client.GetAsync("/api/health/authed");
+        var response = await client.GetAsync("/api/health/authed", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }

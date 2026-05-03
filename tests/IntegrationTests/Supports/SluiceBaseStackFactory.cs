@@ -10,7 +10,7 @@ public sealed class SluiceBaseStackFactory : IAsyncLifetime
     private DistributedApplication? App { get; set; }
     public DistributedApplication InitialisedApp => App!;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>(
         [
@@ -28,7 +28,7 @@ public sealed class SluiceBaseStackFactory : IAsyncLifetime
         await App.StartAsync();
     }
 
-    public async Task DisposeAsync()
+    public async ValueTask DisposeAsync()
     {
         if (App is not null)
         {
