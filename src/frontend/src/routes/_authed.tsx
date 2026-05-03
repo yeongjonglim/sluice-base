@@ -65,7 +65,7 @@ function AuthedLayout() {
               </ActionIcon>
               <Menu position="bottom-end" withinPortal>
                 <Menu.Target>
-                  <Avatar name={displayName} color={"initials"} style={{ cursor: "pointer" }} />
+                  <Avatar data-testid={"user-menu"} name={displayName} color={"initials"} style={{ cursor: "pointer" }} />
                 </Menu.Target>
                 <Menu.Dropdown>
                   <Menu.Item component="a" href="/logout" leftSection={<IconLogout size={14} />}>
