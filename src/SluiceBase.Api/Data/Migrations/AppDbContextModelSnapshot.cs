@@ -39,9 +39,9 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasColumnName("xml");
 
                     b.HasKey("Id")
-                        .HasName("pk_data_protection_keys");
+                        .HasName("pk_data_protection_key");
 
-                    b.ToTable("data_protection_keys", (string)null);
+                    b.ToTable("data_protection_key", (string)null);
                 });
 #pragma warning restore 612, 618
         }

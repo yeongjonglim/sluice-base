@@ -11,7 +11,7 @@ using SluiceBase.Api.Data;
 namespace SluiceBase.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260503022234_Initial")]
+    [Migration("20260503140448_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -42,9 +42,9 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasColumnName("xml");
 
                     b.HasKey("Id")
-                        .HasName("pk_data_protection_keys");
+                        .HasName("pk_data_protection_key");
 
-                    b.ToTable("data_protection_keys", (string)null);
+                    b.ToTable("data_protection_key", (string)null);
                 });
 #pragma warning restore 612, 618
         }

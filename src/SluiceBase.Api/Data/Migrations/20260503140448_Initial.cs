@@ -12,7 +12,7 @@ namespace SluiceBase.Api.Data.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "data_protection_keys",
+                name: "data_protection_key",
                 columns: table => new
                 {
                     id = table.Column<int>(type: "integer", nullable: false)
@@ -22,7 +22,7 @@ namespace SluiceBase.Api.Data.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_data_protection_keys", x => x.id);
+                    table.PrimaryKey("pk_data_protection_key", x => x.id);
                 });
         }
 
@@ -30,7 +30,7 @@ namespace SluiceBase.Api.Data.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "data_protection_keys");
+                name: "data_protection_key");
         }
     }
 }
