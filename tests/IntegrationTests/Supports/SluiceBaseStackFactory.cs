@@ -1,6 +1,7 @@
 using Aspire.Hosting;
 using Aspire.Hosting.Testing;
 using IntegrationTests.Supports.Extensions;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace IntegrationTests.Supports;
 
@@ -11,8 +12,18 @@ public sealed class SluiceBaseStackFactory : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>();
+        var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>(
+        [
+            "DcpPublisher:RandomizePorts=false" // To get fixed port for login redirect
+        ]);
         appHost.MakeTransient();
+        appHost.Services.ConfigureHttpClientDefaults(clientBuilder =>
+        {
+            clientBuilder.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = false
+            });
+        });
         App = await appHost.BuildAsync();
         await App.StartAsync();
     }
