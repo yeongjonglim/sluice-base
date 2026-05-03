@@ -12,7 +12,7 @@ public class AuthEndpointsTests(SluiceBaseStackFactory factory)
     {
         using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
 
-        var response = await client.GetAsync("/api/me");
+        var response = await client.GetAsync("/api/me", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
@@ -22,7 +22,7 @@ public class AuthEndpointsTests(SluiceBaseStackFactory factory)
     {
         using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
 
-        var response = await client.GetAsync("/login");
+        var response = await client.GetAsync("/login", TestContext.Current.CancellationToken);
 
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.NotNull(response.Headers.Location);
