@@ -18,7 +18,7 @@ Sign in with one of the dev users seeded in Keycloak:
 |---|---|
 | `alice` | `dev` |
 | `bob` | `dev` |
-
+g'"
 ## Auth flow
 
 The app uses the Backend-For-Frontend (BFF) pattern:
@@ -60,3 +60,14 @@ This is also run automatically as `prebuild`. After backend changes, run `dotnet
 - `src/auth/` — `AuthProvider` context exposing the current user.
 - `src/theme/` — Mantine theme.
 - `src/lib/` — small utilities.
+
+## End-to-end testing
+
+Playwright E2E lives in `e2e/` and assumes `aspire run` is already active. From this directory:
+
+```bash
+npm run test:e2e        # headless run
+npm run test:e2e:ui     # interactive Playwright UI
+```
+
+See [docs/TESTING.md](../../docs/TESTING.md) for the full test pyramid and conventions.
