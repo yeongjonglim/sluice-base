@@ -1,7 +1,7 @@
 import { Outlet, createRootRouteWithContext, redirect } from "@tanstack/react-router";
-import { ApiError } from "../api/client";
-import { meQueryOptions } from "../api/hooks";
 import type { QueryClient } from "@tanstack/react-query";
+import { ApiError } from "@/api/client.ts";
+import { meQueryOptions } from "@/api/hooks.ts";
 
 export interface RouterContext {
   queryClient: QueryClient;

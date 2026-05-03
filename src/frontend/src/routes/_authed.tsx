@@ -18,9 +18,9 @@ import {
   IconMoon,
   IconSun,
 } from "@tabler/icons-react";
-import { createFileRoute, Link, Outlet, useLocation } from "@tanstack/react-router";
-import { useMe } from "../api/hooks";
-import { AuthProvider } from "../auth/AuthProvider";
+import { Link, Outlet, createFileRoute, useLocation } from "@tanstack/react-router";
+import { useMe } from "@/api/hooks.ts";
+import { AuthProvider } from "@/auth/AuthProvider.tsx";
 
 export const Route = createFileRoute("/_authed")({
   component: AuthedLayout,
