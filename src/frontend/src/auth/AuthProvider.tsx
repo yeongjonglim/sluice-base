@@ -1,21 +1,7 @@
-import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
 import type { MeResponse } from "@/api/hooks.ts";
-
-interface AuthContextValue {
-  user: MeResponse;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext as AuthContext1 } from "@/auth/AuthContext.tsx";
 
 export function AuthProvider({ user, children }: { user: MeResponse; children: ReactNode }) {
-  return <AuthContext.Provider value={{ user }}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthContextValue {
-  const ctx = useContext(AuthContext);
-  if (!ctx) {
-    throw new Error("useAuth must be used within an authenticated route");
-  }
-  return ctx;
+  return <AuthContext1 value={{ user }}>{children}</AuthContext1>;
 }
