@@ -1,0 +1,101 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "SluiceBase.Api | v1",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/login": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "operationId": "Login",
+        "parameters": [
+          {
+            "name": "returnUrl",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/logout": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "operationId": "Logout",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/me": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "operationId": "Me",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/antiforgery-token": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "operationId": "AntiforgeryToken",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "operationId": "Health",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/health/authed": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "operationId": "HealthAuthed",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "SluiceBase.Api"
+    }
+  ]
+}
