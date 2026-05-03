@@ -1,73 +1,62 @@
-# React + TypeScript + Vite
+# SluiceBase frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React + TypeScript + Vite SPA for SluiceBase. Mantine 9 UI, TanStack Router (file-based) + TanStack Query, OpenAPI-driven type generation.
 
-Currently, two official plugins are available:
+## Running
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The frontend runs as part of the Aspire AppHost. From the repo root:
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+aspire run
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The dashboard opens automatically. The web app is at <http://localhost:5173>.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Sign in with one of the dev users seeded in Keycloak:
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Username | Password |
+|---|---|
+| `alice` | `dev` |
+| `bob` | `dev` |
+
+## Auth flow
+
+The app uses the Backend-For-Frontend (BFF) pattern:
+
+1. SPA loads → root route runs `GET /api/me`.
+2. Unauthenticated → returns 401 → SPA navigates to `/login`.
+3. Backend `/login` 302s to Keycloak.
+4. After Keycloak login, backend sets a session cookie and 302s back to `/`.
+5. SPA reloads → `/api/me` returns 200 → Mantine shell renders.
+
+Logging out follows the inverse path through `/logout`.
+
+The SPA never sees an OIDC token — only a server-side session cookie.
+
+## API contract
+
+The backend exposes OpenAPI at `/openapi/v1.json` and writes the document to `src/SluiceBase.Api/openapi.json` on every backend build. This file is checked into the repo. The frontend's typed schema is generated from it:
+
+```bash
+npm run gen:api
 ```
+
+This is also run automatically as `prebuild`. After backend changes, run `dotnet build src/SluiceBase.Api/SluiceBase.Api.csproj` (refreshes `openapi.json`), then `npm run gen:api` here.
+
+## Scripts
+
+| Script | Purpose |
+|---|---|
+| `npm run dev` | Vite dev server (used implicitly by `aspire run`). |
+| `npm run build` | Type-check + Vite production build. Runs `gen:api` first. |
+| `npm run gen:api` | Regenerate `src/api/schema.ts` from the backend OpenAPI document. |
+| `npm run test` | Vitest unit tests. |
+| `npm run lint` | ESLint. |
+
+## Layout
+
+- `src/routes/` — file-based TanStack Router routes (`__root.tsx` is the auth bootstrap; `_authed.tsx` is the AppShell layout for authenticated pages).
+- `src/api/` — fetch client, generated schema types, query hooks.
+- `src/auth/` — `AuthProvider` context exposing the current user.
+- `src/theme/` — Mantine theme.
+- `src/lib/` — small utilities.

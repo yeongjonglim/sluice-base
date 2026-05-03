@@ -31,7 +31,7 @@ export default defineConfig([
           "createRoute",
           "createLazyRoute",
         ],
-      }),
+      }), // https://github.com/ArnaudBarre/eslint-plugin-react-refresh/issues/102
       reactYouMightNotNeedAnEffect.configs.recommended, // https://react.dev/learn/you-might-not-need-an-effect
     ],
     languageOptions: {
