@@ -24,10 +24,12 @@ export default defineConfig({
   server: {
     port: Number(process.env.PORT ?? 5173),
     proxy: {
-      "/api": { target: apiUrl },
-      "/openapi": { target: apiUrl },
-      "/signin-oidc": { target: apiUrl },
-      "/signout-callback-oidc": { target: apiUrl },
+      "/api": { target: apiUrl, changeOrigin: false, secure: false },
+      "/openapi": { target: apiUrl, changeOrigin: false, secure: false },
+      "/login": { target: apiUrl, changeOrigin: false, secure: false },
+      "/logout": { target: apiUrl, changeOrigin: false, secure: false },
+      "/signin-oidc": { target: apiUrl, changeOrigin: false, secure: false },
+      "/signout-callback-oidc": { target: apiUrl, changeOrigin: false, secure: false },
     },
   },
 });
