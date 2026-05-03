@@ -1,4 +1,4 @@
-import { QueryCache, QueryClient, useQuery } from "@tanstack/react-query";
+import { QueryCache, QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
 import { ApiError, apiRequest } from "@/api/client";
 
 export interface MeResponse {
@@ -37,10 +37,10 @@ export function createAppQueryClient(): QueryClient {
   });
 }
 
-export const meQueryOptions = {
+export const meQueryOptions = queryOptions({
   queryKey: ["me"] as const,
   queryFn: () => apiRequest<MeResponse>("/api/me"),
-};
+});
 
 export function useMe() {
   return useQuery(meQueryOptions);

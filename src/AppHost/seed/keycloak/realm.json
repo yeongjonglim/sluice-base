@@ -22,7 +22,10 @@
       "webOrigins": [
         "+"
       ],
-      "protocol": "openid-connect"
+      "protocol": "openid-connect",
+      "attributes": {
+        "post.logout.redirect.uris": "+##http://localhost:5173/signout-callback-oidc##https://localhost:7024/signout-callback-oidc"
+      }
     }
   ],
   "users": [
