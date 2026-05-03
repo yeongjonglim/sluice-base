@@ -67,7 +67,7 @@ internal static class AuthSetup
 
                 options.CallbackPath = "/signin-oidc";
                 options.SignedOutCallbackPath = "/signout-callback-oidc";
-                options.SignedOutRedirectUri = builder.Configuration["Frontend:BaseUrl"] ?? "/";
+                // options.SignedOutRedirectUri = builder.Configuration["Frontend:BaseUrl"] ?? "/";
 
                 options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
@@ -89,11 +89,11 @@ internal static class AuthSetup
                         return Task.CompletedTask;
                     }
 
-                    var frontendBase = builder.Configuration["Frontend:BaseUrl"];
-                    if (!string.IsNullOrEmpty(frontendBase))
-                    {
-                        ctx.ProtocolMessage.RedirectUri = frontendBase.TrimEnd('/') + "/signin-oidc";
-                    }
+                    // var frontendBase = builder.Configuration["Frontend:BaseUrl"];
+                    // if (!string.IsNullOrEmpty(frontendBase))
+                    // {
+                    //     ctx.ProtocolMessage.RedirectUri = frontendBase.TrimEnd('/') + "/signin-oidc";
+                    // }
 
                     return Task.CompletedTask;
                 };
