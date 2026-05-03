@@ -10,7 +10,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.AddServiceDefaults();
 
-builder.AddNpgsqlDbContext<AppDbContext>("Metadata");
+builder.AddNpgsqlDbContext<AppDbContext>("Metadata",
+    configureDbContextOptions: opt => { opt.UseSnakeCaseNamingConvention(); });
 
 builder.Services.AddDataProtection()
     .PersistKeysToDbContext<AppDbContext>();
