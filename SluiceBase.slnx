@@ -1,8 +1,4 @@
 <Solution>
   <Project Path="src\AppHost\AppHost.csproj" />
   <Project Path="src\ServiceDefaults\ServiceDefaults.csproj" />
-  <Project Path="src\SluiceBase.Api\SluiceBase.Api.csproj" />
-  <Project Path="src\SluiceBase.Application\SluiceBase.Application.csproj" />
-  <Project Path="src\SluiceBase.Contracts\SluiceBase.Contracts.csproj" />
-  <Project Path="src\SluiceBase.Core\SluiceBase.Core.csproj" />
 </Solution>
