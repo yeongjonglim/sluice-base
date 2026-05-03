@@ -505,3 +505,8 @@ node_modules
 .yalc
 
 coverage
+
+# Playwright
+playwright-report/
+blob-report/
+playwright/.cache/
