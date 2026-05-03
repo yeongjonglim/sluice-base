@@ -16,7 +16,7 @@ builder.AddNpgsqlDbContext<AppDbContext>("Metadata",
 builder.Services.AddDataProtection()
     .PersistKeysToDbContext<AppDbContext>();
 
-builder.Services.AddSluiceBaseAuth(builder.Configuration);
+builder.AddSluiceBaseAuth();
 
 builder.Services.AddAntiforgery(o => o.HeaderName = "X-XSRF-TOKEN");
 
