@@ -1,18 +1,6 @@
 import { QueryCache, QueryClient, queryOptions, useQuery } from "@tanstack/react-query";
+import type { paths } from "./schema.ts";
 import { ApiError, apiRequest } from "@/api/client";
-
-export interface MeResponse {
-  sub: string | null;
-  email: string | null;
-  name: string | null;
-  preferredUsername: string | null;
-  roles: Array<string>;
-}
-
-export interface AuthedHealthResponse {
-  status: string;
-  user: string | null;
-}
 
 export function createAppQueryClient(): QueryClient {
   return new QueryClient({
@@ -37,9 +25,12 @@ export function createAppQueryClient(): QueryClient {
   });
 }
 
+export type MeResponse = paths["/api/me"]["get"]["responses"][200]["content"]["application/json"];
+
 export const meQueryOptions = queryOptions({
   queryKey: ["me"] as const,
-  queryFn: () => apiRequest<MeResponse>("/api/me"),
+  queryFn: () =>
+    apiRequest<MeResponse>("/api/me"),
 });
 
 export function useMe() {
@@ -49,6 +40,9 @@ export function useMe() {
 export function useAuthedHealth() {
   return useQuery({
     queryKey: ["health-authed"] as const,
-    queryFn: () => apiRequest<AuthedHealthResponse>("/api/health/authed"),
+    queryFn: () =>
+      apiRequest<
+        paths["/api/health/authed"]["get"]["responses"][200]["content"]["application/json"]
+      >("/api/health/authed"),
   });
 }
