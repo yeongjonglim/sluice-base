@@ -22,7 +22,7 @@ public sealed class User
     public string Email { get; private set; }
     public string? Name { get; private set; }
     public DateTimeOffset? LastLoginAt { get; private set; }
-    public IReadOnlyList<UserPermissionMap> Permissions { get; init; } = [];
+    public IList<UserPermissionMap> Permissions { get; init; } = [];
 
     public static User Create(string sub, string email, string? name, DateTimeOffset at) =>
         new(UserId.FromNewVersion7Guid(), sub, email, name, at);

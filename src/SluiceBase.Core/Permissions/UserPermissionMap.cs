@@ -25,7 +25,9 @@ public sealed class UserPermissionMap
     public DateTimeOffset GrantedAt { get; private set; }
     public UserId? GrantedById { get; private set; }
 
-    public static UserPermissionMap Grant(
-        UserId userId, string permission, UserId? grantedById, DateTimeOffset at) =>
+    public static UserPermissionMap Grant(UserId userId,
+        string permission,
+        UserId? grantedById,
+        DateTimeOffset at) =>
         new(UserPermissionId.FromNewVersion7Guid(), userId, permission, grantedById, at);
 }
