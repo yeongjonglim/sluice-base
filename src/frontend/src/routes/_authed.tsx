@@ -15,11 +15,13 @@ import {
   IconHome,
   IconLogout,
   IconMoon,
+  IconShieldLock,
   IconSun,
 } from "@tabler/icons-react";
 import { Link, Outlet, createFileRoute, useLocation } from "@tanstack/react-router";
 import { useMe } from "@/api/hooks.ts";
 import { AuthProvider } from "@/auth/AuthProvider.tsx";
+import { useHasPermission } from "@/auth/permission.ts";
 
 export const Route = createFileRoute("/_authed")({
   component: AuthedLayout,
@@ -30,9 +32,9 @@ function AuthedLayout() {
   const [opened, { toggle }] = useDisclosure();
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const location = useLocation();
+  const isAdmin = useHasPermission("permission:manage");
 
   if (!me.data) {
-    // useMe is prefetched by __root's beforeLoad, so this should never render.
     return null;
   }
 
@@ -65,7 +67,12 @@ function AuthedLayout() {
               </ActionIcon>
               <Menu position="bottom-end" withinPortal>
                 <Menu.Target>
-                  <Avatar data-testid={"user-menu"} name={displayName} color={"initials"} style={{ cursor: "pointer" }} />
+                  <Avatar
+                    data-testid={"user-menu"}
+                    name={displayName}
+                    color={"initials"}
+                    style={{ cursor: "pointer" }}
+                  />
                 </Menu.Target>
                 <Menu.Dropdown>
                   <Menu.Item component="a" href="/logout" leftSection={<IconLogout size={14} />}>
@@ -92,6 +99,15 @@ function AuthedLayout() {
             to="/health"
             active={location.pathname === "/health"}
           />
+          {isAdmin && (
+            <NavLink
+              label="Permission"
+              leftSection={<IconShieldLock size={16} />}
+              component={Link}
+              to="/admin/permission"
+              active={location.pathname === "/admin/permission"}
+            />
+          )}
         </AppShell.Navbar>
 
         <AppShell.Main>

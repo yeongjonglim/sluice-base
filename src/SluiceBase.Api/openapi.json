@@ -121,7 +121,14 @@
         "operationId": "PermissionCatalog",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionCatalogResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -366,7 +373,24 @@
           }
         }
       },
-      "UserId": { },
+      "PermissionCatalogResponse": {
+        "required": [
+          "permissions"
+        ],
+        "type": "object",
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UserId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "UserSummaryResponse": {
         "required": [
           "id",
