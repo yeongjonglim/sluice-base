@@ -25,7 +25,7 @@ public sealed class User
     public IReadOnlyList<UserPermissionMap> Permissions { get; init; } = [];
 
     public static User Create(string sub, string email, string? name, DateTimeOffset at) =>
-        new(UserId.From(Guid.NewGuid()), sub, email, name, at);
+        new(UserId.FromNewVersion7Guid(), sub, email, name, at);
 
     public void RecordLogin(string email, string? name, DateTimeOffset at)
     {
