@@ -1,7 +1,9 @@
-using Microsoft.AspNetCore.Authentication;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.IdentityModel.Tokens;
+using SluiceBase.Core.Permissions;
 
 namespace SluiceBase.Api.Auth;
 
@@ -12,7 +14,10 @@ internal static class AuthSetup
     public static IHostApplicationBuilder AddSluiceBaseAuth(
         this IHostApplicationBuilder builder)
     {
-        builder.Services
+        var services = builder.Services;
+        var config = builder.Configuration;
+
+        services
             .AddAuthentication(options =>
             {
                 options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -52,9 +57,9 @@ internal static class AuthSetup
             })
             .AddOpenIdConnect(options =>
             {
-                options.Authority = builder.Configuration["Oidc:Authority"];
-                options.ClientId = builder.Configuration["Oidc:ClientId"];
-                options.ClientSecret = builder.Configuration["Oidc:ClientSecret"];
+                options.Authority = config["Oidc:Authority"];
+                options.ClientId = config["Oidc:ClientId"];
+                options.ClientSecret = config["Oidc:ClientSecret"];
                 options.ResponseType = "code";
                 options.UsePkce = true;
                 options.SaveTokens = true;
@@ -67,17 +72,13 @@ internal static class AuthSetup
 
                 options.CallbackPath = "/signin-oidc";
                 options.SignedOutCallbackPath = "/signout-callback-oidc";
-                // options.SignedOutRedirectUri = builder.Configuration["Frontend:BaseUrl"] ?? "/";
 
                 options.MapInboundClaims = false;
                 options.TokenValidationParameters = new TokenValidationParameters
                 {
-                    NameClaimType = "preferred_username",
-                    RoleClaimType = "role"
+                    // NameClaimType = "preferred_username",
+                    // RoleClaimType = "role"
                 };
-
-                options.ClaimActions.MapJsonKey("preferred_username", "preferred_username");
-                options.ClaimActions.MapJsonSubKey("role", "realm_access", "roles");
 
                 options.Events.OnRedirectToIdentityProvider = ctx =>
                 {
@@ -86,20 +87,47 @@ internal static class AuthSetup
                     {
                         ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                         ctx.HandleResponse();
-                        return Task.CompletedTask;
                     }
-
-                    // var frontendBase = builder.Configuration["Frontend:BaseUrl"];
-                    // if (!string.IsNullOrEmpty(frontendBase))
-                    // {
-                    //     ctx.ProtocolMessage.RedirectUri = frontendBase.TrimEnd('/') + "/signin-oidc";
-                    // }
 
                     return Task.CompletedTask;
                 };
+
+                options.Events.OnTokenValidated = async ctx =>
+                {
+                    var requestServices = ctx.HttpContext.RequestServices;
+                    var recorder = requestServices.GetRequiredService<IUserLoginRecorder>();
+                    var clock = requestServices.GetRequiredService<TimeProvider>();
+
+                    var sub = ctx.Principal?.FindFirstValue(AppClaims.Sub);
+                    var email = ctx.Principal?.FindFirstValue(AppClaims.Email);
+                    var name = ctx.Principal?.FindFirstValue(AppClaims.Name);
+
+                    if (string.IsNullOrEmpty(sub) || string.IsNullOrEmpty(email))
+                    {
+                        throw new InvalidOperationException($"Missing {AppClaims.Sub} or {AppClaims.Email}");
+                    }
+
+                    await recorder.RecordLoginAsync(
+                        sub, email, name, clock.GetUtcNow(),
+                        ctx.HttpContext.RequestAborted);
+                };
             });
 
-        builder.Services.AddAuthorization();
+        services.AddAuthorization(options =>
+        {
+            foreach (var permission in Permissions.All)
+            {
+                options.AddPolicy(permission,
+                    policy => policy.Requirements.Add(new PermissionRequirement(permission)));
+            }
+        });
+
+        services.AddScoped<IUserLoginRecorder, UserLoginRecorder>();
+        services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
+        services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddHttpContextAccessor();
+        services.Configure<BootstrapAdminOptions>(
+            config.GetSection(BootstrapAdminOptions.SectionName));
 
         return builder;
     }

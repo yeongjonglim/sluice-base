@@ -47,6 +47,7 @@ dotnet_diagnostic.CA1707.severity = none
 
 [**/Migrations/**.{cs,vb}]
 dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1711.severity = none
 dotnet_diagnostic.IDE0300.severity = none
 dotnet_diagnostic.IDE0161.severity = none
 dotnet_diagnostic.IDE0005.severity = none
