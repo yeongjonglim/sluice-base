@@ -1,8 +1,10 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Http.HttpResults;
+using SluiceBase.Api.Auth;
+using SluiceBase.Core.Users;
 
 namespace SluiceBase.Api.Endpoints;
 
@@ -11,10 +13,10 @@ internal static class AuthEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/login",
-                (string? returnUrl) =>
+                ChallengeHttpResult (string? returnUrl) =>
                 {
                     var redirectUri = string.IsNullOrEmpty(returnUrl) ? "/" : returnUrl;
-                    return Results.Challenge(
+                    return TypedResults.Challenge(
                         new AuthenticationProperties { RedirectUri = redirectUri },
                         authenticationSchemes: [OpenIdConnectDefaults.AuthenticationScheme]);
                 })
@@ -22,8 +24,8 @@ internal static class AuthEndpoints
             .AllowAnonymous();
 
         app.MapGet("/logout",
-                () =>
-                    Results.SignOut(
+                SignOutHttpResult () =>
+                    TypedResults.SignOut(
                         new AuthenticationProperties { RedirectUri = "/" },
                         authenticationSchemes:
                         [
@@ -34,33 +36,40 @@ internal static class AuthEndpoints
             .AllowAnonymous();
 
         app.MapGet("/api/me",
-                (ClaimsPrincipal user) =>
+                async Task<Results<UnauthorizedHttpResult, Ok<MeResponse>>> (ICurrentUserAccessor currentUser, CancellationToken ct) =>
                 {
-                    var roles = user.FindAll(ClaimTypes.Role).Select(c => c.Value)
-                        .Concat(user.FindAll("role").Select(c => c.Value))
-                        .Distinct()
-                        .ToArray();
-
-                    return Results.Ok(new
+                    var user = await currentUser.GetAsync(ct);
+                    if (user is null)
                     {
-                        sub = user.FindFirstValue("sub"),
-                        email = user.FindFirstValue("email"),
-                        name = user.FindFirstValue("name"),
-                        preferredUsername = user.FindFirstValue("preferred_username")
-                                            ?? user.Identity?.Name,
-                        roles
-                    });
+                        return TypedResults.Unauthorized();
+                    }
+
+                    return TypedResults.Ok(new MeResponse(
+                        Id: user.Id,
+                        Sub: user.Sub,
+                        Email: user.Email,
+                        Name: user.Name,
+                        Permissions: [.. user.Permissions.Select(p => p.Permission)]));
                 })
             .WithName("Me")
             .RequireAuthorization();
 
         app.MapGet("/api/antiforgery-token",
-                (HttpContext ctx, IAntiforgery antiforgery) =>
+                Ok<AntiforgeryTokenResponse> (HttpContext ctx, IAntiforgery antiforgery) =>
                 {
                     var tokens = antiforgery.GetAndStoreTokens(ctx);
-                    return Results.Ok(new { headerName = tokens.HeaderName });
+                    return TypedResults.Ok(new AntiforgeryTokenResponse(tokens.HeaderName));
                 })
             .WithName("AntiforgeryToken")
             .RequireAuthorization();
     }
 }
+
+internal sealed record MeResponse(
+    UserId Id,
+    string Sub,
+    string Email,
+    string? Name,
+    string[] Permissions);
+
+internal sealed record AntiforgeryTokenResponse(string? HeaderName);
