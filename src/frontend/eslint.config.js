@@ -8,7 +8,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import reactYouMightNotNeedAnEffect from "eslint-plugin-react-you-might-not-need-an-effect";
 
 export default defineConfig([
-  globalIgnores(["dist", "**/functions/*", "*.cjs", "**/routeTree.gen.ts"]),
+  globalIgnores(["dist", "**/functions/*", "*.cjs", "**/routeTree.gen.ts", "**/schema.ts"]),
   ...tanstackConfig,
   {
     // https://github.com/TanStack/table/issues/6137
