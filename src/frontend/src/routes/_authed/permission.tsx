@@ -1,4 +1,4 @@
-import { Badge, Card, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
+import { Badge, Card, Group, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
@@ -123,14 +123,16 @@ function PermissionsAdminPage() {
               <Table.Tr key={user.id}>
                 <Table.Td>
                   <Stack gap={2}>
-                    <Text size="sm" fw={500}>
-                      {user.email}
+                    <Group gap={6}>
+                      <Text size="sm" fw={500}>
+                        {user.email}
+                      </Text>
                       {user.id === me.data?.id && (
-                        <Badge ml={6} size="xs" variant="outline">
+                        <Badge size="xs" variant="outline">
                           you
                         </Badge>
                       )}
-                    </Text>
+                    </Group>
                     {user.name && (
                       <Text size="xs" c="dimmed">
                         {user.name}

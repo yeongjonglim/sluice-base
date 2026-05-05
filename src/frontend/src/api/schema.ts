@@ -186,21 +186,21 @@ export interface components {
             detail?: null | string;
             instance?: null | string;
             errors?: {
-                [key: string]: Array<string>;
+                [key: string]: string[];
             };
         };
         ListUsersResponse: {
-            users: Array<components["schemas"]["UserSummaryResponse"]>;
+            users: components["schemas"]["UserSummaryResponse"][];
         };
         MeResponse: {
             id: components["schemas"]["UserId"];
             sub: string;
             email: string;
             name: null | string;
-            permissions: Array<string>;
+            permissions: string[];
         };
         PermissionCatalogResponse: {
-            permissions: Array<string>;
+            permissions: string[];
         };
         /** Format: uuid */
         UserId: string;
@@ -211,7 +211,7 @@ export interface components {
             name: null | string;
             /** Format: date-time */
             lastLoginAt: null | string;
-            permissions: Array<string>;
+            permissions: string[];
         };
     };
     responses: never;
