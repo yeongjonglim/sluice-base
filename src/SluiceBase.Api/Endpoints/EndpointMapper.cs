@@ -6,6 +6,7 @@ internal static class EndpointMapper
     {
         AuthEndpoints.Map(app);
         HealthEndpoints.Map(app);
+        PermissionEndpoints.Map(app);
         return app;
     }
 }

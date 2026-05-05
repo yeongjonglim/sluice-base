@@ -18,11 +18,16 @@ builder.Services.AddDataProtection()
 
 builder.AddSluiceBaseAuth();
 
-builder.Services.AddAntiforgery(o => o.HeaderName = "X-XSRF-TOKEN");
+builder.Services.AddAntiforgery(o =>
+{
+    o.HeaderName = "X-XSRF-TOKEN";
+    o.Cookie.Name = "XSRF-TOKEN";
+});
 
 builder.Services.AddOpenApi();
 
 builder.Services.AddSingleton<ITargetEngine, PostgresTargetEngine>();
+builder.Services.AddSingleton(TimeProvider.System);
 
 var app = builder.Build();
 

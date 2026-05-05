@@ -48,7 +48,14 @@
         "operationId": "Me",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -61,7 +68,14 @@
         "operationId": "AntiforgeryToken",
         "responses": {
           "200": {
-            "description": "OK"
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AntiforgeryTokenResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -87,7 +101,310 @@
         "operationId": "HealthAuthed",
         "responses": {
           "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/permission/catalog": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "operationId": "PermissionCatalog",
+        "responses": {
+          "200": {
             "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/admin/user": {
+      "get": {
+        "tags": [
+          "PermissionEndpoints"
+        ],
+        "operationId": "ListUsers",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUsersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/user/{userId}/permission": {
+      "post": {
+        "tags": [
+          "PermissionEndpoints"
+        ],
+        "operationId": "GrantPermission",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantPermissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK"
+          },
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/api/admin/user/{userId}/permission/{permission}": {
+      "delete": {
+        "tags": [
+          "PermissionEndpoints"
+        ],
+        "operationId": "RevokePermission",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "permission",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AntiforgeryTokenResponse": {
+        "required": [
+          "headerName"
+        ],
+        "type": "object",
+        "properties": {
+          "headerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "GrantPermissionRequest": {
+        "required": [
+          "permission"
+        ],
+        "type": "object",
+        "properties": {
+          "permission": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthResponse": {
+        "required": [
+          "status",
+          "user"
+        ],
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "user": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "HttpValidationProblemDetails": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "status": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "detail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "instance": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ListUsersResponse": {
+        "required": [
+          "users"
+        ],
+        "type": "object",
+        "properties": {
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserSummaryResponse"
+            }
+          }
+        }
+      },
+      "MeResponse": {
+        "required": [
+          "id",
+          "sub",
+          "email",
+          "name",
+          "permissions"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "sub": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "UserId": { },
+      "UserSummaryResponse": {
+        "required": [
+          "id",
+          "sub",
+          "email",
+          "name",
+          "lastLoginAt",
+          "permissions"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "sub": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastLoginAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       }
@@ -96,6 +413,9 @@
   "tags": [
     {
       "name": "SluiceBase.Api"
+    },
+    {
+      "name": "PermissionEndpoints"
     }
   ]
 }
