@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http.HttpResults;
+using SluiceBase.Api.Auth;
 
 namespace SluiceBase.Api.Endpoints;
 
@@ -12,7 +13,7 @@ internal static class HealthEndpoints
 
         app.MapGet("/api/health/authed",
                 Ok<HealthResponse> (HttpContext ctx) =>
-                    TypedResults.Ok(new HealthResponse("ok", ctx.User.Identity?.Name)))
+                    TypedResults.Ok(new HealthResponse("ok", ctx.User.FindFirst(AppClaims.Name)?.Value)))
             .WithName("HealthAuthed")
             .RequireAuthorization();
     }

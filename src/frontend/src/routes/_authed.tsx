@@ -104,8 +104,8 @@ function AuthedLayout() {
               label="Permission"
               leftSection={<IconShieldLock size={16} />}
               component={Link}
-              to="/admin/permission"
-              active={location.pathname === "/admin/permission"}
+              to="/permission"
+              active={location.pathname === "/permission"}
             />
           )}
         </AppShell.Navbar>

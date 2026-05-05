@@ -24,7 +24,7 @@ internal sealed class UserLoginRecorder(
         if (user is null)
         {
             user = User.Create(sub, email, name, at);
-            db.Users.Add(user);
+            await db.Users.AddAsync(user, ct);
         }
         else
         {
@@ -36,13 +36,13 @@ internal sealed class UserLoginRecorder(
 
         if (emailMatchesBootstrap && !user.HasPermission(Permissions.PermissionManage))
         {
-            db.UserPermissions.Add(UserPermissionMap.Grant(
+            await db.UserPermissions.AddAsync(UserPermissionMap.Grant(
                 user.Id,
                 Permissions.PermissionManage,
                 // I prefer to use UserId.System,
                 // but it will cause foreign key violation since there is no user with that id exists
                 grantedById: null,
-                at));
+                at), ct);
         }
 
         await db.SaveChangesAsync(ct);
