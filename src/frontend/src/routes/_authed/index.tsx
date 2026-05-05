@@ -9,7 +9,7 @@ export const Route = createFileRoute("/_authed/")({
 
 function HomePage() {
   const { user } = useAuth();
-  const displayName = user.name ?? user.preferredUsername ?? user.email ?? "stranger";
+  const displayName = user.name ?? user.email;
 
   return (
     <Stack gap="xs">

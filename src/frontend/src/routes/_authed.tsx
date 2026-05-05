@@ -36,7 +36,7 @@ function AuthedLayout() {
     return null;
   }
 
-  const displayName = me.data.name ?? me.data.preferredUsername ?? me.data.email ?? "user";
+  const displayName = me.data.name ?? me.data.email;
 
   return (
     <AuthProvider user={me.data}>
