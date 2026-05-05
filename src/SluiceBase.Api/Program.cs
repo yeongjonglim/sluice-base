@@ -24,7 +24,10 @@ builder.Services.AddAntiforgery(o =>
     o.Cookie.Name = "XSRF-TOKEN";
 });
 
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(x =>
+{
+    x.MapVogenTypesInOpenApiTransformers();
+});
 
 builder.Services.AddSingleton<ITargetEngine, PostgresTargetEngine>();
 builder.Services.AddSingleton(TimeProvider.System);

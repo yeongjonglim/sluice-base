@@ -12,7 +12,7 @@ internal static class PermissionEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/permission/catalog",
-                () => Results.Ok(new PermissionCatalogResponse([.. Permissions.All])))
+                Ok<PermissionCatalogResponse> () => TypedResults.Ok(new PermissionCatalogResponse([.. Permissions.All])))
             .WithName("PermissionCatalog")
             .RequireAuthorization();
 

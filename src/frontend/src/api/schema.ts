@@ -186,20 +186,24 @@ export interface components {
             detail?: null | string;
             instance?: null | string;
             errors?: {
-                [key: string]: string[];
+                [key: string]: Array<string>;
             };
         };
         ListUsersResponse: {
-            users: components["schemas"]["UserSummaryResponse"][];
+            users: Array<components["schemas"]["UserSummaryResponse"]>;
         };
         MeResponse: {
             id: components["schemas"]["UserId"];
             sub: string;
             email: string;
             name: null | string;
-            permissions: string[];
+            permissions: Array<string>;
         };
-        UserId: unknown;
+        PermissionCatalogResponse: {
+            permissions: Array<string>;
+        };
+        /** Format: uuid */
+        UserId: string;
         UserSummaryResponse: {
             id: components["schemas"]["UserId"];
             sub: string;
@@ -207,7 +211,7 @@ export interface components {
             name: null | string;
             /** Format: date-time */
             lastLoginAt: null | string;
-            permissions: string[];
+            permissions: Array<string>;
         };
     };
     responses: never;
@@ -348,7 +352,9 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PermissionCatalogResponse"];
+                };
             };
         };
     };
