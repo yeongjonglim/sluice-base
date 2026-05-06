@@ -642,7 +642,10 @@
           }
         }
       },
-      "ServerId": { },
+      "ServerId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "ServerResponse": {
         "required": [
           "id",

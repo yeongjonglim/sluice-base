@@ -140,6 +140,8 @@ export type ServerListResponse =
 export type ServerItem = ServerListResponse["servers"][0];
 export type TestConnectionResponse =
   paths["/api/server/{id}/test"]["post"]["responses"][200]["content"]["application/json"];
+export type CreateServerRequest =
+  paths["/api/server"]["post"]["requestBody"]["content"]["application/json"];
 
 export function useServers() {
   return useQuery({
@@ -151,13 +153,8 @@ export function useServers() {
 export function useCreateServer() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (
-      body: paths["/api/server"]["post"]["requestBody"]["content"]["application/json"],
-    ) =>
-      apiRequest<
-        paths["/api/server"]["post"]["requestBody"]["content"]["application/json"],
-        ServerItem
-      >("/api/server", { method: "POST", body }),
+    mutationFn: (body: CreateServerRequest) =>
+      apiRequest<CreateServerRequest, ServerItem>("/api/server", { method: "POST", body }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["server"] });
       notifications.show({ title: "Server created", message: "", color: "teal" });

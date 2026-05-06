@@ -15,6 +15,7 @@ import {
   IconHome,
   IconLogout,
   IconMoon,
+  IconServer,
   IconShieldLock,
   IconSun,
 } from "@tabler/icons-react";
@@ -33,6 +34,7 @@ function AuthedLayout() {
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const location = useLocation();
   const isAdmin = useHasPermission("permission:manage");
+  const isServerAdmin = useHasPermission("server:manage");
 
   if (!me.data) {
     return null;
@@ -99,6 +101,15 @@ function AuthedLayout() {
             to="/health"
             active={location.pathname === "/health"}
           />
+          {isServerAdmin && (
+            <NavLink
+              label="Servers"
+              leftSection={<IconServer size={16} />}
+              component={Link}
+              to="/server"
+              active={location.pathname === "/server"}
+            />
+          )}
           {isAdmin && (
             <NavLink
               label="Permission"
