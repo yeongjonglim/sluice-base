@@ -232,6 +232,177 @@
           }
         }
       }
+    },
+    "/api/server": {
+      "get": {
+        "tags": [
+          "ServerEndpoints"
+        ],
+        "operationId": "ListServers",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListServersResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ServerEndpoints"
+        ],
+        "operationId": "CreateServer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict"
+          }
+        }
+      }
+    },
+    "/api/server/{id}": {
+      "put": {
+        "tags": [
+          "ServerEndpoints"
+        ],
+        "operationId": "UpdateServer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ServerEndpoints"
+        ],
+        "operationId": "DeleteServer",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/server/{id}/test": {
+      "post": {
+        "tags": [
+          "ServerEndpoints"
+        ],
+        "operationId": "TestConnection",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestConnectionResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -243,6 +414,76 @@
         "type": "object",
         "properties": {
           "headerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "ConnectivityResult": {
+        "required": [
+          "ok",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "CreateServerRequest": {
+        "required": [
+          "name",
+          "kind",
+          "host",
+          "port",
+          "database",
+          "readUsername",
+          "readPassword"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "database": {
+            "type": "string"
+          },
+          "readUsername": {
+            "type": "string"
+          },
+          "readPassword": {
+            "type": "string"
+          },
+          "writeUsername": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "writePassword": {
             "type": [
               "null",
               "string"
@@ -326,6 +567,20 @@
           }
         }
       },
+      "ListServersResponse": {
+        "required": [
+          "servers"
+        ],
+        "type": "object",
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServerResponse"
+            }
+          }
+        }
+      },
       "ListUsersResponse": {
         "required": [
           "users"
@@ -387,6 +642,139 @@
           }
         }
       },
+      "ServerId": { },
+      "ServerResponse": {
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "host",
+          "port",
+          "database",
+          "isEnabled",
+          "hasWriteCredential",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "database": {
+            "type": "string"
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "hasWriteCredential": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TestConnectionResponse": {
+        "required": [
+          "read",
+          "write"
+        ],
+        "type": "object",
+        "properties": {
+          "read": {
+            "$ref": "#/components/schemas/ConnectivityResult"
+          },
+          "write": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConnectivityResult"
+              }
+            ]
+          }
+        }
+      },
+      "UpdateServerRequest": {
+        "required": [
+          "name",
+          "host",
+          "port",
+          "database"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "database": {
+            "type": "string"
+          },
+          "readUsername": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "readPassword": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "writeUsername": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "writePassword": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "isEnabled": {
+            "type": "boolean",
+            "default": true
+          }
+        }
+      },
       "UserId": {
         "type": "string",
         "format": "uuid"
@@ -440,6 +828,9 @@
     },
     {
       "name": "PermissionEndpoints"
+    },
+    {
+      "name": "ServerEndpoints"
     }
   ]
 }

@@ -11,7 +11,9 @@ internal sealed class ServerConnectionFactory(
     IDataProtectionProvider dataProtection) : IServerConnectionFactory
 {
     private readonly IDataProtector _protector =
-        dataProtection.CreateProtector("SluiceBase.ServerPassword");
+        dataProtection.CreateProtector(ProtectorPurpose);
+
+    public const string ProtectorPurpose = "SluiceBase.ServerPassword";
 
     public async Task<string> GetConnectionStringAsync(ServerId serverId, CredentialKind kind, CancellationToken ct)
     {

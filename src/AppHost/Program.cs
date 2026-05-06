@@ -1,15 +1,17 @@
+using AppHost.Extensions;
+
 var builder = DistributedApplication.CreateBuilder(args);
 
 var metadata = builder.AddPostgres("metadata-pg")
     .WithDataVolume()
     .AddDatabase("metadata");
 
-builder.AddPostgres("target-blue-pg")
+var blueDb = builder.AddPostgres("target-blue-pg")
     .WithBindMount("seed/blue", "/docker-entrypoint-initdb.d")
     .WithDataVolume()
     .AddDatabase("blue-appdb", "appdb");
 
-builder.AddPostgres("target-green-pg")
+var greenDb = builder.AddPostgres("target-green-pg")
     .WithBindMount("seed/green", "/docker-entrypoint-initdb.d")
     .WithDataVolume()
     .AddDatabase("green-appdb", "appdb");
@@ -34,5 +36,20 @@ var web = builder.AddViteApp("web", "../frontend")
 
 api.WithEnvironment("Frontend__BaseUrl",
     ReferenceExpression.Create($"{web.GetEndpoint("http")}"));
+
+metadata.WithCommand(
+    name: "seed-servers",
+    displayName: "Seed Server Registry",
+    executeCommand: context => DevServerSeed.SeedAsync(context, api, metadata, blueDb, greenDb),
+    commandOptions: new CommandOptions
+    {
+        UpdateState = ctx => ctx.ResourceSnapshot.HealthStatus is Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy
+            ? ResourceCommandState.Enabled
+            : ResourceCommandState.Disabled,
+        IconName = "DatabaseArrowDown",
+        IconVariant = IconVariant.Filled,
+        Description = "Inserts Blue and Green dev servers. Idempotent.",
+        ConfirmationMessage = "Seed dev server records into the registry?",
+    });
 
 builder.Build().Run();
