@@ -6,7 +6,6 @@ using SluiceBase.Core.Permissions;
 
 namespace IntegrationTests;
 
-[Collection("Aspire")]
 public class AdminPermissionTests(SluiceBaseStackFactory factory)
 {
     // ── helpers ──────────────────────────────────────────────────────────────
