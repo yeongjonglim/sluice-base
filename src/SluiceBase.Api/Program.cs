@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
+using SluiceBase.Api.Servers;
 using SluiceBase.Api.Targets;
 using SluiceBase.Core.Targets;
 
@@ -31,6 +32,7 @@ builder.Services.AddOpenApi(x =>
 
 builder.Services.AddSingleton<ITargetEngine, PostgresTargetEngine>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 
 var app = builder.Build();
 
