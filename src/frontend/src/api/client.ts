@@ -17,13 +17,16 @@ function readCookie(name: string): string | undefined {
   return match?.split("=")[1];
 }
 
-export interface ApiRequestOptions {
+export interface ApiRequestOptions<TRequest> {
   method?: string;
-  body?: unknown;
+  body?: TRequest extends void ? never : TRequest;
   signal?: AbortSignal;
 }
 
-export async function apiRequest<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+export async function apiRequest<TRequest, TResponse>(
+  path: string,
+  options: ApiRequestOptions<TRequest> = {},
+): Promise<TResponse> {
   const method = (options.method ?? "GET").toUpperCase();
   const headers = new Headers({
     Accept: "application/json",
@@ -56,5 +59,5 @@ export async function apiRequest<T>(path: string, options: ApiRequestOptions = {
     throw new ApiError(response.status, payload);
   }
 
-  return payload as T;
+  return payload as TResponse;
 }
