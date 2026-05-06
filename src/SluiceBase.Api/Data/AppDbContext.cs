@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
 using SluiceBase.Api.Data.Converters;
 using SluiceBase.Core.Permissions;
+using SluiceBase.Core.Servers;
 using SluiceBase.Core.Users;
 
 namespace SluiceBase.Api.Data;
@@ -13,6 +14,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
     public DbSet<User> Users => Set<User>();
     public DbSet<UserPermissionMap> UserPermissions => Set<UserPermissionMap>();
+    public DbSet<Server> Servers => Set<Server>();
+
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
