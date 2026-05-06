@@ -5,7 +5,6 @@ using IntegrationTests.Supports;
 
 namespace IntegrationTests;
 
-[Collection("Aspire")]
 public class OpenApiTests(SluiceBaseStackFactory factory)
 {
     [Fact]

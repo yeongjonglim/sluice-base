@@ -6,7 +6,6 @@ using SluiceBase.Core.Permissions;
 
 namespace IntegrationTests;
 
-[Collection("Aspire")]
 public class PermissionCatalogTests(SluiceBaseStackFactory factory)
 {
     [Fact]

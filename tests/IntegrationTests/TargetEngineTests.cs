@@ -4,7 +4,6 @@ using SluiceBase.Api.Targets;
 
 namespace IntegrationTests;
 
-[Collection("Aspire")]
 public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
 {
     [Fact]

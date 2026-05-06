@@ -1,7 +1,10 @@
 using Aspire.Hosting;
 using Aspire.Hosting.Testing;
+using IntegrationTests.Supports;
 using IntegrationTests.Supports.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+
+[assembly: AssemblyFixture(typeof(SluiceBaseStackFactory))]
 
 namespace IntegrationTests.Supports;
 
@@ -36,6 +39,3 @@ public sealed class SluiceBaseStackFactory : IAsyncLifetime
         }
     }
 }
-
-[CollectionDefinition("Aspire")]
-public class SluiceBaseCollectionDefinition : ICollectionFixture<SluiceBaseStackFactory>;

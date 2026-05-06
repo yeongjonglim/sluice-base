@@ -4,7 +4,6 @@ using IntegrationTests.Supports;
 
 namespace IntegrationTests;
 
-[Collection("Aspire")]
 public sealed class HealthEndpointsTests(SluiceBaseStackFactory factory)
 {
     [Fact]

@@ -4,7 +4,6 @@ using IntegrationTests.Supports;
 
 namespace IntegrationTests;
 
-[Collection("Aspire")]
 public class AuthEndpointsTests(SluiceBaseStackFactory factory)
 {
     [Fact]
