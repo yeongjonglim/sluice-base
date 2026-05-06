@@ -5,6 +5,7 @@ using IntegrationTests.Supports.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 
 [assembly: AssemblyFixture(typeof(SluiceBaseStackFactory))]
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace IntegrationTests.Supports;
 

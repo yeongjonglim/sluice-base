@@ -40,7 +40,7 @@ public sealed class Server
     public string Kind { get; private set; }
     public string Host { get; private set; }
     public int Port { get; private set; }
-    public string Database { get; private set; }
+    public string Database { get; private set; } // Question: What if we want to connect to multiple databases on same server?
     public string ReadUsername { get; private set; }
     public string EncryptedReadPassword { get; private set; }
     public string? WriteUsername { get; private set; }
@@ -77,14 +77,21 @@ public sealed class Server
         string host,
         int port,
         string database,
-        string readUsername,
+        string? readUsername,
+        bool isEnabled,
         DateTimeOffset at)
     {
         Name = name;
         Host = host;
         Port = port;
         Database = database;
-        ReadUsername = readUsername;
+
+        if (!string.IsNullOrEmpty(readUsername))
+        {
+            ReadUsername = readUsername;
+        }
+
+        IsEnabled = isEnabled;
         UpdatedAt = at;
     }
 

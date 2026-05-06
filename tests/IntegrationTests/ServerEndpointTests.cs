@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using Aspire.Hosting.Testing;
 using IntegrationTests.Supports;
 using Npgsql;
+using SluiceBase.Api.Endpoints;
+using SluiceBase.Core.Permissions;
 
 namespace IntegrationTests;
 
@@ -16,7 +18,7 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
         HttpMethod method, string url, string xsrf, object? body = null)
     {
         var req = new HttpRequestMessage(method, url);
-        req.Headers.Add("X-XSRF-TOKEN", xsrf);
+        req.Headers.Add("X-XSRF-TOKEN", xsrf); // Question X-XSRF-TOKEN seems to be useless
         if (body is not null)
         {
             req.Content = JsonContent.Create(body);
@@ -27,34 +29,48 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private async Task<(AuthenticatedSession session, string xsrf)> AliceSessionAsync(CancellationToken ct)
+    private async Task<(AuthenticatedSession session, string xsrf)> AuthorizedSessionAsync(CancellationToken ct)
     {
         var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+
         var xsrf = await session.FetchXsrfTokenAsync(ct);
+
+        var users = await session.Client.GetFromJsonAsync<ListUserBody>(
+            "/api/admin/user",
+            ct);
+        var alice = Assert.Single(users!.Users, u => u.Email == "alice@example.com");
+        using var grantReq = MutationRequest(
+            HttpMethod.Post,
+            $"/api/admin/user/{alice.Id}/permission",
+            xsrf,
+            new { permission = Permissions.ServerManage });
+        var grantResp = await session.Client.SendAsync(grantReq, ct);
+        grantResp.EnsureSuccessStatusCode();
+
         return (session, xsrf);
     }
 
-    private static async Task<ServerRow> CreateServerAsync(
+    private static async Task<ServerEndpoints.ServerResponse> CreateServerAsync(
         AuthenticatedSession session, string xsrf, string name,
         string host, int port, CancellationToken ct)
     {
         using var req = MutationRequest(
-            HttpMethod.Post, "/api/server", xsrf,
-            new
-            {
-                name,
-                kind = "postgres",
+            HttpMethod.Post,
+            "/api/server",
+            xsrf,
+            new ServerEndpoints.CreateServerRequest(name,
+                "postgres",
                 host,
                 port,
-                database = "appdb",
-                readUsername = "reader_blue",
-                readPassword = "reader_blue",
-                writeUsername = "writer_blue",
-                writePassword = "writer_blue",
-            });
+                "appdb",
+                "reader_blue",
+                "reader_blue",
+                "writer_blue",
+                "writer_blue")
+        );
         var resp = await session.Client.SendAsync(req, ct);
         resp.EnsureSuccessStatusCode();
-        var body = await resp.Content.ReadFromJsonAsync<ServerRow>(ct);
+        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
         return body!;
     }
 
@@ -82,30 +98,30 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
     public async Task CreateServer_HappyPath_HasPasswordTrueNeverReturnsPlaintext()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AliceSessionAsync(ct);
+        var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
         var name = UniqueName();
         using var req = MutationRequest(
-            HttpMethod.Post, "/api/server", xsrf,
-            new
-            {
-                name,
-                kind = "postgres",
-                host = "localhost",
-                port = 5432,
-                database = "appdb",
-                readUsername = "reader_blue",
-                readPassword = "s3cr3t",
-            });
+            HttpMethod.Post,
+            "/api/server",
+            xsrf,
+            new ServerEndpoints.CreateServerRequest(name,
+                "postgres",
+                "localhost",
+                5432,
+                "appdb",
+                "reader_blue",
+                "s3cr3t"
+            )
+        );
         var resp = await session.Client.SendAsync(req, ct);
         Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
 
-        var body = await resp.Content.ReadFromJsonAsync<ServerRow>(ct);
+        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
         Assert.NotNull(body);
         Assert.Equal(name, body.Name);
-        Assert.True(body.HasReadPassword);
-        Assert.False(body.HasWritePassword);
+        Assert.False(body.HasWriteCredential);
 
         // Verify no plaintext in the JSON response
         var raw = await resp.Content.ReadAsStringAsync(ct);
@@ -116,23 +132,24 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
     public async Task CreateServer_MismatchedWriteCredentials_Returns400()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AliceSessionAsync(ct);
+        var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
         using var req = MutationRequest(
-            HttpMethod.Post, "/api/server", xsrf,
-            new
-            {
-                name = UniqueName(),
-                kind = "postgres",
-                host = "localhost",
-                port = 5432,
-                database = "appdb",
-                readUsername = "reader",
-                readPassword = "pass",
-                writeUsername = "writer",
-                // writePassword intentionally omitted
-            });
+            HttpMethod.Post,
+            "/api/server",
+            xsrf,
+            new ServerEndpoints.CreateServerRequest(
+                UniqueName(),
+                "postgres",
+                "localhost",
+                5432,
+                "appdb",
+                "reader",
+                "pass",
+                "writer"
+            )
+        );
         var resp = await session.Client.SendAsync(req, ct);
         Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
     }
@@ -141,20 +158,19 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
     public async Task CreateServer_DuplicateName_Returns409()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AliceSessionAsync(ct);
+        var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
         var name = UniqueName();
-        var body = new
-        {
+        var body = new ServerEndpoints.CreateServerRequest(
             name,
-            kind = "postgres",
-            host = "localhost",
-            port = 5432,
-            database = "appdb",
-            readUsername = "r",
-            readPassword = "p",
-        };
+            "postgres",
+            "localhost",
+            5432,
+            "appdb",
+            "r",
+            "p"
+        );
 
         using var req1 = MutationRequest(HttpMethod.Post, "/api/server", xsrf, body);
         var resp1 = await session.Client.SendAsync(req1, ct);
@@ -171,7 +187,7 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
     public async Task UpdateServer_NullReadPassword_PreservesExistingCiphertext()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AliceSessionAsync(ct);
+        var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
         var connStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct)
@@ -182,32 +198,28 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
 
         // Update name only — no new password
         using var req = MutationRequest(
-            HttpMethod.Put, $"/api/server/{created.Id}", xsrf,
-            new
-            {
-                name = created.Name + "-renamed",
-                host = created.Host,
-                port = created.Port,
-                database = created.Database,
-                readUsername = created.ReadUsername,
-                readPassword = (string?)null,
-                writeUsername = (string?)null,
-                writePassword = (string?)null,
-                isEnabled = true,
-            });
+            HttpMethod.Put,
+            $"/api/server/{created.Id}",
+            xsrf,
+            new ServerEndpoints.UpdateServerRequest(
+                created.Name + "-renamed",
+                created.Host,
+                created.Port,
+                created.Database
+            )
+        );
         var resp = await session.Client.SendAsync(req, ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
 
-        var body = await resp.Content.ReadFromJsonAsync<ServerRow>(ct);
-        Assert.True(body!.HasReadPassword);
-        Assert.True(body.HasWritePassword);
+        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
+        Assert.True(body!.HasWriteCredential);
     }
 
     [Fact]
     public async Task UpdateServer_ClearsWriteCredential()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AliceSessionAsync(ct);
+        var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
         var connStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct)
@@ -215,28 +227,29 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
         var pg = new NpgsqlConnectionStringBuilder(connStr);
 
         var created = await CreateServerAsync(session, xsrf, UniqueName(), pg.Host!, pg.Port, ct);
-        Assert.True(created.HasWritePassword);
+        Assert.True(created.HasWriteCredential);
 
         // Clear write credentials by sending empty strings
         using var req = MutationRequest(
-            HttpMethod.Put, $"/api/server/{created.Id}", xsrf,
-            new
-            {
-                name = created.Name,
-                host = created.Host,
-                port = created.Port,
-                database = created.Database,
-                readUsername = created.ReadUsername,
-                readPassword = (string?)null,
-                writeUsername = "",
-                writePassword = "",
-                isEnabled = true,
-            });
+            HttpMethod.Put,
+            $"/api/server/{created.Id}",
+            xsrf,
+            new ServerEndpoints.UpdateServerRequest(
+                created.Name,
+                created.Host,
+                created.Port,
+                created.Database,
+                "new_read_user",
+                "new_read_pass",
+                string.Empty,
+                string.Empty
+            )
+        );
         var resp = await session.Client.SendAsync(req, ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
 
-        var body = await resp.Content.ReadFromJsonAsync<ServerRow>(ct);
-        Assert.False(body!.HasWritePassword);
+        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
+        Assert.False(body!.HasWriteCredential);
     }
 
     // ── delete ────────────────────────────────────────────────────────────────
@@ -245,7 +258,7 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
     public async Task DeleteServer_RemovesFromList()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AliceSessionAsync(ct);
+        var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
         var connStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct)
@@ -258,7 +271,7 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
         var resp = await session.Client.SendAsync(req, ct);
         Assert.Equal(HttpStatusCode.NoContent, resp.StatusCode);
 
-        var list = await session.Client.GetFromJsonAsync<ListBody>("/api/server", ct);
+        var list = await session.Client.GetFromJsonAsync<ServerEndpoints.ListServersResponse>("/api/server", ct);
         Assert.DoesNotContain(list!.Servers, s => s.Id == created.Id);
     }
 
@@ -268,7 +281,7 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
     public async Task TestConnection_Read_Succeeds_AgainstBlue()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AliceSessionAsync(ct);
+        var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
         var connStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct)
@@ -281,7 +294,7 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
         var resp = await session.Client.SendAsync(req, ct);
         resp.EnsureSuccessStatusCode();
 
-        var body = await resp.Content.ReadFromJsonAsync<TestConnectionBody>(ct);
+        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.TestConnectionResponse>(ct);
         Assert.True(body!.Read.Ok, body.Read.Error);
         Assert.True(body.Write?.Ok, body.Write?.Error);
     }
@@ -290,32 +303,33 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
     public async Task TestConnection_Write_IsNull_ForReadOnlyServer()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AliceSessionAsync(ct);
+        var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
         var name = UniqueName();
         using var createReq = MutationRequest(
-            HttpMethod.Post, "/api/server", xsrf,
-            new
-            {
+            HttpMethod.Post,
+            "/api/server",
+            xsrf,
+            new ServerEndpoints.CreateServerRequest(
                 name,
-                kind = "postgres",
-                host = "localhost",
-                port = 5432,
-                database = "appdb",
-                readUsername = "reader_blue",
-                readPassword = "reader_blue",
-                // No write credentials
-            });
+                "postgres",
+                "localhost",
+                5432,
+                "appdb",
+                "reader_blue",
+                "reader_blue"
+            )
+        );
         var createResp = await session.Client.SendAsync(createReq, ct);
         createResp.EnsureSuccessStatusCode();
-        var created = await createResp.Content.ReadFromJsonAsync<ServerRow>(ct);
+        var created = await createResp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
 
         using var req = MutationRequest(HttpMethod.Post, $"/api/server/{created!.Id}/test", xsrf);
         var resp = await session.Client.SendAsync(req, ct);
         resp.EnsureSuccessStatusCode();
 
-        var body = await resp.Content.ReadFromJsonAsync<TestConnectionBody>(ct);
+        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.TestConnectionResponse>(ct);
         Assert.Null(body!.Write);
     }
 
@@ -323,44 +337,39 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
     public async Task TestConnection_BadHost_ReturnsOkFalse()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AliceSessionAsync(ct);
+        var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
         using var createReq = MutationRequest(
-            HttpMethod.Post, "/api/server", xsrf,
-            new
-            {
-                name = UniqueName(),
-                kind = "postgres",
-                host = "no-such-host-xyz.invalid",
-                port = 5432,
-                database = "appdb",
-                readUsername = "r",
-                readPassword = "p",
-            });
+            HttpMethod.Post,
+            "/api/server",
+            xsrf,
+            new ServerEndpoints.CreateServerRequest(
+                UniqueName(),
+                "postgres",
+                "no-such-host-xyz.invalid",
+                5432,
+                "appdb",
+                "r",
+                "p"
+            )
+        );
         var createResp = await session.Client.SendAsync(createReq, ct);
         createResp.EnsureSuccessStatusCode();
-        var created = await createResp.Content.ReadFromJsonAsync<ServerRow>(ct);
+        var created = await createResp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
 
         using var req = MutationRequest(HttpMethod.Post, $"/api/server/{created!.Id}/test", xsrf);
         var resp = await session.Client.SendAsync(req, ct);
         resp.EnsureSuccessStatusCode();
 
-        var body = await resp.Content.ReadFromJsonAsync<TestConnectionBody>(ct);
+        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.TestConnectionResponse>(ct);
         Assert.False(body!.Read.Ok);
         Assert.NotNull(body.Read.Error);
     }
 
     // ── response types ────────────────────────────────────────────────────────
 
-    private sealed record ServerRow(
-        string Id, string Name, string Kind,
-        string Host, int Port, string Database,
-        string ReadUsername, bool HasReadPassword,
-        string? WriteUsername, bool HasWritePassword,
-        bool IsEnabled);
+    private sealed record ListUserBody(UserRow[] Users);
 
-    private sealed record ListBody(ServerRow[] Servers);
-    private sealed record ConnResult(bool Ok, string? Error);
-    private sealed record TestConnectionBody(ConnResult Read, ConnResult? Write);
+    private sealed record UserRow(string Id, string Email);
 }
