@@ -269,7 +269,8 @@ export interface components {
         PermissionCatalogResponse: {
             permissions: string[];
         };
-        ServerId: unknown;
+        /** Format: uuid */
+        ServerId: string;
         ServerResponse: {
             id: components["schemas"]["ServerId"];
             name: string;

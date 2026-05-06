@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
+import { Route as AuthedServerRouteImport } from './routes/_authed/server'
 import { Route as AuthedPermissionRouteImport } from './routes/_authed/permission'
 import { Route as AuthedHealthRouteImport } from './routes/_authed/health'
 
@@ -21,6 +22,11 @@ const AuthedRoute = AuthedRouteImport.update({
 const AuthedIndexRoute = AuthedIndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedServerRoute = AuthedServerRouteImport.update({
+  id: '/server',
+  path: '/server',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedPermissionRoute = AuthedPermissionRouteImport.update({
@@ -38,10 +44,12 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/health': typeof AuthedHealthRoute
   '/permission': typeof AuthedPermissionRoute
+  '/server': typeof AuthedServerRoute
 }
 export interface FileRoutesByTo {
   '/health': typeof AuthedHealthRoute
   '/permission': typeof AuthedPermissionRoute
+  '/server': typeof AuthedServerRoute
   '/': typeof AuthedIndexRoute
 }
 export interface FileRoutesById {
@@ -49,18 +57,20 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/_authed/health': typeof AuthedHealthRoute
   '/_authed/permission': typeof AuthedPermissionRoute
+  '/_authed/server': typeof AuthedServerRoute
   '/_authed/': typeof AuthedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/health' | '/permission'
+  fullPaths: '/' | '/health' | '/permission' | '/server'
   fileRoutesByTo: FileRoutesByTo
-  to: '/health' | '/permission' | '/'
+  to: '/health' | '/permission' | '/server' | '/'
   id:
     | '__root__'
     | '/_authed'
     | '/_authed/health'
     | '/_authed/permission'
+    | '/_authed/server'
     | '/_authed/'
   fileRoutesById: FileRoutesById
 }
@@ -84,6 +94,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedIndexRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/server': {
+      id: '/_authed/server'
+      path: '/server'
+      fullPath: '/server'
+      preLoaderRoute: typeof AuthedServerRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/permission': {
       id: '/_authed/permission'
       path: '/permission'
@@ -104,12 +121,14 @@ declare module '@tanstack/react-router' {
 interface AuthedRouteChildren {
   AuthedHealthRoute: typeof AuthedHealthRoute
   AuthedPermissionRoute: typeof AuthedPermissionRoute
+  AuthedServerRoute: typeof AuthedServerRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedHealthRoute: AuthedHealthRoute,
   AuthedPermissionRoute: AuthedPermissionRoute,
+  AuthedServerRoute: AuthedServerRoute,
   AuthedIndexRoute: AuthedIndexRoute,
 }
 
