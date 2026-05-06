@@ -1,5 +1,3 @@
-// src/SluiceBase.Core/Servers/Server.cs
-
 namespace SluiceBase.Core.Servers;
 
 public sealed class Server
