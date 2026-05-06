@@ -20,8 +20,8 @@ Permissions established who can do what, but there is nothing to do yet. The Ser
 - "Test connection" action per server (tests read and write credentials independently, returning pass/fail + error).
 - `Kind` field + UI dropdown wired from day one (single value "postgres" for now — extensible without a migration).
 - Mantine server management page at `/server`.
-- Dev seeding via an Aspire custom resource command on the `metadata` resource — inserts Blue and Green dev servers directly into the metadata DB, bypassing the API.
-- `__DEV_PLAINTEXT__:` prefix convention for dev-seeded passwords.
+- Dev seeding via an Aspire custom resource command on the `metadata` resource — calls the dev-only encrypt endpoint to get proper ciphertext, then inserts Blue and Green dev servers directly into the metadata DB.
+- A dev-only `POST /api/internal/dev/encrypt` endpoint: accepts plaintext, returns DataProtection ciphertext, excluded from OpenAPI, localhost-only, no auth.
 
 ### Out of scope (deferred)
 
@@ -56,8 +56,8 @@ After implementation, with Aspire running:
 | 5 | `IServerConnectionFactory` is the sole decryption point | One place to audit; one place to change if the encryption scheme evolves; sub-projects 4 and 5 inject this interface, never `IDataProtector` directly. |
 | 6 | `Kind` field wired now, Postgres only | Extension point costs a column and a dropdown with one item. Avoids a migration when a second engine arrives in a future sub-project. |
 | 7 | Test connection is a separate button, not coupled to save | A server may be temporarily unreachable; blocking save on reachability would prevent registering valid servers. |
-| 8 | Dev seeding via Aspire custom resource command | Runs directly against the metadata DB from the AppHost process; visible and repeatable via the Aspire dashboard; idempotent. No dev-only API endpoints. |
-| 9 | `__DEV_PLAINTEXT__:` prefix for dev-seeded passwords | AppHost has no DataProtection infrastructure. The prefix is explicit, greppable, and triggers a startup warning if found outside a Development environment. |
+| 8 | Dev seeding via Aspire custom resource command | Runs from the AppHost process; visible and repeatable via the Aspire dashboard; idempotent. |
+| 9 | Dev-only encrypt endpoint for seed passwords | AppHost has no DataProtection infrastructure. A `POST /api/internal/dev/encrypt` endpoint exposes the protector to the seed command — dev-only, localhost-only, hidden from OpenAPI. No special handling leaks into `ServerConnectionFactory` or Core. |
 | 10 | Per-server permission scoping deferred | Global `server:manage` is correct for v1; when per-server scoping lands, the migration is a nullable `ServerId` FK on `user_permission`. |
 | 11 | Single PR | Feature is self-contained; no reason to split. |
 
@@ -207,8 +207,6 @@ internal sealed class ServerConnectionFactory(
     AppDbContext db,
     IDataProtectionProvider dataProtection) : IServerConnectionFactory
 {
-    private const string DevPlaintextPrefix = "__DEV_PLAINTEXT__:";
-
     private readonly IDataProtector _protector =
         dataProtection.CreateProtector("SluiceBase.ServerPassword");
 
@@ -232,9 +230,7 @@ internal sealed class ServerConnectionFactory(
             ? server.ReadUsername
             : server.WriteUsername!;
 
-        var password = encryptedPassword.StartsWith(DevPlaintextPrefix)
-            ? encryptedPassword[DevPlaintextPrefix.Length..]
-            : _protector.Unprotect(encryptedPassword);
+        var password = _protector.Unprotect(encryptedPassword);
 
         return new NpgsqlConnectionStringBuilder
         {
@@ -248,28 +244,7 @@ internal sealed class ServerConnectionFactory(
 }
 ```
 
-Registered scoped: `services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>()`.
-
-**Dev plaintext warning** — runs at startup after migrations in `Program.cs`:
-
-```csharp
-if (!app.Environment.IsDevelopment())
-{
-    await using var scope = app.Services.CreateAsyncScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-    var hasDevPasswords = await db.Servers.AnyAsync(s =>
-        s.EncryptedReadPassword.StartsWith("__DEV_PLAINTEXT__:") ||
-        (s.EncryptedWritePassword != null &&
-         s.EncryptedWritePassword.StartsWith("__DEV_PLAINTEXT__:")));
-    if (hasDevPasswords)
-        logger.LogWarning(
-            "One or more servers have dev-plaintext passwords in a non-Development environment. " +
-            "Replace these credentials via the server management UI.");
-}
-```
-
-No servers are blocked — it is a warning only.
+Registered scoped: `services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>()`. No special dev-mode branching — the factory always decrypts via DataProtection.
 
 ## 5. API endpoints
 
@@ -277,13 +252,14 @@ New file `Api/Endpoints/ServerEndpoints.cs`, added to `EndpointMapper`.
 
 ### 5.1 Endpoint table
 
-| Endpoint | Method | Auth | Antiforgery |
-|---|---|---|---|
-| `/api/server` | GET | `server:manage` | No |
-| `/api/server` | POST | `server:manage` | Yes |
-| `/api/server/{id}` | PUT | `server:manage` | Yes |
-| `/api/server/{id}` | DELETE | `server:manage` | Yes |
-| `/api/server/{id}/test` | POST | `server:manage` | Yes |
+| Endpoint | Method | Auth | Antiforgery | Notes |
+|---|---|---|---|---|
+| `/api/server` | GET | `server:manage` | No | |
+| `/api/server` | POST | `server:manage` | Yes | |
+| `/api/server/{id}` | PUT | `server:manage` | Yes | |
+| `/api/server/{id}` | DELETE | `server:manage` | Yes | |
+| `/api/server/{id}/test` | POST | `server:manage` | Yes | |
+| `/api/internal/dev/encrypt` | POST | None | No | Dev-only; see §5.4 |
 
 ### 5.2 Request / response shapes
 
@@ -331,7 +307,37 @@ internal sealed record TestConnectionResponse(
     ConnectivityResult? Write); // null if write credential not configured
 ```
 
-### 5.3 Behaviour notes
+### 5.3 Dev-only encrypt endpoint
+
+Defined in a new `Api/Endpoints/DevEndpoints.cs`, registered in `Program.cs` only when `app.Environment.IsDevelopment()` — never added to `EndpointMapper`.
+
+```csharp
+// registered conditionally in Program.cs, not via EndpointMapper
+if (app.Environment.IsDevelopment())
+{
+    app.MapPost("/api/internal/dev/encrypt", (
+        EncryptRequest req,
+        IDataProtectionProvider dataProtection) =>
+    {
+        var protector = dataProtection.CreateProtector("SluiceBase.ServerPassword");
+        var ciphertext = protector.Protect(req.Plaintext);
+        return Results.Ok(new EncryptResponse(ciphertext));
+    })
+    .RequireHost("localhost")        // localhost-only; rejects non-local callers
+    .ExcludeFromDescription();       // hidden from OpenAPI / openapi.json
+}
+
+internal sealed record EncryptRequest(string Plaintext);
+internal sealed record EncryptResponse(string Ciphertext);
+```
+
+**Constraints:**
+- `.RequireHost("localhost")` rejects any request not originating from localhost — no auth token needed.
+- `.ExcludeFromDescription()` keeps it out of `openapi.json` and the generated TypeScript schema.
+- Only registered when `IsDevelopment()` — absent in staging/production entirely.
+- No antiforgery (called by the AppHost seed command, not a browser).
+
+### 5.4 Behaviour notes
 
 - **Create validation**: `WriteUsername` and `WritePassword` must be both non-null/non-empty or both absent. Mismatch returns `ValidationProblemDetails`.
 - **Update password semantics**: `ReadPassword: null` preserves existing ciphertext. `WriteUsername: ""` + `WritePassword: ""` calls `server.ClearWriteCredential(...)`. `WriteUsername: "user"` + `WritePassword: "pass"` calls `server.SetWriteCredential(...)`.
@@ -443,8 +449,9 @@ Defined as a static method in `AppHost/DevServerSeed.cs`:
 
 1. Calls `metadata.Resource.GetConnectionStringAsync()` to get the metadata DB admin connection string (used only to open a direct Npgsql connection to insert rows).
 2. Calls `blueDb.Resource.GetConnectionStringAsync()` and `greenDb.Resource.GetConnectionStringAsync()` — these return the Aspire postgres admin connection strings, from which **only the host and port** are extracted via `NpgsqlConnectionStringBuilder`. The application-level usernames (`app_read`, `app_write`) and their passwords are hardcoded in the seed, matching the values in `seed/blue/01-init.sql` and `seed/green/01-init.sql`. The database name is always `appdb`.
-3. Opens a direct `NpgsqlConnection` to the metadata DB.
-4. For each seed record, executes:
+3. Resolves the API base URL from the `api` resource (via `context.ServiceProvider` or captured builder reference) and calls `POST /api/internal/dev/encrypt` once per plaintext password to obtain proper DataProtection ciphertext. These are localhost-to-localhost HTTP calls; no auth token required.
+4. Opens a direct `NpgsqlConnection` to the metadata DB.
+5. For each seed record, executes:
    ```sql
    INSERT INTO server (id, name, kind, host, port, database,
        read_username, encrypted_read_password,
@@ -456,7 +463,7 @@ Defined as a static method in `AppHost/DevServerSeed.cs`:
        true, now(), now())
    ON CONFLICT (name) DO NOTHING;
    ```
-5. Returns `CommandResults.Success()` or `CommandResults.Failure(ex.Message)`.
+6. Returns `CommandResults.Success()` or `CommandResults.Failure(ex.Message)`.
 
 ### 7.3 Seed records
 
@@ -464,23 +471,10 @@ Host and port come from the Aspire-injected blue/green connection strings. Usern
 
 | Name | Host:Port | Read user | Enc. read pass | Write user | Enc. write pass |
 |---|---|---|---|---|---|
-| Blue | (Aspire-injected) | `app_read` | `__DEV_PLAINTEXT__:<from init sql>` | `app_write` | `__DEV_PLAINTEXT__:<from init sql>` |
-| Green | (Aspire-injected) | `app_read` | `__DEV_PLAINTEXT__:<from init sql>` | `null` | `null` |
+| Blue | (Aspire-injected) | `app_read` | DataProtection ciphertext (via `/api/internal/dev/encrypt`) | `app_write` | DataProtection ciphertext (via `/api/internal/dev/encrypt`) |
+| Green | (Aspire-injected) | `app_read` | DataProtection ciphertext (via `/api/internal/dev/encrypt`) | `null` | `null` |
 
 Green is intentionally seeded without write credentials so the "⚠ No write" badge is visible from day one.
-
-### 7.4 `__DEV_PLAINTEXT__:` handling
-
-In `ServerConnectionFactory`:
-```csharp
-private const string DevPlaintextPrefix = "__DEV_PLAINTEXT__:";
-
-var password = encryptedPassword.StartsWith(DevPlaintextPrefix)
-    ? encryptedPassword[DevPlaintextPrefix.Length..]
-    : _protector.Unprotect(encryptedPassword);
-```
-
-On startup, `Program.cs` logs a warning if any server row contains `__DEV_PLAINTEXT__:` and the environment is not Development. No servers are blocked — it is a warning only.
 
 ## 8. Tests
 
@@ -524,7 +518,7 @@ Signed in as alice throughout:
 
 - Concurrent create/update races (single-instance v1).
 - DataProtection key rotation (framework responsibility).
-- `__DEV_PLAINTEXT__:` warning in non-dev environments (covered by startup log; not a runtime error).
+- The dev encrypt endpoint itself — it is a one-liner over `IDataProtector.Protect`; tested transitively by the seed command populating real ciphertext that `TestConnection` then successfully decrypts.
 
 ## 9. Packages, risks, acceptance
 
@@ -544,7 +538,6 @@ services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 
 ### 9.3 Risks & open questions
 
-- **`__DEV_PLAINTEXT__:` in production**: the startup warning is a soft guard. A future hardening slice could refuse to start if dev-plaintext passwords are found outside Development.
 - **`Kind` enum drift**: `Kind` is a plain `string` column, not a DB enum. If a second engine is added in a future sub-project, no migration is needed — only a new `ITargetEngine` registration and a new dropdown option.
 - **Duplicate name conflict**: the unique index on `server.name` returns a DB exception on conflict. The create handler should catch this and return a `ValidationProblemDetails` with a clear message rather than a 500.
 - **Antiforgery on test connection**: `POST /api/server/{id}/test` requires the antiforgery token. The frontend's `apiRequest` helper already sends `X-XSRF-TOKEN` on all non-GET requests.
