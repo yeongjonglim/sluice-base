@@ -164,12 +164,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListServers"];
+        put?: never;
+        post: operations["CreateServer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateServer"];
+        post?: never;
+        delete: operations["DeleteServer"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/{id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TestConnection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         AntiforgeryTokenResponse: {
             headerName: null | string;
+        };
+        ConnectivityResult: {
+            ok: boolean;
+            error: null | string;
+        };
+        CreateServerRequest: {
+            name: string;
+            kind: string;
+            host: string;
+            /** Format: int32 */
+            port: number | string;
+            database: string;
+            readUsername: string;
+            readPassword: string;
+            writeUsername?: null | string;
+            writePassword?: null | string;
         };
         GrantPermissionRequest: {
             permission: string;
@@ -189,6 +253,9 @@ export interface components {
                 [key: string]: string[];
             };
         };
+        ListServersResponse: {
+            servers: components["schemas"]["ServerResponse"][];
+        };
         ListUsersResponse: {
             users: components["schemas"]["UserSummaryResponse"][];
         };
@@ -201,6 +268,39 @@ export interface components {
         };
         PermissionCatalogResponse: {
             permissions: string[];
+        };
+        ServerId: unknown;
+        ServerResponse: {
+            id: components["schemas"]["ServerId"];
+            name: string;
+            kind: string;
+            host: string;
+            /** Format: int32 */
+            port: number | string;
+            database: string;
+            isEnabled: boolean;
+            hasWriteCredential: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        TestConnectionResponse: {
+            read: components["schemas"]["ConnectivityResult"];
+            write: null | components["schemas"]["ConnectivityResult"];
+        };
+        UpdateServerRequest: {
+            name: string;
+            host: string;
+            /** Format: int32 */
+            port: number | string;
+            database: string;
+            readUsername?: null | string;
+            readPassword?: null | string;
+            writeUsername?: null | string;
+            writePassword?: null | string;
+            /** @default true */
+            isEnabled: boolean;
         };
         /** Format: uuid */
         UserId: string;
@@ -439,6 +539,164 @@ export interface operations {
         responses: {
             /** @description No Content */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListServers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListServersResponse"];
+                };
+            };
+        };
+    };
+    CreateServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateServerRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UpdateServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateServerRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServerResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeleteServer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TestConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestConnectionResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

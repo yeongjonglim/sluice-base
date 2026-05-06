@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { apiRequest } from "../client";
+import { apiRequest } from "@/api/client";
 
 describe("apiRequest", () => {
   const fetchMock = vi.fn();
@@ -22,7 +22,7 @@ describe("apiRequest", () => {
       }),
     );
 
-    const result = await apiRequest<{ ok: boolean }>("/api/things");
+    const result = await apiRequest<void, { ok: boolean }>("/api/things");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const init = fetchMock.mock.calls[0][1] as RequestInit;
