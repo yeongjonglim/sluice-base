@@ -275,7 +275,8 @@ function ServerForm({ server, onSuccess }: { server: ServerItem | null; onSucces
         </Text>
         <TextInput
           label="Username"
-          required
+          required={!isEditing}
+          placeholder={isEditing ? "Leave blank to keep existing" : "Enter username"}
           value={readUsername}
           onChange={(e) => setReadUsername(e.currentTarget.value)}
         />
