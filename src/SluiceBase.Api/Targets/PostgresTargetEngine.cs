@@ -1,4 +1,5 @@
 using Npgsql;
+using SluiceBase.Core.Schemas;
 using SluiceBase.Core.Targets;
 
 namespace SluiceBase.Api.Targets;
@@ -23,5 +24,10 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         {
             return new ConnectivityResult(false, ex.Message);
         }
+    }
+
+    public Task<SchemaTree> GetSchemaAsync(string connectionString, CancellationToken ct)
+    {
+        throw new NotImplementedException();
     }
 }
