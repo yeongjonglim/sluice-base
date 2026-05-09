@@ -491,8 +491,11 @@
   {
       await using var conn = new NpgsqlConnection(connectionString);
       await conn.OpenAsync(ct);
-      await using var cmd = new NpgsqlCommand(sql, conn);
-      return await cmd.ExecuteNonQueryAsync(ct);
+      await using var tx = await conn.BeginTransactionAsync(ct);
+      await using var cmd = new NpgsqlCommand(sql, conn, tx);
+      var affected = await cmd.ExecuteNonQueryAsync(ct);
+      await tx.CommitAsync(ct);
+      return affected;
   }
   ```
 
