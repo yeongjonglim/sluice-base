@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedServerRouteImport } from './routes/_authed/server'
+import { Route as AuthedQueryRouteImport } from './routes/_authed/query'
 import { Route as AuthedPermissionRouteImport } from './routes/_authed/permission'
 import { Route as AuthedHealthRouteImport } from './routes/_authed/health'
 
@@ -29,6 +30,11 @@ const AuthedServerRoute = AuthedServerRouteImport.update({
   path: '/server',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedQueryRoute = AuthedQueryRouteImport.update({
+  id: '/query',
+  path: '/query',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedPermissionRoute = AuthedPermissionRouteImport.update({
   id: '/permission',
   path: '/permission',
@@ -44,11 +50,13 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/health': typeof AuthedHealthRoute
   '/permission': typeof AuthedPermissionRoute
+  '/query': typeof AuthedQueryRoute
   '/server': typeof AuthedServerRoute
 }
 export interface FileRoutesByTo {
   '/health': typeof AuthedHealthRoute
   '/permission': typeof AuthedPermissionRoute
+  '/query': typeof AuthedQueryRoute
   '/server': typeof AuthedServerRoute
   '/': typeof AuthedIndexRoute
 }
@@ -57,19 +65,21 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/_authed/health': typeof AuthedHealthRoute
   '/_authed/permission': typeof AuthedPermissionRoute
+  '/_authed/query': typeof AuthedQueryRoute
   '/_authed/server': typeof AuthedServerRoute
   '/_authed/': typeof AuthedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/health' | '/permission' | '/server'
+  fullPaths: '/' | '/health' | '/permission' | '/query' | '/server'
   fileRoutesByTo: FileRoutesByTo
-  to: '/health' | '/permission' | '/server' | '/'
+  to: '/health' | '/permission' | '/query' | '/server' | '/'
   id:
     | '__root__'
     | '/_authed'
     | '/_authed/health'
     | '/_authed/permission'
+    | '/_authed/query'
     | '/_authed/server'
     | '/_authed/'
   fileRoutesById: FileRoutesById
@@ -101,6 +111,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedServerRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/query': {
+      id: '/_authed/query'
+      path: '/query'
+      fullPath: '/query'
+      preLoaderRoute: typeof AuthedQueryRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/permission': {
       id: '/_authed/permission'
       path: '/permission'
@@ -121,6 +138,7 @@ declare module '@tanstack/react-router' {
 interface AuthedRouteChildren {
   AuthedHealthRoute: typeof AuthedHealthRoute
   AuthedPermissionRoute: typeof AuthedPermissionRoute
+  AuthedQueryRoute: typeof AuthedQueryRoute
   AuthedServerRoute: typeof AuthedServerRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
 }
@@ -128,6 +146,7 @@ interface AuthedRouteChildren {
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedHealthRoute: AuthedHealthRoute,
   AuthedPermissionRoute: AuthedPermissionRoute,
+  AuthedQueryRoute: AuthedQueryRoute,
   AuthedServerRoute: AuthedServerRoute,
   AuthedIndexRoute: AuthedIndexRoute,
 }
