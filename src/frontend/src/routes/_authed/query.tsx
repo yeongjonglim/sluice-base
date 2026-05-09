@@ -12,6 +12,7 @@ import {
   Stack,
   Table,
   Text,
+  Tooltip,
   useMantineColorScheme,
 } from "@mantine/core";
 import {
@@ -19,6 +20,7 @@ import {
   IconChevronRight,
   IconDatabase,
   IconPlayerPlay,
+  IconPlaylistAdd,
   IconTable,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
@@ -28,14 +30,9 @@ import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
 import { keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
-import type {ReactCodeMirrorRef} from "@uiw/react-codemirror";
-import type {ExecuteQueryResponse} from "@/api/hooks";
-import {
-  meQueryOptions,
-  useExecuteQuery,
-  useSchema,
-  useServers
-} from "@/api/hooks";
+import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
+import type { ExecuteQueryResponse } from "@/api/hooks";
+import { meQueryOptions, useExecuteQuery, useSchema, useServers } from "@/api/hooks";
 
 export const Route = createFileRoute("/_authed/query")({
   beforeLoad: ({ context }) => {
@@ -233,9 +230,7 @@ function QueryResults({
             {rows.map((row, i) => (
               <Table.Tr key={i}>
                 {row.map((cell, j) => (
-                  <Table.Td key={j}>
-                    {cell}
-                  </Table.Td>
+                  <Table.Td key={j}>{cell}</Table.Td>
                 ))}
               </Table.Tr>
             ))}
@@ -327,23 +322,27 @@ function SchemaSidebar({
                 const tableExpanded = expandedTables.has(tableKey);
                 return (
                   <div key={tableKey}>
-                    <NavLink
-                      label={t.name}
-                      leftSection={<IconTable size={14} />}
-                      rightSection={
-                        tableExpanded ? (
-                          <IconChevronDown size={12} />
-                        ) : (
-                          <IconChevronRight size={12} />
-                        )
-                      }
-                      onClick={() => {
-                        toggleTable(tableKey);
-                        onTableClick(s.name, t.name, t.columns);
-                      }}
-                      pl="lg"
-                      active={false}
-                    />
+                    <Group gap="xs" justify="space-between" wrap="nowrap">
+                      <NavLink
+                        label={t.name}
+                        leftSection={<IconTable size={14} />}
+                        rightSection={
+                          tableExpanded ? (
+                            <IconChevronDown size={12} />
+                          ) : (
+                            <IconChevronRight size={12} />
+                          )
+                        }
+                        onClick={() => toggleTable(tableKey)}
+                        pl="lg"
+                        active={false}
+                      />
+                      <Tooltip label="Append SELECT query" position="right" withArrow>
+                        <Button onClick={() => onTableClick(s.name, t.name, t.columns)} size="xs" variant="subtle">
+                          <IconPlaylistAdd />
+                        </Button>
+                      </Tooltip>
+                    </Group>
                     {tableExpanded && (
                       <Stack
                         gap={0}
