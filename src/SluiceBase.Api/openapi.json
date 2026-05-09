@@ -133,6 +133,39 @@
         }
       }
     },
+    "/api/schema/{serverId}": {
+      "get": {
+        "tags": [
+          "SchemaEndpoints"
+        ],
+        "operationId": "GetSchema",
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemaTree"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
     "/api/admin/user": {
       "get": {
         "tags": [
@@ -421,6 +454,25 @@
           }
         }
       },
+      "ColumnInfo": {
+        "required": [
+          "name",
+          "dataType",
+          "isNullable"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "dataType": {
+            "type": "string"
+          },
+          "isNullable": {
+            "type": "boolean"
+          }
+        }
+      },
       "ConnectivityResult": {
         "required": [
           "ok",
@@ -642,6 +694,38 @@
           }
         }
       },
+      "SchemaInfo": {
+        "required": [
+          "name",
+          "tables"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TableInfo"
+            }
+          }
+        }
+      },
+      "SchemaTree": {
+        "required": [
+          "schemas"
+        ],
+        "type": "object",
+        "properties": {
+          "schemas": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SchemaInfo"
+            }
+          }
+        }
+      },
       "ServerId": {
         "type": "string",
         "format": "uuid"
@@ -697,6 +781,24 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "TableInfo": {
+        "required": [
+          "name",
+          "columns"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnInfo"
+            }
           }
         }
       },
@@ -828,6 +930,9 @@
   "tags": [
     {
       "name": "SluiceBase.Api"
+    },
+    {
+      "name": "SchemaEndpoints"
     },
     {
       "name": "PermissionEndpoints"
