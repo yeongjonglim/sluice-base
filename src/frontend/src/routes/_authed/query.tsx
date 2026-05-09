@@ -1,20 +1,41 @@
 import {
   Alert,
   Box,
-  Center,
+  Button,
   Code,
   Flex,
   Group,
   NavLink,
+  ScrollArea,
   Select,
   Skeleton,
   Stack,
+  Table,
   Text,
+  useMantineColorScheme,
 } from "@mantine/core";
-import { IconChevronDown, IconChevronRight, IconDatabase, IconTable } from "@tabler/icons-react";
+import {
+  IconChevronDown,
+  IconChevronRight,
+  IconDatabase,
+  IconPlayerPlay,
+  IconTable,
+} from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useState } from "react";
-import { meQueryOptions, useSchema, useServers } from "@/api/hooks";
+import { useCallback, useRef, useState } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { sql } from "@codemirror/lang-sql";
+import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
+import { keymap } from "@codemirror/view";
+import { Prec } from "@codemirror/state";
+import type {ReactCodeMirrorRef} from "@uiw/react-codemirror";
+import type {ExecuteQueryResponse} from "@/api/hooks";
+import {
+  meQueryOptions,
+  useExecuteQuery,
+  useSchema,
+  useServers
+} from "@/api/hooks";
 
 export const Route = createFileRoute("/_authed/query")({
   beforeLoad: ({ context }) => {
@@ -30,11 +51,47 @@ function QueryPage() {
   const servers = useServers();
   const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
   const schema = useSchema(selectedServerId);
+  const [editorContent, setEditorContent] = useState("");
+  const editorRef = useRef<ReactCodeMirrorRef>(null);
+  const executeQuery = useExecuteQuery();
+  const { colorScheme } = useMantineColorScheme();
 
   const serverOptions = (servers.data?.servers ?? []).map((s) => ({
     value: s.id,
     label: s.name,
   }));
+
+  const handleTableClick = useCallback(
+    (schemaName: string, tableName: string, columns: Array<{ name: string }>) => {
+      const colList = columns.map((c) => c.name).join(", ");
+      const snippet = `SELECT ${colList}\nFROM ${schemaName}.${tableName}\nLIMIT 100;\n`;
+      setEditorContent((prev) =>
+        prev.trimEnd() === "" ? snippet : `${prev.trimEnd()}\n\n${snippet}`,
+      );
+    },
+    [],
+  );
+
+  const runKeymap = Prec.highest(
+    keymap.of([
+      {
+        key: "Ctrl-Enter",
+        mac: "Cmd-Enter",
+        run: () => {
+          if (selectedServerId && editorContent.trim()) {
+            executeQuery.mutate({ serverId: selectedServerId, sql: editorContent });
+          }
+          return true;
+        },
+      },
+    ]),
+  );
+
+  const handleRun = () => {
+    if (selectedServerId && editorContent.trim()) {
+      executeQuery.mutate({ serverId: selectedServerId, sql: editorContent });
+    }
+  };
 
   return (
     <Flex h="calc(100vh - 90px)" style={{ overflow: "hidden" }}>
@@ -55,19 +112,153 @@ function QueryPage() {
             mb="xs"
             size="sm"
           />
-          <SchemaSidebar schema={schema} />
+          <SchemaSidebar schema={schema} onTableClick={handleTableClick} />
         </Stack>
       </Box>
-      <Box flex={1} style={{ overflow: "auto" }}>
-        <Center h="100%">
-          <Text c="dimmed">Query editor coming soon</Text>
-        </Center>
+
+      <Box flex={1} style={{ overflowY: "auto" }}>
+        <Stack gap={0} p="md">
+          <Box
+            style={{
+              border: "1px solid var(--mantine-color-default-border)",
+              borderRadius: "var(--mantine-radius-sm)",
+              overflow: "hidden",
+            }}
+          >
+            <CodeMirror
+              ref={editorRef}
+              value={editorContent}
+              onChange={setEditorContent}
+              extensions={[sql(), runKeymap]}
+              theme={colorScheme === "dark" ? githubDark : githubLight}
+              height="300px"
+              basicSetup={{ lineNumbers: true, foldGutter: false }}
+            />
+          </Box>
+
+          <Group mt="xs" gap="xs">
+            <Button
+              leftSection={<IconPlayerPlay size={14} />}
+              size="sm"
+              onClick={handleRun}
+              loading={executeQuery.isPending}
+              disabled={!selectedServerId || !editorContent.trim()}
+            >
+              Run
+            </Button>
+            {!selectedServerId && (
+              <Text size="xs" c="dimmed">
+                Select a server to run queries
+              </Text>
+            )}
+          </Group>
+
+          <QueryResults
+            result={executeQuery.data ?? null}
+            isPending={executeQuery.isPending}
+            isError={executeQuery.isError}
+          />
+        </Stack>
       </Box>
     </Flex>
   );
 }
 
-function SchemaSidebar({ schema }: { schema: ReturnType<typeof useSchema> }) {
+function QueryResults({
+  result,
+  isPending,
+  isError,
+}: {
+  result: ExecuteQueryResponse | null;
+  isPending: boolean;
+  isError: boolean;
+}) {
+  if (isPending) {
+    return (
+      <Stack mt="md" gap="xs">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} h={28} radius="sm" />
+        ))}
+      </Stack>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Alert color="red" title="Request failed" mt="md">
+        Could not reach the server. Check your connection and try again.
+      </Alert>
+    );
+  }
+
+  if (!result) {
+    return (
+      <Text mt="md" size="sm" c="dimmed">
+        Run a query to see results.
+      </Text>
+    );
+  }
+
+  if (result.error) {
+    return (
+      <Stack mt="md" gap="xs">
+        <Text size="xs" c="dimmed">
+          Error · {result.durationMs} ms
+        </Text>
+        <Alert color="red" title="Query error">
+          {result.error}
+        </Alert>
+      </Stack>
+    );
+  }
+
+  const columns = result.columns ?? [];
+  const rows = result.rows ?? [];
+
+  return (
+    <Stack mt="md" gap="xs">
+      <Text size="xs" c="dimmed">
+        {result.rowCount} {result.rowCount === 1 ? "row" : "rows"} · {result.durationMs} ms
+      </Text>
+      <ScrollArea type="auto">
+        <Table striped withTableBorder withColumnBorders fz="xs" style={{ whiteSpace: "nowrap" }}>
+          <Table.Thead>
+            <Table.Tr>
+              {columns.map((col) => (
+                <Table.Th key={col}>{col}</Table.Th>
+              ))}
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {rows.map((row, i) => (
+              <Table.Tr key={i}>
+                {row.map((cell, j) => (
+                  <Table.Td key={j}>
+                    {cell}
+                  </Table.Td>
+                ))}
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+        </Table>
+      </ScrollArea>
+    </Stack>
+  );
+}
+
+type TableClickHandler = (
+  schemaName: string,
+  tableName: string,
+  columns: Array<{ name: string }>,
+) => void;
+
+function SchemaSidebar({
+  schema,
+  onTableClick,
+}: {
+  schema: ReturnType<typeof useSchema>;
+  onTableClick: TableClickHandler;
+}) {
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
 
@@ -146,7 +337,10 @@ function SchemaSidebar({ schema }: { schema: ReturnType<typeof useSchema> }) {
                           <IconChevronRight size={12} />
                         )
                       }
-                      onClick={() => toggleTable(tableKey)}
+                      onClick={() => {
+                        toggleTable(tableKey);
+                        onTableClick(s.name, t.name, t.columns);
+                      }}
                       pl="lg"
                       active={false}
                     />
