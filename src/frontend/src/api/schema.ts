@@ -116,6 +116,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/schema/{serverId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetSchema"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/user": {
         parameters: {
             query?: never;
@@ -219,6 +235,11 @@ export interface components {
         AntiforgeryTokenResponse: {
             headerName: null | string;
         };
+        ColumnInfo: {
+            name: string;
+            dataType: string;
+            isNullable: boolean;
+        };
         ConnectivityResult: {
             ok: boolean;
             error: null | string;
@@ -269,6 +290,13 @@ export interface components {
         PermissionCatalogResponse: {
             permissions: string[];
         };
+        SchemaInfo: {
+            name: string;
+            tables: components["schemas"]["TableInfo"][];
+        };
+        SchemaTree: {
+            schemas: components["schemas"]["SchemaInfo"][];
+        };
         /** Format: uuid */
         ServerId: string;
         ServerResponse: {
@@ -285,6 +313,10 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        TableInfo: {
+            name: string;
+            columns: components["schemas"]["ColumnInfo"][];
         };
         TestConnectionResponse: {
             read: components["schemas"]["ConnectivityResult"];
@@ -456,6 +488,35 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["PermissionCatalogResponse"];
                 };
+            };
+        };
+    };
+    GetSchema: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SchemaTree"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
