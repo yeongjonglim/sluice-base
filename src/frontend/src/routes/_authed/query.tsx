@@ -157,7 +157,7 @@ function SchemaSidebar({ schema }: { schema: ReturnType<typeof useSchema> }) {
                       >
                         {t.columns.map((c) => (
                           <Group key={c.name} gap="xs" px="xs" py={2} wrap="nowrap">
-                            <Text size="xs" style={{ minWidth: 0 }} truncate>
+                            <Text size="xs" style={{ minWidth: 0 }}>
                               {c.name}
                             </Text>
                             <Code fz="xs">{c.dataType}</Code>

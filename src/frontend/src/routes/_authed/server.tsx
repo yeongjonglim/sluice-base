@@ -270,6 +270,7 @@ function ServerForm({ server, onSuccess }: { server: ServerItem | null; onSucces
           onChange={(e) => setDatabase(e.currentTarget.value)}
         />
 
+        {/* TODO: Add a warning here later to tell that it's admin's responsibility to ensure that this credential must only be able to read. If it is able to read and write, that means that the query page is also possible to read and write*/}
         <Text fw={500} size="sm" mt="xs">
           Read credentials
         </Text>
