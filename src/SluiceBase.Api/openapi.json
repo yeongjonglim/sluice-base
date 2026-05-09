@@ -166,6 +166,49 @@
         }
       }
     },
+    "/api/query": {
+      "post": {
+        "tags": [
+          "QueryEndpoints"
+        ],
+        "operationId": "ExecuteQuery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QueryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/user": {
       "get": {
         "tags": [
@@ -694,6 +737,76 @@
           }
         }
       },
+      "QueryRequest": {
+        "required": [
+          "serverId",
+          "sql"
+        ],
+        "type": "object",
+        "properties": {
+          "serverId": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "sql": {
+            "type": "string"
+          }
+        }
+      },
+      "QueryResponse": {
+        "required": [
+          "columns",
+          "rows",
+          "rowCount",
+          "durationMs",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "rows": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "rowCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "durationMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "SchemaInfo": {
         "required": [
           "name",
@@ -933,6 +1046,9 @@
     },
     {
       "name": "SchemaEndpoints"
+    },
+    {
+      "name": "QueryEndpoints"
     },
     {
       "name": "PermissionEndpoints"

@@ -9,6 +9,7 @@ internal static class EndpointMapper
         PermissionEndpoints.Map(app);
         ServerEndpoints.Map(app);
         SchemaEndpoints.Map(app);
+        QueryEndpoints.Map(app);
 
         if (app.Environment.IsDevelopment())
         {

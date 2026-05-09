@@ -4,7 +4,7 @@ using IntegrationTests.Supports;
 
 namespace IntegrationTests;
 
-public sealed class HealthEndpointsTests(SluiceBaseStackFactory factory)
+public sealed class HealthEndpointTests(SluiceBaseStackFactory factory)
 {
     [Fact]
     public async Task Health_Anonymous_ReturnsOk()

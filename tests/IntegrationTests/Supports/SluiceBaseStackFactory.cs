@@ -30,6 +30,8 @@ public sealed class SluiceBaseStackFactory : IAsyncLifetime
         });
         App = await appHost.BuildAsync();
         await App.StartAsync();
+
+        await App.ResourceNotifications.WaitForResourceHealthyAsync("api");
     }
 
     public async ValueTask DisposeAsync()

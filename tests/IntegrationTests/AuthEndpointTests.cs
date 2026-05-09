@@ -4,7 +4,7 @@ using IntegrationTests.Supports;
 
 namespace IntegrationTests;
 
-public class AuthEndpointsTests(SluiceBaseStackFactory factory)
+public class AuthEndpointTests(SluiceBaseStackFactory factory)
 {
     [Fact]
     public async Task Me_Anonymous_Returns401()
