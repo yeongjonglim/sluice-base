@@ -221,3 +221,15 @@ export function useTestConnection() {
       apiRequest<void, TestConnectionResponse>(`/api/server/${id}/test`, { method: "POST" }),
   });
 }
+
+export type SchemaResponse =
+  paths["/api/schema/{serverId}"]["get"]["responses"][200]["content"]["application/json"];
+
+export function useSchema(serverId: string | null) {
+  return useQuery({
+    queryKey: ["schema", serverId] as const,
+    queryFn: () => apiRequest<void, SchemaResponse>(`/api/schema/${serverId}`),
+    enabled: serverId !== null,
+    staleTime: 5 * 60 * 1000,
+  });
+}
