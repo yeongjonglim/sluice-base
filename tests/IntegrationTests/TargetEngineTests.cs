@@ -1,5 +1,6 @@
 using Aspire.Hosting.Testing;
 using IntegrationTests.Supports;
+using Npgsql;
 using SluiceBase.Api.Targets;
 
 namespace IntegrationTests;
@@ -98,5 +99,23 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
         Assert.NotNull(result);
         Assert.Single(result.Columns);
         Assert.Empty(result.Rows);
+    }
+
+    [Theory]
+    [InlineData("INSERT INTO public.users (id, email) VALUES (9999, 'injected@test.com')")]
+    [InlineData("UPDATE public.users SET email = 'x@x.com'")]
+    [InlineData("DELETE FROM public.users")]
+    public async Task TargetEngine_Postgres_ExecuteQuery_RejectsMutatingStatements(string sql)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var ex = await Assert.ThrowsAsync<PostgresException>(async () =>
+            await _targetEngine.ExecuteQueryAsync(connectionString, sql, ct));
+
+        // PostgreSQL error code 25006 = read_only_sql_transaction
+        Assert.Equal("25006", ex.SqlState);
     }
 }
