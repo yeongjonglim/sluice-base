@@ -1,4 +1,5 @@
 using Npgsql;
+using SluiceBase.Core.Queries;
 using SluiceBase.Core.Schemas;
 using SluiceBase.Core.Targets;
 
@@ -66,5 +67,40 @@ internal sealed class PostgresTargetEngine : ITargetEngine
             .ToList();
 
         return new SchemaTree(schemas);
+    }
+
+    public async Task<QueryData> ExecuteQueryAsync(string connectionString, string sql, CancellationToken ct)
+    {
+        await using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+
+        await using (var setReadOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", conn, tx))
+        {
+            await setReadOnly.ExecuteNonQueryAsync(ct);
+        }
+
+        string[] columns;
+        var rows = new List<string?[]>();
+
+        await using (var cmd = new NpgsqlCommand(sql, conn, tx))
+        await using (var reader = await cmd.ExecuteReaderAsync(ct))
+        {
+            columns = [.. Enumerable.Range(0, reader.FieldCount).Select(reader.GetName)];
+
+            while (await reader.ReadAsync(ct))
+            {
+                var row = new string?[reader.FieldCount];
+                for (var i = 0; i < reader.FieldCount; i++)
+                {
+                    row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i).ToString();
+                }
+
+                rows.Add(row);
+            }
+        }
+
+        await tx.CommitAsync(ct);
+        return new QueryData(columns, [.. rows]);
     }
 }

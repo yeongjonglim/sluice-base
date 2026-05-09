@@ -1,3 +1,4 @@
+using SluiceBase.Core.Queries;
 using SluiceBase.Core.Schemas;
 
 namespace SluiceBase.Core.Targets;
@@ -12,6 +13,11 @@ public interface ITargetEngine
 
     Task<SchemaTree> GetSchemaAsync(
         string connectionString,
+        CancellationToken ct);
+
+    Task<QueryData> ExecuteQueryAsync(
+        string connectionString,
+        string sql,
         CancellationToken ct);
 }
 
