@@ -6,6 +6,8 @@ namespace IntegrationTests;
 
 public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
 {
+    private readonly PostgresTargetEngine _targetEngine = new();
+
     [Fact]
     public async Task TargetEngine_Postgres_TestConnection_Succeeds()
     {
@@ -14,14 +16,13 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
 
         Assert.NotNull(connectionString);
 
-        var engine = new PostgresTargetEngine();
-        var result = await engine.TestConnectionAsync(
+        var result = await _targetEngine.TestConnectionAsync(
             connectionString,
             TestContext.Current.CancellationToken);
 
         Assert.True(result.Ok, result.Error);
         Assert.Null(result.Error);
-        Assert.Equal("postgres", engine.Kind);
+        Assert.Equal("postgres", _targetEngine.Kind);
     }
 
     [Fact]
@@ -30,8 +31,7 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
         const string brokenConnectionString =
             "Host=does-not-exist.invalid;Port=65000;Database=appdb;Username=u;Password=p;Timeout=2";
 
-        var engine = new PostgresTargetEngine();
-        var result = await engine.TestConnectionAsync(
+        var result = await _targetEngine.TestConnectionAsync(
             brokenConnectionString,
             TestContext.Current.CancellationToken);
 
@@ -50,8 +50,7 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
 
         Assert.NotNull(connectionString);
 
-        var engine = new PostgresTargetEngine();
-        var tree = await engine.GetSchemaAsync(
+        var tree = await _targetEngine.GetSchemaAsync(
             connectionString,
             TestContext.Current.CancellationToken);
 

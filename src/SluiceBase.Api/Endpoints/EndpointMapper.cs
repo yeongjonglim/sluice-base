@@ -8,6 +8,7 @@ internal static class EndpointMapper
         HealthEndpoints.Map(app);
         PermissionEndpoints.Map(app);
         ServerEndpoints.Map(app);
+        SchemaEndpoints.Map(app);
 
         if (app.Environment.IsDevelopment())
         {
