@@ -118,4 +118,48 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
         // PostgreSQL error code 25006 = read_only_sql_transaction
         Assert.Equal("25006", ex.SqlState);
     }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_ExecuteUpdate_AffectsRows()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        // Use write credentials from the blue DB seed (writer_blue/writer_blue)
+        var builder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Username = "writer_blue",
+            Password = "writer_blue",
+        };
+
+        var result = await _targetEngine.ExecuteUpdateAsync(
+            builder.ConnectionString,
+            "UPDATE public.users SET email = email WHERE 1=0",
+            ct);
+
+        Assert.Equal(0, result);
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_ExecuteUpdate_ThrowsOnInvalidSql()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var builder = new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Username = "writer_blue",
+            Password = "writer_blue",
+        };
+
+        await Assert.ThrowsAsync<PostgresException>(async () =>
+            await _targetEngine.ExecuteUpdateAsync(
+                builder.ConnectionString,
+                "UPDATE public.nonexistent SET foo = bar",
+                ct));
+    }
 }

@@ -103,4 +103,15 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         await tx.CommitAsync(ct);
         return new QueryData(columns, [.. rows]);
     }
+
+    public async Task<int> ExecuteUpdateAsync(string connectionString, string sql, CancellationToken ct)
+    {
+        await using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+        await using var cmd = new NpgsqlCommand(sql, conn, tx);
+        var affected = await cmd.ExecuteNonQueryAsync(ct);
+        await tx.CommitAsync(ct);
+        return affected;
+    }
 }
