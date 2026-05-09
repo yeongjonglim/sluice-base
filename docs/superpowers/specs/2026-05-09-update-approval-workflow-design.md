@@ -26,18 +26,19 @@ Managed via the **Stateless** NuGet package (to be added to `SluiceBase.Api`).
   ┌──────────┐ ┌───────────┐ ┌──────────┐
   │ approved │ │ cancelled │ │ rejected │
   └──────────┘ └───────────┘ └──────────┘
-       │
-    execute
-       │
-  ┌──────────┐
-  │ executed │
-  └──────────┘
+     /     \
+ cancel   execute
+   /           \
+┌───────────┐ ┌──────────┐
+│ cancelled │ │ executed │
+└───────────┘ └──────────┘
 ```
 
 Valid transitions:
 - `pending` → `approved` (trigger: Approve, permission: `update:approve`)
 - `pending` → `rejected` (trigger: Reject, permission: `update:approve`)
 - `pending` → `cancelled` (trigger: Cancel, permission: `update:submit`)
+- `approved` → `cancelled` (trigger: Cancel, permission: `update:submit`)
 - `approved` → `executed` (trigger: Execute, permission: `update:execute`)
 
 `rejected`, `cancelled`, and `executed` are terminal states. Invalid transitions return `409 Conflict`.
@@ -161,6 +162,7 @@ Layout (top to bottom):
    - `pending` + has `update:approve`: Approve and Reject buttons, each opening a modal with a required note field
    - `pending` + has `update:submit` (any submitter, not just the original): Cancel button
    - `approved` + has `update:execute`: Execute button with a confirmation dialog
+   - `approved` + has `update:submit`: Cancel button (shown alongside Execute if the user also has `update:execute`)
    - Terminal states: no action buttons
 
 ### Hooks
@@ -185,7 +187,7 @@ Integration tests (following existing patterns in the test project):
 - State machine guard tests: each invalid transition returns `409` (approve an executed request, cancel an approved request, execute a pending request, etc.)
 - Full happy-path flow: `pending → approved → executed` with correct result fields
 - Execution failure path: SQL error marks request `executed` with `exec_success = false` and `exec_error` set
-- Cancel guard: only works when `pending`
+- Cancel guard: works when `pending` or `approved`; returns `409` from any other state
 - Missing write credential: `409` when executing against a server with no write credentials configured
 
 ### Frontend
