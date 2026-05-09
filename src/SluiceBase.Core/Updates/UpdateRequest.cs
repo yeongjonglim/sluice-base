@@ -55,9 +55,9 @@ public sealed class UpdateRequest
 
     private abstract record BaseTriggerRequest(Actioned Actioned); // Not used anywhere yet
 
-    private record TriggerRequest(Actioned Actioned, string Note) : BaseTriggerRequest(Actioned);
+    private sealed record TriggerRequest(Actioned Actioned, string Note) : BaseTriggerRequest(Actioned);
 
-    private record ExecuteTriggerRequest(
+    private sealed record ExecuteTriggerRequest(
         Actioned Actioned,
         bool Success,
         int DurationMs,
