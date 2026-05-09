@@ -49,7 +49,7 @@ internal static class QueryEndpoints
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
 
         QueryResponse response;
-        string logStatus;
+        QueryLogStatus logStatus;
         int? rowCount = null;
 
         try
