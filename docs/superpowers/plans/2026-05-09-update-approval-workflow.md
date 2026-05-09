@@ -4,7 +4,7 @@
 
 **Goal:** Implement the full update request lifecycle — submit, approve/reject, cancel, execute — with a Stateless state machine, 7 API endpoints, EF migration, and three frontend routes.
 
-**Architecture:** Domain entity `UpdateRequest` lives in `SluiceBase.Core`; a Stateless machine in `SluiceBase.Api` guards state transitions; seven minimal-API endpoints follow the existing `ServerEndpoints` pattern. The frontend adds three TanStack Router routes under `/_authed/update/` and seven new hooks.
+**Architecture:** Domain entity `UpdateRequest` owns the Stateless machine internally — it is the single point of entry for all state transitions. Endpoints call domain methods (`Approve`, `Reject`, `Cancel`, `RecordExecution`) and catch `InvalidOperationException` for 409 Conflict responses. No state machine or trigger types leak into the API layer. Seven minimal-API endpoints follow the existing `ServerEndpoints` pattern. The frontend adds three TanStack Router routes under `/_authed/update/` and seven new hooks.
 
 **Tech Stack:** .NET 10, Stateless (NuGet), EF Core + Npgsql, React + TypeScript, Mantine, TanStack Router/Query, Vitest
 
@@ -15,9 +15,7 @@
 **Create (backend):**
 - `src/SluiceBase.Core/Updates/UpdateRequestId.cs`
 - `src/SluiceBase.Core/Updates/UpdateRequestStatus.cs`
-- `src/SluiceBase.Core/Updates/UpdateRequest.cs`
-- `src/SluiceBase.Api/Updates/UpdateRequestTrigger.cs`
-- `src/SluiceBase.Api/Updates/UpdateRequestMachine.cs`
+- `src/SluiceBase.Core/Updates/UpdateRequest.cs` — owns the Stateless machine; triggers are private
 - `src/SluiceBase.Api/Auth/AnyPermissionRequirement.cs`
 - `src/SluiceBase.Api/Auth/AnyPermissionAuthorizationHandler.cs`
 - `src/SluiceBase.Api/Data/Configurations/UpdateRequestConfiguration.cs`
@@ -26,7 +24,7 @@
 
 **Modify (backend):**
 - `src/SluiceBase.Core/Permissions/Permissions.cs` — add `UpdateAny` constant
-- `src/SluiceBase.Api/SluiceBase.Api.csproj` — add Stateless NuGet
+- `src/SluiceBase.Core/SluiceBase.Core.csproj` — add Stateless NuGet (machine lives in Core)
 - `src/SluiceBase.Api/Data/AppDbContext.cs` — add `DbSet<UpdateRequest>`
 - `src/SluiceBase.Api/Auth/AuthSetup.cs` — register new policy + handler
 - `src/SluiceBase.Api/Endpoints/EndpointMapper.cs` — register `UpdateEndpoints`
@@ -48,17 +46,17 @@
 ## Task 1: Stateless NuGet + core domain types
 
 **Files:**
-- Modify: `src/SluiceBase.Api/SluiceBase.Api.csproj`
+- Modify: `src/SluiceBase.Core/SluiceBase.Core.csproj`
 - Create: `src/SluiceBase.Core/Updates/UpdateRequestId.cs`
 - Create: `src/SluiceBase.Core/Updates/UpdateRequestStatus.cs`
 - Create: `src/SluiceBase.Core/Updates/UpdateRequest.cs`
 - Modify: `src/SluiceBase.Core/Permissions/Permissions.cs`
 
-- [ ] **Step 1: Add Stateless to SluiceBase.Api.csproj**
+- [ ] **Step 1: Add Stateless to SluiceBase.Core.csproj**
 
-  Run from repo root:
+  The machine lives in the domain entity, so the dependency belongs in Core:
   ```bash
-  dotnet add src/SluiceBase.Api/SluiceBase.Api.csproj package Stateless
+  dotnet add src/SluiceBase.Core/SluiceBase.Core.csproj package Stateless
   ```
   Expected: NuGet resolves and adds a `<PackageReference Include="Stateless" ... />` line.
 
@@ -90,10 +88,11 @@
   }
   ```
 
-- [ ] **Step 4: Create UpdateRequest entity**
+- [ ] **Step 4: Create UpdateRequest entity with embedded state machine**
 
   `src/SluiceBase.Core/Updates/UpdateRequest.cs`:
   ```csharp
+  using Stateless;
   using SluiceBase.Core.Servers;
   using SluiceBase.Core.Users;
 
@@ -127,6 +126,42 @@
       public User? Reviewer { get; private set; }
       public User? Executor { get; private set; }
 
+      // Trigger names are an implementation detail — hidden from callers.
+      private static class Trigger
+      {
+          public const string Approve = "Approve";
+          public const string Reject = "Reject";
+          public const string Cancel = "Cancel";
+          public const string Execute = "Execute";
+      }
+
+      // Builds a Stateless machine whose accessor/mutator reads and writes this entity's Status.
+      // Each new machine instance reflects current status, so Build() is called per operation.
+      private StateMachine<string, string> BuildMachine()
+      {
+          var machine = new StateMachine<string, string>(
+              stateAccessor: () => Status,
+              stateMutator: s => Status = s);
+
+          machine.Configure(UpdateRequestStatus.Pending)
+              .Permit(Trigger.Approve, UpdateRequestStatus.Approved)
+              .Permit(Trigger.Reject, UpdateRequestStatus.Rejected)
+              .Permit(Trigger.Cancel, UpdateRequestStatus.Cancelled);
+
+          machine.Configure(UpdateRequestStatus.Approved)
+              .Permit(Trigger.Cancel, UpdateRequestStatus.Cancelled)
+              .Permit(Trigger.Execute, UpdateRequestStatus.Executed);
+
+          machine.Configure(UpdateRequestStatus.Rejected);
+          machine.Configure(UpdateRequestStatus.Cancelled);
+          machine.Configure(UpdateRequestStatus.Executed);
+
+          return machine;
+      }
+
+      // Exposed for the execute endpoint to pre-check before running expensive SQL.
+      public bool CanExecute => BuildMachine().CanFire(Trigger.Execute);
+
       public static UpdateRequest Create(
           ServerId serverId,
           UserId submitterId,
@@ -143,9 +178,11 @@
           SubmittedAt = at,
       };
 
+      // Fires the machine trigger (throws InvalidOperationException on invalid transition),
+      // then sets the supplementary review fields.
       public void Approve(UserId reviewerId, string note, DateTimeOffset at)
       {
-          Status = UpdateRequestStatus.Approved;
+          BuildMachine().Fire(Trigger.Approve);
           ReviewerId = reviewerId;
           ReviewNote = note;
           ReviewedAt = at;
@@ -153,7 +190,7 @@
 
       public void Reject(UserId reviewerId, string note, DateTimeOffset at)
       {
-          Status = UpdateRequestStatus.Rejected;
+          BuildMachine().Fire(Trigger.Reject);
           ReviewerId = reviewerId;
           ReviewNote = note;
           ReviewedAt = at;
@@ -161,10 +198,12 @@
 
       public void Cancel()
       {
-          Status = UpdateRequestStatus.Cancelled;
+          BuildMachine().Fire(Trigger.Cancel);
       }
 
-      public void SetExecutionResult(
+      // Fires the Execute trigger and records the outcome.
+      // The caller is responsible for running the SQL and passing the result here.
+      public void RecordExecution(
           UserId executorId,
           DateTimeOffset at,
           bool success,
@@ -172,7 +211,7 @@
           int? affectedRows,
           string? error)
       {
-          Status = UpdateRequestStatus.Executed;
+          BuildMachine().Fire(Trigger.Execute);
           ExecutorId = executorId;
           ExecutedAt = at;
           ExecSuccess = success;
@@ -202,70 +241,20 @@
 - [ ] **Step 7: Commit**
 
   ```bash
-  git add src/SluiceBase.Core/Updates/ src/SluiceBase.Core/Permissions/Permissions.cs src/SluiceBase.Api/SluiceBase.Api.csproj
+  git add src/SluiceBase.Core/Updates/ src/SluiceBase.Core/Permissions/Permissions.cs src/SluiceBase.Core/SluiceBase.Core.csproj
   git commit -m "feat: add UpdateRequest domain entity and Stateless NuGet"
   ```
 
 ---
 
-## Task 2: State machine factory + any-permission auth policy
+## Task 2: Any-permission auth policy
 
 **Files:**
-- Create: `src/SluiceBase.Api/Updates/UpdateRequestTrigger.cs`
-- Create: `src/SluiceBase.Api/Updates/UpdateRequestMachine.cs`
 - Create: `src/SluiceBase.Api/Auth/AnyPermissionRequirement.cs`
 - Create: `src/SluiceBase.Api/Auth/AnyPermissionAuthorizationHandler.cs`
 - Modify: `src/SluiceBase.Api/Auth/AuthSetup.cs`
 
-- [ ] **Step 1: Create UpdateRequestTrigger**
-
-  `src/SluiceBase.Api/Updates/UpdateRequestTrigger.cs`:
-  ```csharp
-  namespace SluiceBase.Api.Updates;
-
-  internal static class UpdateRequestTrigger
-  {
-      public const string Approve = "Approve";
-      public const string Reject = "Reject";
-      public const string Cancel = "Cancel";
-      public const string Execute = "Execute";
-  }
-  ```
-
-- [ ] **Step 2: Create UpdateRequestMachine**
-
-  `src/SluiceBase.Api/Updates/UpdateRequestMachine.cs`:
-  ```csharp
-  using Stateless;
-  using SluiceBase.Core.Updates;
-
-  namespace SluiceBase.Api.Updates;
-
-  internal static class UpdateRequestMachine
-  {
-      public static StateMachine<string, string> Build(string currentStatus)
-      {
-          var machine = new StateMachine<string, string>(currentStatus);
-
-          machine.Configure(UpdateRequestStatus.Pending)
-              .Permit(UpdateRequestTrigger.Approve, UpdateRequestStatus.Approved)
-              .Permit(UpdateRequestTrigger.Reject, UpdateRequestStatus.Rejected)
-              .Permit(UpdateRequestTrigger.Cancel, UpdateRequestStatus.Cancelled);
-
-          machine.Configure(UpdateRequestStatus.Approved)
-              .Permit(UpdateRequestTrigger.Cancel, UpdateRequestStatus.Cancelled)
-              .Permit(UpdateRequestTrigger.Execute, UpdateRequestStatus.Executed);
-
-          machine.Configure(UpdateRequestStatus.Rejected);
-          machine.Configure(UpdateRequestStatus.Cancelled);
-          machine.Configure(UpdateRequestStatus.Executed);
-
-          return machine;
-      }
-  }
-  ```
-
-- [ ] **Step 3: Create AnyPermissionRequirement**
+- [ ] **Step 1: Create AnyPermissionRequirement**
 
   `src/SluiceBase.Api/Auth/AnyPermissionRequirement.cs`:
   ```csharp
@@ -279,7 +268,7 @@
   }
   ```
 
-- [ ] **Step 4: Create AnyPermissionAuthorizationHandler**
+- [ ] **Step 2: Create AnyPermissionAuthorizationHandler**
 
   `src/SluiceBase.Api/Auth/AnyPermissionAuthorizationHandler.cs`:
   ```csharp
@@ -302,7 +291,7 @@
   }
   ```
 
-- [ ] **Step 5: Register policy and handler in AuthSetup.cs**
+- [ ] **Step 3: Register policy and handler in AuthSetup.cs**
 
   In `src/SluiceBase.Api/Auth/AuthSetup.cs`, inside `AddAuthorization`, after the `foreach` loop that registers individual permission policies, add:
   ```csharp
@@ -319,18 +308,18 @@
   services.AddScoped<IAuthorizationHandler, AnyPermissionAuthorizationHandler>();
   ```
 
-- [ ] **Step 6: Build**
+- [ ] **Step 4: Build**
 
   ```bash
   dotnet build src/SluiceBase.Api/SluiceBase.Api.csproj
   ```
   Expected: Build succeeded, 0 Warning(s), 0 Error(s).
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 5: Commit**
 
   ```bash
-  git add src/SluiceBase.Api/Updates/ src/SluiceBase.Api/Auth/
-  git commit -m "feat: add state machine factory and update:any auth policy"
+  git add src/SluiceBase.Api/Auth/
+  git commit -m "feat: add update:any auth policy"
   ```
 
 ---
@@ -544,7 +533,6 @@
   using Microsoft.EntityFrameworkCore;
   using SluiceBase.Api.Auth;
   using SluiceBase.Api.Data;
-  using SluiceBase.Api.Updates;
   using SluiceBase.Core.Permissions;
   using SluiceBase.Core.Servers;
   using SluiceBase.Core.Updates;
@@ -683,14 +671,9 @@
               return TypedResults.NotFound();
           }
 
-          var machine = UpdateRequestMachine.Build(request.Status);
-          if (!machine.CanFire(UpdateRequestTrigger.Approve))
-          {
-              return TypedResults.Conflict($"Cannot approve a request in '{request.Status}' state.");
-          }
-
           var user = await currentUser.GetAsync(ct);
-          request.Approve(user!.Id, req.Note, timeProvider.GetUtcNow());
+          try { request.Approve(user!.Id, req.Note, timeProvider.GetUtcNow()); }
+          catch (InvalidOperationException ex) { return TypedResults.Conflict(ex.Message); }
           await db.SaveChangesAsync(ct);
 
           return TypedResults.Ok(ToDetail(await LoadDetail(db, id, ct)!));
@@ -712,14 +695,9 @@
               return TypedResults.NotFound();
           }
 
-          var machine = UpdateRequestMachine.Build(request.Status);
-          if (!machine.CanFire(UpdateRequestTrigger.Reject))
-          {
-              return TypedResults.Conflict($"Cannot reject a request in '{request.Status}' state.");
-          }
-
           var user = await currentUser.GetAsync(ct);
-          request.Reject(user!.Id, req.Note, timeProvider.GetUtcNow());
+          try { request.Reject(user!.Id, req.Note, timeProvider.GetUtcNow()); }
+          catch (InvalidOperationException ex) { return TypedResults.Conflict(ex.Message); }
           await db.SaveChangesAsync(ct);
 
           return TypedResults.Ok(ToDetail(await LoadDetail(db, id, ct)!));
@@ -738,13 +716,8 @@
               return TypedResults.NotFound();
           }
 
-          var machine = UpdateRequestMachine.Build(request.Status);
-          if (!machine.CanFire(UpdateRequestTrigger.Cancel))
-          {
-              return TypedResults.Conflict($"Cannot cancel a request in '{request.Status}' state.");
-          }
-
-          request.Cancel();
+          try { request.Cancel(); }
+          catch (InvalidOperationException ex) { return TypedResults.Conflict(ex.Message); }
           await db.SaveChangesAsync(ct);
 
           return TypedResults.Ok(ToDetail(await LoadDetail(db, id, ct)!));
@@ -768,8 +741,7 @@
               return TypedResults.NotFound();
           }
 
-          var machine = UpdateRequestMachine.Build(request.Status);
-          if (!machine.CanFire(UpdateRequestTrigger.Execute))
+          if (!request.CanExecute)
           {
               return TypedResults.Conflict($"Cannot execute a request in '{request.Status}' state.");
           }
@@ -818,7 +790,8 @@
           }
 
           var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
-          request.SetExecutionResult(user!.Id, timeProvider.GetUtcNow(), success, durationMs, affectedRows, execError);
+          try { request.RecordExecution(user!.Id, timeProvider.GetUtcNow(), success, durationMs, affectedRows, execError); }
+          catch (InvalidOperationException ex) { return TypedResults.Conflict(ex.Message); }
           await db.SaveChangesAsync(ct);
 
           return TypedResults.Ok(ToDetail(await LoadDetail(db, id, ct)!));
@@ -929,7 +902,7 @@
 - [ ] **Step 5: Commit**
 
   ```bash
-  git add src/SluiceBase.Api/Endpoints/ src/SluiceBase.Api/Updates/
+  git add src/SluiceBase.Api/Endpoints/
   git commit -m "feat: add UpdateEndpoints with all 7 routes"
   ```
 
