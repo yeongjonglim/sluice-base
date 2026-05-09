@@ -1,26 +1,25 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 test.describe("Permission admin", () => {
-  test("alice grants query:execute to bob", async ({ page }) => {
-    // 1. Bob logs in to ensure a user row is created
+  async function extracted(page: Page, username: string, password: string) {
     await page.goto("/");
     await expect(page).toHaveURL(/login-actions\/authenticate/, { timeout: 15_000 });
-    await page.getByLabel(/username/i).fill("bob");
-    await page.locator('[id="password"]').fill("dev");
+    await page.getByLabel(/username/i).fill(username);
+    await page.locator('[id="password"]').fill(password);
     await page.getByRole("button", { name: /sign in/i }).click();
     await expect(page).toHaveURL(/^http:\/\/localhost:5173\/?$/, { timeout: 15_000 });
+  }
+
+  test("alice grants query:execute to bob", async ({ page }) => {
+    // 1. Bob logs in to ensure a user row is created
+    await extracted(page, "bob", "dev");
 
     // Sign bob out
     await page.getByTestId("user-menu").click();
     await page.getByRole("menuitem", { name: /log out/i }).click();
 
     // 2. Alice logs in
-    await page.goto("/");
-    await expect(page).toHaveURL(/login-actions\/authenticate/, { timeout: 15_000 });
-    await page.getByLabel(/username/i).fill("alice");
-    await page.locator('[id="password"]').fill("dev");
-    await page.getByRole("button", { name: /sign in/i }).click();
-    await expect(page).toHaveURL(/^http:\/\/localhost:5173\/?$/, { timeout: 15_000 });
+    await extracted(page, "alice", "dev");
 
     // 3. Alice sees the Permission nav link
     await expect(page.getByRole("link", { name: "Permission" })).toBeVisible();
@@ -47,13 +46,12 @@ test.describe("Permission admin", () => {
     await page.getByTestId("user-menu").click();
     await page.getByRole("menuitem", { name: /log out/i }).click();
 
+    // Ensure session info are all cleared
+    await page.evaluate(() => window.localStorage.clear());
+    await page.evaluate(() => window.sessionStorage.clear());
+
     // 8. Bob logs back in
-    await page.goto("/");
-    await expect(page).toHaveURL(/login-actions\/authenticate/, { timeout: 15_000 });
-    await page.getByLabel(/username/i).fill("bob");
-    await page.locator('[id="password"]').fill("dev");
-    await page.getByRole("button", { name: /sign in/i }).click();
-    await expect(page).toHaveURL(/^http:\/\/localhost:5173\/?$/, { timeout: 15_000 });
+    await extracted(page, "bob", "dev");
 
     // 9. Bob's /api/me includes query:execute
     const [meResponse] = await Promise.all([
@@ -74,6 +72,9 @@ test.describe("Permission admin", () => {
     await page.getByRole("menuitem", { name: /log out/i }).click();
 
     // Find the query:execute switch (aria-label matches the full label from PERMISSION_LABELS)
+    await extracted(page, "alice", "dev");
+    await page.getByRole("link", { name: "Permission" }).click();
+    await expect(page).toHaveURL("/permission");
     const querySwitch2 = bobRow.getByRole("switch", { name: /run read queries/i });
     await expect(querySwitch2).toBeChecked();
     await querySwitch2.click({ force: true });
