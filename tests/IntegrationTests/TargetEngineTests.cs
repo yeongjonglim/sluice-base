@@ -42,9 +42,6 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
     [Fact]
     public async Task TargetEngine_Postgres_GetSchema_ReturnsPublicSchemaForBlue()
     {
-        await factory.InitialisedApp.ResourceNotifications
-            .WaitForResourceHealthyAsync("blue-appdb", TestContext.Current.CancellationToken);
-
         var connectionString = await factory.InitialisedApp
             .GetConnectionStringAsync("blue-appdb", TestContext.Current.CancellationToken);
 

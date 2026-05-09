@@ -2,9 +2,10 @@ using AppHost.Extensions;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-var metadata = builder.AddPostgres("metadata-pg")
-    .WithDataVolume()
-    .AddDatabase("metadata");
+var main = builder.AddPostgres("main-pg").WithDataVolume();
+
+var metadataDb = main.AddDatabase("metadata-db");
+var keycloakDb = main.AddDatabase("keycloak-db");
 
 const string appDbName = "appdb";
 
@@ -13,8 +14,7 @@ var blueDbInstance = builder.AddPostgres("target-blue-pg")
     .WithEnvironment("POSTGRES_DB", appDbName)
     // Mount the SQL scripts directory into the container so that the init scripts run.
     .WithBindMount("seed/blue", "/docker-entrypoint-initdb.d")
-    // Keep the container running between app host sessions.
-    .WithLifetime(ContainerLifetime.Persistent);
+    .WithDataVolume();
 
 // Add the default database to the application model so that it can be referenced by other resources.
 var blueDb = blueDbInstance.AddDatabase("blue-appdb", appDbName);
@@ -24,17 +24,19 @@ var greenDbInstance = builder.AddPostgres("target-green-pg")
     .WithEnvironment("POSTGRES_DB", appDbName)
     // Mount the SQL scripts directory into the container so that the init scripts run.
     .WithBindMount("seed/green", "/docker-entrypoint-initdb.d")
-    // Keep the container running between app host sessions.
-    .WithLifetime(ContainerLifetime.Persistent);
+    .WithDataVolume();
 
 // Add the default database to the application model so that it can be referenced by other resources.
 var greenDb = greenDbInstance.AddDatabase("green-appdb", appDbName);
 
 var keycloak = builder.AddKeycloak("keycloak")
-    .WithRealmImport("seed/keycloak");
+    .WithRealmImport("seed/keycloak")
+    .WithOtlpExporter()
+    .WaitFor(keycloakDb)
+    .WithPostgres(keycloakDb);
 
 var api = builder.AddProject<Projects.SluiceBase_Api>("api")
-    .WithReference(metadata, "Metadata").WaitFor(metadata)
+    .WithReference(metadataDb, "Metadata").WaitFor(metadataDb)
     .WaitFor(keycloak)
     .WithEnvironment("Oidc__Authority",
         ReferenceExpression.Create($"{keycloak.GetEndpoint("https")}/realms/sluicebase"))
@@ -51,10 +53,10 @@ var web = builder.AddViteApp("web", "../frontend")
 api.WithEnvironment("Frontend__BaseUrl",
     ReferenceExpression.Create($"{web.GetEndpoint("http")}"));
 
-metadata.WithCommand(
+metadataDb.WithCommand(
     name: "seed-servers",
     displayName: "Seed Server Registry",
-    executeCommand: context => DevServerSeed.SeedAsync(context, api, metadata, blueDb, greenDb),
+    executeCommand: context => DevServerSeed.SeedAsync(context, api, metadataDb, blueDb, greenDb),
     commandOptions: new CommandOptions
     {
         UpdateState = ctx => ctx.ResourceSnapshot.HealthStatus is Microsoft.Extensions.Diagnostics.HealthChecks.HealthStatus.Healthy
