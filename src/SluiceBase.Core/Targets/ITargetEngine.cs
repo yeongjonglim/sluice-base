@@ -19,6 +19,11 @@ public interface ITargetEngine
         string connectionString,
         string sql,
         CancellationToken ct);
+
+    Task<int> ExecuteUpdateAsync(
+        string connectionString,
+        string sql,
+        CancellationToken ct);
 }
 
 public sealed record ConnectivityResult(bool Ok, string? Error);
