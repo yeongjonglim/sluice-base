@@ -6,15 +6,29 @@ var metadata = builder.AddPostgres("metadata-pg")
     .WithDataVolume()
     .AddDatabase("metadata");
 
-var blueDb = builder.AddPostgres("target-blue-pg")
-    .WithBindMount("seed/blue", "/docker-entrypoint-initdb.d")
-    .WithDataVolume()
-    .AddDatabase("blue-appdb", "appdb");
+const string appDbName = "appdb";
 
-var greenDb = builder.AddPostgres("target-green-pg")
+var blueDbInstance = builder.AddPostgres("target-blue-pg")
+    // Set the name of the default database to auto-create on container startup.
+    .WithEnvironment("POSTGRES_DB", appDbName)
+    // Mount the SQL scripts directory into the container so that the init scripts run.
+    .WithBindMount("seed/blue", "/docker-entrypoint-initdb.d")
+    // Keep the container running between app host sessions.
+    .WithLifetime(ContainerLifetime.Persistent);
+
+// Add the default database to the application model so that it can be referenced by other resources.
+var blueDb = blueDbInstance.AddDatabase("blue-appdb", appDbName);
+
+var greenDbInstance = builder.AddPostgres("target-green-pg")
+    // Set the name of the default database to auto-create on container startup.
+    .WithEnvironment("POSTGRES_DB", appDbName)
+    // Mount the SQL scripts directory into the container so that the init scripts run.
     .WithBindMount("seed/green", "/docker-entrypoint-initdb.d")
-    .WithDataVolume()
-    .AddDatabase("green-appdb", "appdb");
+    // Keep the container running between app host sessions.
+    .WithLifetime(ContainerLifetime.Persistent);
+
+// Add the default database to the application model so that it can be referenced by other resources.
+var greenDb = greenDbInstance.AddDatabase("green-appdb", appDbName);
 
 var keycloak = builder.AddKeycloak("keycloak")
     .WithRealmImport("seed/keycloak");
