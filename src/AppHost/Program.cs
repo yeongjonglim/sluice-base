@@ -2,7 +2,7 @@ using AppHost.Extensions;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
-var main = builder.AddPostgres("main-pg").WithDataVolume();
+var main = builder.AddPostgres("main-pg").WithHostPort(54321).WithDataVolume();
 
 var metadataDb = main.AddDatabase("metadata-db");
 var keycloakDb = main.AddDatabase("keycloak-db");
@@ -14,6 +14,7 @@ var blueDbInstance = builder.AddPostgres("target-blue-pg")
     .WithEnvironment("POSTGRES_DB", appDbName)
     // Mount the SQL scripts directory into the container so that the init scripts run.
     .WithBindMount("seed/blue", "/docker-entrypoint-initdb.d")
+    .WithHostPort(55532)
     .WithDataVolume();
 
 // Add the default database to the application model so that it can be referenced by other resources.
@@ -24,6 +25,7 @@ var greenDbInstance = builder.AddPostgres("target-green-pg")
     .WithEnvironment("POSTGRES_DB", appDbName)
     // Mount the SQL scripts directory into the container so that the init scripts run.
     .WithBindMount("seed/green", "/docker-entrypoint-initdb.d")
+    .WithHostPort(55533)
     .WithDataVolume();
 
 // Add the default database to the application model so that it can be referenced by other resources.
