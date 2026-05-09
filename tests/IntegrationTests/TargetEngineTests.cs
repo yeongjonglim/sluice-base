@@ -63,4 +63,43 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
         Assert.NotEmpty(usersTable.Columns);
         Assert.All(usersTable.Columns, c => Assert.NotEmpty(c.DataType));
     }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_ExecuteQuery_ReturnsData()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var result = await _targetEngine.ExecuteQueryAsync(
+            connectionString,
+            "SELECT id, email FROM public.users ORDER BY id LIMIT 5",
+            ct);
+
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Columns.Length);
+        Assert.Equal("id", result.Columns[0]);
+        Assert.Equal("email", result.Columns[1]);
+        Assert.NotEmpty(result.Rows);
+        Assert.All(result.Rows, row => Assert.Equal(2, row.Length));
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_ExecuteQuery_ReturnsEmptyRows_ForNoResults()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var result = await _targetEngine.ExecuteQueryAsync(
+            connectionString,
+            "SELECT id FROM public.users WHERE 1 = 0",
+            ct);
+
+        Assert.NotNull(result);
+        Assert.Single(result.Columns);
+        Assert.Empty(result.Rows);
+    }
 }
