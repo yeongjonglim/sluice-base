@@ -9,6 +9,9 @@ public static class Permissions
     public const string UpdateApprove = "update:approve";
     public const string UpdateExecute = "update:execute";
 
+    // Virtual policy — never assigned to users; combines update:submit|approve|execute for read access
+    public const string UpdateAny = "update:any";
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>
     {
         PermissionManage,

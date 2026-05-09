@@ -120,11 +120,19 @@ internal static class AuthSetup
                 options.AddPolicy(permission,
                     policy => policy.Requirements.Add(new PermissionRequirement(permission)));
             }
+
+            options.AddPolicy(Permissions.UpdateAny, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement([
+                    Permissions.UpdateSubmit,
+                    Permissions.UpdateApprove,
+                    Permissions.UpdateExecute,
+                ])));
         });
 
         services.AddScoped<IUserLoginRecorder, UserLoginRecorder>();
         services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
+        services.AddScoped<IAuthorizationHandler, AnyPermissionAuthorizationHandler>();
         services.AddHttpContextAccessor();
         services.Configure<BootstrapAdminOptions>(
             config.GetSection(BootstrapAdminOptions.SectionName));
