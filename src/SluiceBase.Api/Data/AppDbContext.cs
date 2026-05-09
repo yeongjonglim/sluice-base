@@ -5,6 +5,7 @@ using SluiceBase.Api.Data.Converters;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Queries;
 using SluiceBase.Core.Servers;
+using SluiceBase.Core.Updates;
 using SluiceBase.Core.Users;
 
 namespace SluiceBase.Api.Data;
@@ -17,6 +18,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<UserPermissionMap> UserPermissions => Set<UserPermissionMap>();
     public DbSet<Server> Servers => Set<Server>();
     public DbSet<QueryLog> QueryLogs => Set<QueryLog>();
+    public DbSet<UpdateRequest> UpdateRequests => Set<UpdateRequest>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
