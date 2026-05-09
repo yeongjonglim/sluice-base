@@ -105,6 +105,14 @@ public class AdminPermissionTests(SluiceBaseStackFactory factory)
         var meResp = await bobSession2.Client.GetFromJsonAsync<MeBody>(
             "/api/me", ct);
         Assert.Contains(Permissions.QueryExecute, meResp!.Permissions);
+
+        // Revoke permission to clean up
+        using var revokeReq = MutationRequest(
+            HttpMethod.Delete,
+            $"/api/admin/user/{bob.Id}/permission/{Permissions.QueryExecute}",
+            xsrf);
+        var revokeResp = await aliceSession.Client.SendAsync(revokeReq, ct);
+        Assert.Equal(HttpStatusCode.NoContent, revokeResp.StatusCode);
     }
 
     [Fact]
