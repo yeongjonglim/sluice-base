@@ -27,8 +27,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         base.ConfigureConventions(configurationBuilder);
-        configurationBuilder.Conventions.Remove<TableNameFromDbSetConvention>();
 
+        configurationBuilder.Conventions.Remove<TableNameFromDbSetConvention>();
         configurationBuilder.RegisterAllInVogenEfCoreConverters();
+        configurationBuilder.Properties<Enum>().HaveConversion<string>();
     }
 }

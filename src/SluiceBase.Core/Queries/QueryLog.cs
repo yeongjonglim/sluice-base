@@ -13,7 +13,7 @@ public sealed class QueryLog
     public UserId? UserId { get; private set; }
     public ServerId? ServerId { get; private set; }
     public string QueryText { get; private set; }
-    public string Status { get; private set; }
+    public QueryLogStatus Status { get; private set; }
     public DateTimeOffset ExecutedAt { get; private set; }
     public int? DurationMs { get; private set; }
     public int? RowCount { get; private set; }
@@ -23,7 +23,7 @@ public sealed class QueryLog
         UserId? userId,
         ServerId? serverId,
         string queryText,
-        string status,
+        QueryLogStatus status,
         DateTimeOffset executedAt,
         int? durationMs,
         int? rowCount,
