@@ -132,6 +132,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ExecuteQuery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/user": {
         parameters: {
             query?: never;
@@ -289,6 +305,19 @@ export interface components {
         };
         PermissionCatalogResponse: {
             permissions: string[];
+        };
+        QueryRequest: {
+            serverId: components["schemas"]["ServerId"];
+            sql: string;
+        };
+        QueryResponse: {
+            columns: null | string[];
+            rows: null | string[][];
+            /** Format: int32 */
+            rowCount: number | string;
+            /** Format: int32 */
+            durationMs: number | string;
+            error: null | string;
         };
         SchemaInfo: {
             name: string;
@@ -509,6 +538,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SchemaTree"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ExecuteQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QueryRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
                 };
             };
             /** @description Not Found */

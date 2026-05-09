@@ -233,3 +233,18 @@ export function useSchema(serverId: string | null) {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+export type ExecuteQueryRequest =
+  paths["/api/query"]["post"]["requestBody"]["content"]["application/json"];
+export type ExecuteQueryResponse =
+  paths["/api/query"]["post"]["responses"][200]["content"]["application/json"];
+
+export function useExecuteQuery() {
+  return useMutation({
+    mutationFn: (body: ExecuteQueryRequest) =>
+      apiRequest<ExecuteQueryRequest, ExecuteQueryResponse>("/api/query", {
+        method: "POST",
+        body,
+      }),
+  });
+}
