@@ -18,6 +18,7 @@ import {
   IconServer,
   IconShieldLock,
   IconSun,
+  IconTerminal2,
 } from "@tabler/icons-react";
 import { Link, Outlet, createFileRoute, useLocation } from "@tanstack/react-router";
 import { useMe } from "@/api/hooks.ts";
@@ -35,6 +36,8 @@ function AuthedLayout() {
   const location = useLocation();
   const isAdmin = useHasPermission("permission:manage");
   const isServerAdmin = useHasPermission("server:manage");
+  const canQuery = useHasPermission("query:execute");
+
 
   if (!me.data) {
     return null;
@@ -101,6 +104,15 @@ function AuthedLayout() {
             to="/health"
             active={location.pathname === "/health"}
           />
+          {canQuery && (
+            <NavLink
+              label="Query"
+              leftSection={<IconTerminal2 size={16} />}
+              component={Link}
+              to="/query"
+              active={location.pathname === "/query"}
+            />
+          )}
           {isServerAdmin && (
             <NavLink
               label="Servers"
