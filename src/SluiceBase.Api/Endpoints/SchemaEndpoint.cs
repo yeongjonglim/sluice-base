@@ -13,29 +13,34 @@ internal static class SchemaEndpoints
 {
     public static void Map(IEndpointRouteBuilder app)
     {
-        app.MapGet("/api/schema/{serverId}", GetSchema)
+        app.MapGet("/api/schema/{databaseId}", GetSchema)
             .RequireAuthorization(Permissions.QueryExecute)
             .WithName("GetSchema");
     }
 
-    private static async Task<Results<Ok<SchemaTree>, NotFound>> GetSchema(
-        ServerId serverId,
+    private static async Task<Results<Ok<SchemaTree>, NotFound, BadRequest<string>>> GetSchema(
+        DatabaseId databaseId,
         AppDbContext db,
         IServerConnectionFactory connectionFactory,
         ITargetEngine targetEngine,
         CancellationToken ct)
     {
-        var server = await db.Servers.AsNoTracking()
-            .SingleOrDefaultAsync(s => s.Id == serverId, ct);
-        if (server is null)
+        var database = await db.Databases.AsNoTracking()
+            .SingleOrDefaultAsync(d => d.Id == databaseId, ct);
+        if (database is null)
         {
             return TypedResults.NotFound();
         }
 
-        var connectionString = await connectionFactory
-            .GetConnectionStringAsync(serverId, CredentialKind.Read, ct);
-
-        var tree = await targetEngine.GetSchemaAsync(connectionString, ct);
-        return TypedResults.Ok(tree);
+        try
+        {
+            var connectionString = await connectionFactory.GetConnectionStringAsync(databaseId, CredentialKind.Read, ct);
+            var tree = await targetEngine.GetSchemaAsync(connectionString, ct);
+            return TypedResults.Ok(tree);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return TypedResults.BadRequest(ex.Message);
+        }
     }
 }
