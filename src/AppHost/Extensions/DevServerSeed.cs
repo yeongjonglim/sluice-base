@@ -28,37 +28,41 @@ internal static class DevServerSeed
             var bluePg = new NpgsqlConnectionStringBuilder(blueConnStr);
             var greenPg = new NpgsqlConnectionStringBuilder(greenConnStr);
 
-            // Encrypt passwords via the dev-only endpoint
             var blueReadEnc = await EncryptAsync(apiUrl, "reader_blue", ct);
             var blueWriteEnc = await EncryptAsync(apiUrl, "writer_blue", ct);
             var greenReadEnc = await EncryptAsync(apiUrl, "reader_green", ct);
 
-            // Insert server records directly into metadata DB
             await using var conn = new NpgsqlConnection(metaConnStr);
             await conn.OpenAsync(ct);
 
-            await UpsertServerAsync(conn,
-                name: "Blue",
+            await SeedServerAsync(conn,
+                serverName: "Blue",
                 kind: "postgres",
                 host: bluePg.Host!,
                 port: bluePg.Port,
-                database: "appdb",
+                readLabel: "Read-only role",
                 readUser: "reader_blue",
                 encReadPass: blueReadEnc,
+                writeLabel: "Write role",
                 writeUser: "writer_blue",
                 encWritePass: blueWriteEnc,
+                dbDisplayName: "Blue App DB",
+                dbName: "appdb",
                 ct);
 
-            await UpsertServerAsync(conn,
-                name: "Green",
+            await SeedServerAsync(conn,
+                serverName: "Green",
                 kind: "postgres",
                 host: greenPg.Host!,
                 port: greenPg.Port,
-                database: "appdb",
+                readLabel: "Read-only role",
                 readUser: "reader_green",
                 encReadPass: greenReadEnc,
+                writeLabel: null,
                 writeUser: null,
                 encWritePass: null,
+                dbDisplayName: "Green App DB",
+                dbName: "appdb",
                 ct);
 
             return CommandResults.Success();
@@ -69,55 +73,114 @@ internal static class DevServerSeed
         }
     }
 
+    private static async Task SeedServerAsync(
+        NpgsqlConnection conn,
+        string serverName,
+        string kind,
+        string host,
+        int port,
+        string readLabel,
+        string readUser,
+        string encReadPass,
+        string? writeLabel,
+        string? writeUser,
+        string? encWritePass,
+        string dbDisplayName,
+        string dbName,
+        CancellationToken ct)
+    {
+        // Insert server (no-op if already seeded)
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO server (id, name, kind, host, port, is_disabled, created_at, updated_at)
+                VALUES (gen_random_uuid(), @name, @kind, @host, @port, false, now(), now())
+                ON CONFLICT (name) WHERE deleted_at IS NULL DO NOTHING;
+                """;
+            cmd.Parameters.AddWithValue("name", serverName);
+            cmd.Parameters.AddWithValue("kind", kind);
+            cmd.Parameters.AddWithValue("host", host);
+            cmd.Parameters.AddWithValue("port", port);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        Guid serverId;
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = "SELECT id FROM server WHERE name = @name AND deleted_at IS NULL;";
+            cmd.Parameters.AddWithValue("name", serverName);
+            serverId = (Guid)(await cmd.ExecuteScalarAsync(ct))!;
+        }
+
+        // Insert read credential
+        var readCredId = await UpsertCredentialAsync(conn, serverId, readLabel, readUser, encReadPass, ct);
+
+        // Insert write credential (optional)
+        Guid? writeCredId = null;
+        if (writeLabel is not null && writeUser is not null && encWritePass is not null)
+        {
+            writeCredId = await UpsertCredentialAsync(conn, serverId, writeLabel, writeUser, encWritePass, ct);
+        }
+
+        // Insert database
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO server_database (
+                    id, server_id, display_name, database_name,
+                    read_credential_id, write_credential_id,
+                    is_disabled, created_at, updated_at)
+                VALUES (
+                    gen_random_uuid(), @serverId, @displayName, @dbName,
+                    @readCredId, @writeCredId,
+                    false, now(), now())
+                ON CONFLICT DO NOTHING;
+                """;
+            cmd.Parameters.AddWithValue("serverId", serverId);
+            cmd.Parameters.AddWithValue("displayName", dbDisplayName);
+            cmd.Parameters.AddWithValue("dbName", dbName);
+            cmd.Parameters.AddWithValue("readCredId", readCredId);
+            cmd.Parameters.AddWithValue("writeCredId", (object?)writeCredId ?? DBNull.Value);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    private static async Task<Guid> UpsertCredentialAsync(
+        NpgsqlConnection conn,
+        Guid serverId,
+        string label,
+        string username,
+        string encryptedPassword,
+        CancellationToken ct)
+    {
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = """
+                INSERT INTO server_credential (id, server_id, label, username, encrypted_password, created_at, updated_at)
+                VALUES (gen_random_uuid(), @serverId, @label, @username, @encPass, now(), now())
+                ON CONFLICT DO NOTHING;
+                """;
+            cmd.Parameters.AddWithValue("serverId", serverId);
+            cmd.Parameters.AddWithValue("label", label);
+            cmd.Parameters.AddWithValue("username", username);
+            cmd.Parameters.AddWithValue("encPass", encryptedPassword);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+
+        await using var selectCmd = conn.CreateCommand();
+        selectCmd.CommandText = "SELECT id FROM server_credential WHERE server_id = @serverId AND username = @username AND deleted_at IS NULL LIMIT 1;";
+        selectCmd.Parameters.AddWithValue("serverId", serverId);
+        selectCmd.Parameters.AddWithValue("username", username);
+        return (Guid)(await selectCmd.ExecuteScalarAsync(ct))!;
+    }
+
     private static async Task<string> EncryptAsync(string apiBaseUrl, string plaintext, CancellationToken ct)
     {
-        using var handler = new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-        };
-        using var http = new HttpClient(handler) { BaseAddress = new Uri(apiBaseUrl) };
+        using var http = new HttpClient { BaseAddress = new Uri(apiBaseUrl) };
         var resp = await http.PostAsJsonAsync("/api/internal/dev/encrypt", new { plaintext }, ct);
         resp.EnsureSuccessStatusCode();
         var body = await resp.Content.ReadFromJsonAsync<EncryptResponse>(ct);
         return body!.Ciphertext;
-    }
-
-    private static async Task UpsertServerAsync(NpgsqlConnection conn,
-        string name,
-        string kind,
-        string host,
-        int port,
-        string database,
-        string readUser,
-        string encReadPass,
-        string? writeUser,
-        string? encWritePass,
-        CancellationToken ct)
-    {
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-                          INSERT INTO server (
-                              id, name, kind, host, port, database,
-                              read_username, encrypted_read_password,
-                              write_username, encrypted_write_password,
-                              is_enabled, created_at, updated_at)
-                          VALUES (
-                              gen_random_uuid(), @name, @kind, @host, @port, @database,
-                              @readUser, @encReadPass,
-                              @writeUser, @encWritePass,
-                              true, now(), now())
-                          ON CONFLICT (name) DO NOTHING;
-                          """;
-        cmd.Parameters.AddWithValue("name", name);
-        cmd.Parameters.AddWithValue("kind", kind);
-        cmd.Parameters.AddWithValue("host", host);
-        cmd.Parameters.AddWithValue("port", port);
-        cmd.Parameters.AddWithValue("database", database);
-        cmd.Parameters.AddWithValue("readUser", readUser);
-        cmd.Parameters.AddWithValue("encReadPass", encReadPass);
-        cmd.Parameters.AddWithValue("writeUser", (object?)writeUser ?? DBNull.Value);
-        cmd.Parameters.AddWithValue("encWritePass", (object?)encWritePass ?? DBNull.Value);
-        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     private sealed record EncryptResponse(string Ciphertext);
