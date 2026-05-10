@@ -479,6 +479,312 @@
           }
         }
       }
+    },
+    "/api/update": {
+      "post": {
+        "tags": [
+          "UpdateEndpoints"
+        ],
+        "operationId": "SubmitUpdate",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateRequestDetailResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "UpdateEndpoints"
+        ],
+        "operationId": "ListUpdates",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListUpdateRequestsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/update/{id}": {
+      "get": {
+        "tags": [
+          "UpdateEndpoints"
+        ],
+        "operationId": "GetUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateRequestDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/update/{id}/approve": {
+      "post": {
+        "tags": [
+          "UpdateEndpoints"
+        ],
+        "operationId": "ApproveUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateRequestDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/update/{id}/reject": {
+      "post": {
+        "tags": [
+          "UpdateEndpoints"
+        ],
+        "operationId": "RejectUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateRequestDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/update/{id}/cancel": {
+      "post": {
+        "tags": [
+          "UpdateEndpoints"
+        ],
+        "operationId": "CancelUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateRequestDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/update/{id}/execute": {
+      "post": {
+        "tags": [
+          "UpdateEndpoints"
+        ],
+        "operationId": "ExecuteUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateRequestDetailResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -494,6 +800,17 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "CancelUpdateRequest": {
+        "required": [
+          "note"
+        ],
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string"
           }
         }
       },
@@ -676,6 +993,20 @@
           }
         }
       },
+      "ListUpdateRequestsResponse": {
+        "required": [
+          "requests"
+        ],
+        "type": "object",
+        "properties": {
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UpdateSummaryItem"
+            }
+          }
+        }
+      },
       "ListUsersResponse": {
         "required": [
           "users"
@@ -807,6 +1138,17 @@
           }
         }
       },
+      "ReviewUpdateRequest": {
+        "required": [
+          "note"
+        ],
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string"
+          }
+        }
+      },
       "SchemaInfo": {
         "required": [
           "name",
@@ -897,6 +1239,25 @@
           }
         }
       },
+      "SubmitUpdateRequest": {
+        "required": [
+          "serverId",
+          "sqlText",
+          "reason"
+        ],
+        "type": "object",
+        "properties": {
+          "serverId": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "sqlText": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        }
+      },
       "TableInfo": {
         "required": [
           "name",
@@ -936,6 +1297,200 @@
             ]
           }
         }
+      },
+      "UpdateRequestDetailResponse": {
+        "required": [
+          "id",
+          "serverId",
+          "serverName",
+          "submitterId",
+          "submitterName",
+          "sqlText",
+          "reason",
+          "status",
+          "reviewerId",
+          "reviewerName",
+          "reviewNote",
+          "cancelledById",
+          "cancelledByName",
+          "cancelNote",
+          "executorId",
+          "executorName",
+          "submittedAt",
+          "reviewedAt",
+          "executedAt",
+          "cancelledAt",
+          "execSuccess",
+          "execDurationMs",
+          "execAffectedRows",
+          "execError"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/UpdateRequestId"
+          },
+          "serverId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ServerId"
+              }
+            ]
+          },
+          "serverName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "submitterId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          },
+          "submitterName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sqlText": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UpdateRequestStatus"
+          },
+          "reviewerId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          },
+          "reviewerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reviewNote": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cancelledById": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          },
+          "cancelledByName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cancelNote": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "executorId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          },
+          "executorName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "reviewedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "executedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "cancelledAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "execSuccess": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "execDurationMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "execAffectedRows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "execError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "UpdateRequestId": { },
+      "UpdateRequestStatus": {
+        "type": "integer"
       },
       "UpdateServerRequest": {
         "required": [
@@ -990,6 +1545,51 @@
           "isEnabled": {
             "type": "boolean",
             "default": true
+          }
+        }
+      },
+      "UpdateSummaryItem": {
+        "required": [
+          "id",
+          "serverName",
+          "submitterName",
+          "reason",
+          "status",
+          "submittedAt",
+          "execSuccess"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/UpdateRequestId"
+          },
+          "serverName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "submitterName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UpdateRequestStatus"
+          },
+          "submittedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "execSuccess": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           }
         }
       },
@@ -1055,6 +1655,9 @@
     },
     {
       "name": "ServerEndpoints"
+    },
+    {
+      "name": "UpdateEndpoints"
     }
   ]
 }
