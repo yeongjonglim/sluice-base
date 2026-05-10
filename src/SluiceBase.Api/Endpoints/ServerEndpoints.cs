@@ -1,11 +1,9 @@
-using Microsoft.AspNetCore.DataProtection;
+// src/SluiceBase.Api/Endpoints/ServerEndpoints.cs
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Data;
-using SluiceBase.Api.Servers;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Servers;
-using SluiceBase.Core.Targets;
 
 namespace SluiceBase.Api.Endpoints;
 
@@ -20,7 +18,6 @@ internal static class ServerEndpoints
         servers.MapPost("/", CreateServer).WithName("CreateServer");
         servers.MapPut("/{id}", UpdateServer).WithName("UpdateServer");
         servers.MapDelete("/{id}", DeleteServer).WithName("DeleteServer");
-        servers.MapPost("/{id}/test", TestConnection).WithName("TestConnection");
     }
 
     // ── list ─────────────────────────────────────────────────────────────────
@@ -30,45 +27,24 @@ internal static class ServerEndpoints
     {
         var servers = await db.Servers
             .AsNoTracking()
+            .Where(s => s.DeletedAt == null)
+            .Include(s => s.Credentials.Where(c => c.DeletedAt == null))
+            .Include(s => s.Databases.Where(d => d.DeletedAt == null))
             .OrderBy(s => s.Name)
-            .Select(s => ToResponse(s))
             .ToListAsync(ct);
-        return TypedResults.Ok(new ListServersResponse(servers));
+        return TypedResults.Ok(new ListServersResponse([.. servers.Select(ToResponse)]));
     }
 
     // ── create ────────────────────────────────────────────────────────────────
 
-    private static async Task<Results<Created<ServerResponse>, ValidationProblem, Conflict>> CreateServer(
+    private static async Task<Results<Created<ServerResponse>, Conflict>> CreateServer(
         CreateServerRequest req,
         AppDbContext db,
-        IDataProtectionProvider dataProtection,
         TimeProvider clock,
         CancellationToken ct)
     {
-        var validationErrors = ValidateWriteCredentials(req.WriteUsername, req.WritePassword);
-        if (validationErrors is not null)
-        {
-            return TypedResults.ValidationProblem(validationErrors);
-        }
-
-        var protector = dataProtection.CreateProtector(ServerConnectionFactory.ProtectorPurpose);
-        var encReadPass = protector.Protect(req.ReadPassword);
-        var encWritePass = req.WritePassword is not null ? protector.Protect(req.WritePassword) : null;
-
-        var server = Server.Create(
-            req.Name,
-            req.Kind,
-            req.Host,
-            req.Port,
-            req.Database,
-            req.ReadUsername,
-            encReadPass,
-            req.WriteUsername,
-            encWritePass,
-            clock.GetUtcNow());
-
+        var server = Server.Create(req.Name, req.Kind, req.Host, req.Port, clock.GetUtcNow());
         db.Servers.Add(server);
-
         try
         {
             await db.SaveChangesAsync(ct);
@@ -78,133 +54,69 @@ internal static class ServerEndpoints
         {
             return TypedResults.Conflict();
         }
-
         return TypedResults.Created($"/api/server/{server.Id}", ToResponse(server));
     }
 
     // ── update ────────────────────────────────────────────────────────────────
 
-    private static async Task<Results<Ok<ServerResponse>, ValidationProblem, NotFound>> UpdateServer(
+    private static async Task<Results<Ok<ServerResponse>, NotFound, Conflict>> UpdateServer(
         ServerId id,
-        UpdateServerRequest request,
+        UpdateServerRequest req,
         AppDbContext db,
-        IDataProtectionProvider dataProtection,
         TimeProvider clock,
         CancellationToken ct)
     {
-        var server = await db.Servers.SingleOrDefaultAsync(s => s.Id == id, ct);
+        var server = await db.Servers
+            .Include(s => s.Credentials.Where(c => c.DeletedAt == null))
+            .Include(s => s.Databases.Where(d => d.DeletedAt == null))
+            .SingleOrDefaultAsync(s => s.Id == id && s.DeletedAt == null, ct);
         if (server is null)
         {
             return TypedResults.NotFound();
         }
 
-        var protector = dataProtection.CreateProtector(ServerConnectionFactory.ProtectorPurpose);
-        var now = clock.GetUtcNow();
-
-        server.Update(request.Name, request.Host, request.Port, request.Database, request.ReadUsername, request.IsEnabled, now);
-
-        if (request.ReadPassword is not null)
+        server.Update(req.Name, req.Host, req.Port, req.Kind, req.IsDisabled, clock.GetUtcNow());
+        try
         {
-            server.ReplaceReadPassword(protector.Protect(request.ReadPassword), now);
+            await db.SaveChangesAsync(ct);
         }
-
-        if (request.WriteUsername == string.Empty || request.WritePassword == string.Empty)
+        catch (DbUpdateException ex) when (ex.InnerException?.Message.Contains("unique") == true ||
+                                           ex.InnerException?.Message.Contains("duplicate") == true)
         {
-            server.ClearWriteCredential(now);
+            return TypedResults.Conflict();
         }
-
-        if (request.WriteUsername is not null && request.WritePassword is not null)
-        {
-            var validationErrors = ValidateWriteCredentials(request.WriteUsername, request.WritePassword);
-            if (validationErrors is not null)
-            {
-                return TypedResults.ValidationProblem(validationErrors);
-            }
-
-            server.SetWriteCredential(request.WriteUsername, protector.Protect(request.WritePassword), now);
-        }
-        // Both null → keep existing write credential unchanged
-
-        await db.SaveChangesAsync(ct);
         return TypedResults.Ok(ToResponse(server));
     }
 
-    // ── delete ────────────────────────────────────────────────────────────────
+    // ── soft-delete ───────────────────────────────────────────────────────────
 
     private static async Task<Results<NoContent, NotFound>> DeleteServer(
         ServerId id,
         AppDbContext db,
+        TimeProvider clock,
         CancellationToken ct)
     {
-        var server = await db.Servers.SingleOrDefaultAsync(s => s.Id == id, ct);
+        var server = await db.Servers
+            .Include(s => s.Credentials)
+            .Include(s => s.Databases)
+            .SingleOrDefaultAsync(s => s.Id == id && s.DeletedAt == null, ct);
         if (server is null)
         {
             return TypedResults.NotFound();
         }
 
-        db.Servers.Remove(server);
+        server.SoftDelete(clock.GetUtcNow());
         await db.SaveChangesAsync(ct);
         return TypedResults.NoContent();
     }
 
-    // ── test connection ───────────────────────────────────────────────────────
-
-    private static async Task<Results<Ok<TestConnectionResponse>, NotFound>> TestConnection(
-        ServerId id,
-        AppDbContext db,
-        IDataProtectionProvider dataProtection,
-        ITargetEngine targetEngine,
-        IServerConnectionFactory factory,
-        CancellationToken ct)
-    {
-        var server = await db.Servers.AsNoTracking().SingleOrDefaultAsync(s => s.Id == id, ct);
-        if (server is null)
-        {
-            return TypedResults.NotFound();
-        }
-
-        var connectionString = await factory.GetConnectionStringAsync(server.Id, CredentialKind.Read, ct);
-        var readResult = await targetEngine.TestConnectionAsync(connectionString, ct);
-
-        ConnectivityResult? writeResult = null;
-        if (server.HasWriteCredential)
-        {
-            var writeConnectionString = await factory.GetConnectionStringAsync(server.Id, CredentialKind.Write, ct);
-            writeResult = await targetEngine.TestConnectionAsync(writeConnectionString, ct);
-        }
-
-        return TypedResults.Ok(new TestConnectionResponse(readResult, writeResult));
-    }
-
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private static Dictionary<string, string[]>? ValidateWriteCredentials(
-        string? username, string? password)
-    {
-        var hasUser = !string.IsNullOrEmpty(username);
-        var hasPass = !string.IsNullOrEmpty(password);
-        if (hasUser == hasPass)
-        {
-            return null;
-        }
-
-        return new Dictionary<string, string[]>
-        {
-            ["writeCredentials"] = ["WriteUsername and WritePassword must both be provided or both omitted."]
-        };
-    }
-
     private static ServerResponse ToResponse(Server s) =>
-        new(s.Id,
-            s.Name,
-            s.Kind,
-            s.Host,
-            s.Port,
-            s.Database,
-            s.IsEnabled,
-            s.HasWriteCredential,
-            s.CreatedAt,
-            s.UpdatedAt);
+        new(s.Id, s.Name, s.Kind, s.Host, s.Port, s.IsDisabled,
+            s.Credentials.Select(c => new CredentialResponse(c.Id, c.Label, c.Username, c.CreatedAt, c.UpdatedAt)).ToList(),
+            s.Databases.Select(d => new DatabaseResponse(d.Id, d.DisplayName, d.DatabaseName, d.ReadCredentialId, d.WriteCredentialId, d.CanWrite, d.IsDisabled, d.CreatedAt, d.UpdatedAt)).ToList(),
+            s.CreatedAt, s.UpdatedAt);
 
     // ── request / response records ────────────────────────────────────────────
 
@@ -216,35 +128,36 @@ internal static class ServerEndpoints
         string Kind,
         string Host,
         int Port,
-        string Database,
-        bool IsEnabled,
-        bool HasWriteCredential,
+        bool IsDisabled,
+        IReadOnlyList<CredentialResponse> Credentials, // Should credential be returned at all?
+        IReadOnlyList<DatabaseResponse> Databases,
         DateTimeOffset CreatedAt,
         DateTimeOffset UpdatedAt);
 
-    public sealed record CreateServerRequest(
-        string Name,
-        string Kind,
-        string Host,
-        int Port,
-        string Database,
-        string ReadUsername,
-        string ReadPassword,
-        string? WriteUsername = null,
-        string? WritePassword = null);
+    public sealed record CredentialResponse(
+        CredentialId Id,
+        string Label,
+        string Username,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset UpdatedAt);
+
+    public sealed record DatabaseResponse(
+        DatabaseId Id,
+        string DisplayName,
+        string DatabaseName,
+        CredentialId ReadCredentialId,
+        CredentialId? WriteCredentialId,
+        bool CanWrite,
+        bool IsDisabled,
+        DateTimeOffset CreatedAt,
+        DateTimeOffset UpdatedAt);
+
+    public sealed record CreateServerRequest(string Name, string Kind, string Host, int Port);
 
     public sealed record UpdateServerRequest(
         string Name,
         string Host,
         int Port,
-        string Database,
-        string? ReadUsername = null,
-        string? ReadPassword = null,
-        string? WriteUsername = null,
-        string? WritePassword = null,
-        bool IsEnabled = true);
-
-    public sealed record TestConnectionResponse(
-        ConnectivityResult Read,
-        ConnectivityResult? Write);
+        string Kind,
+        bool IsDisabled = false);
 }
