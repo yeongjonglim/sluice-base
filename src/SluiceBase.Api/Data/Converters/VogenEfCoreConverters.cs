@@ -10,6 +10,8 @@ namespace SluiceBase.Api.Data.Converters;
 [EfCoreConverter<UserId>]
 [EfCoreConverter<UserPermissionId>]
 [EfCoreConverter<ServerId>]
+[EfCoreConverter<DatabaseId>]
+[EfCoreConverter<CredentialId>]
 [EfCoreConverter<QueryLogId>]
 [EfCoreConverter<UpdateRequestId>]
 internal partial class VogenEfCoreConverters;

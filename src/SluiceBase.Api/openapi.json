@@ -1088,7 +1088,17 @@
           "readCredentialId": {
             "$ref": "#/components/schemas/CredentialId"
           },
-          "writeCredentialId": { }
+          "writeCredentialId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "format": "uuid"
+          }
         }
       },
       "AntiforgeryTokenResponse": {
@@ -1181,7 +1191,10 @@
           }
         }
       },
-      "CredentialId": { },
+      "CredentialId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "CredentialResponse": {
         "required": [
           "id",
@@ -1211,7 +1224,10 @@
           }
         }
       },
-      "DatabaseId": { },
+      "DatabaseId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "DatabaseResponse": {
         "required": [
           "id",
