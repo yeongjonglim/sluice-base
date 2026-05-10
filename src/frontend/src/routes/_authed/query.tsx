@@ -13,7 +13,7 @@ import {
   Table,
   Text,
   Tooltip,
-  useMantineColorScheme,
+  useComputedColorScheme,
 } from "@mantine/core";
 import {
   IconChevronDown,
@@ -51,7 +51,7 @@ function QueryPage() {
   const [editorContent, setEditorContent] = useState("");
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const executeQuery = useExecuteQuery();
-  const { colorScheme } = useMantineColorScheme();
+  const computedColorScheme = useComputedColorScheme();
 
   const serverOptions = (servers.data?.servers ?? []).map((s) => ({
     value: s.id,
@@ -127,7 +127,7 @@ function QueryPage() {
               value={editorContent}
               onChange={setEditorContent}
               extensions={[sql(), runKeymap]}
-              theme={colorScheme === "dark" ? githubDark : githubLight}
+              theme={computedColorScheme === "dark" ? githubDark : githubLight}
               height="300px"
               basicSetup={{ lineNumbers: true, foldGutter: false }}
             />

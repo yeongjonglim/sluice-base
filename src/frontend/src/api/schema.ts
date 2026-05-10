@@ -493,8 +493,10 @@ export interface components {
             execAffectedRows: null | number | string;
             execError: null | string;
         };
-        UpdateRequestId: unknown;
-        UpdateRequestStatus: number;
+        /** Format: uuid */
+        UpdateRequestId: string;
+        /** @enum {string} */
+        UpdateRequestStatus: "Pending" | "Approved" | "Rejected" | "Cancelled" | "Executed";
         UpdateServerRequest: {
             name: string;
             host: string;
