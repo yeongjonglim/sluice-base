@@ -244,12 +244,111 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListUpdates"];
+        put?: never;
+        post: operations["SubmitUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetUpdate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ApproveUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["RejectUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update/{id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["CancelUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update/{id}/execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ExecuteUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         AntiforgeryTokenResponse: {
             headerName: null | string;
+        };
+        CancelUpdateRequest: {
+            note: string;
         };
         ColumnInfo: {
             name: string;
@@ -293,6 +392,9 @@ export interface components {
         ListServersResponse: {
             servers: components["schemas"]["ServerResponse"][];
         };
+        ListUpdateRequestsResponse: {
+            requests: components["schemas"]["UpdateSummaryItem"][];
+        };
         ListUsersResponse: {
             users: components["schemas"]["UserSummaryResponse"][];
         };
@@ -319,6 +421,9 @@ export interface components {
             durationMs: number | string;
             error: null | string;
         };
+        ReviewUpdateRequest: {
+            note: string;
+        };
         SchemaInfo: {
             name: string;
             tables: components["schemas"]["TableInfo"][];
@@ -343,6 +448,11 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        SubmitUpdateRequest: {
+            serverId: components["schemas"]["ServerId"];
+            sqlText: string;
+            reason: string;
+        };
         TableInfo: {
             name: string;
             columns: components["schemas"]["ColumnInfo"][];
@@ -351,6 +461,40 @@ export interface components {
             read: components["schemas"]["ConnectivityResult"];
             write: null | components["schemas"]["ConnectivityResult"];
         };
+        UpdateRequestDetailResponse: {
+            id: components["schemas"]["UpdateRequestId"];
+            serverId: null | components["schemas"]["ServerId"];
+            serverName: null | string;
+            submitterId: null | components["schemas"]["UserId"];
+            submitterName: null | string;
+            sqlText: string;
+            reason: string;
+            status: components["schemas"]["UpdateRequestStatus"];
+            reviewerId: null | components["schemas"]["UserId"];
+            reviewerName: null | string;
+            reviewNote: null | string;
+            cancelledById: null | components["schemas"]["UserId"];
+            cancelledByName: null | string;
+            cancelNote: null | string;
+            executorId: null | components["schemas"]["UserId"];
+            executorName: null | string;
+            /** Format: date-time */
+            submittedAt: string;
+            /** Format: date-time */
+            reviewedAt: null | string;
+            /** Format: date-time */
+            executedAt: null | string;
+            /** Format: date-time */
+            cancelledAt: null | string;
+            execSuccess: null | boolean;
+            /** Format: int32 */
+            execDurationMs: null | number | string;
+            /** Format: int32 */
+            execAffectedRows: null | number | string;
+            execError: null | string;
+        };
+        UpdateRequestId: unknown;
+        UpdateRequestStatus: number;
         UpdateServerRequest: {
             name: string;
             host: string;
@@ -363,6 +507,16 @@ export interface components {
             writePassword?: null | string;
             /** @default true */
             isEnabled: boolean;
+        };
+        UpdateSummaryItem: {
+            id: components["schemas"]["UpdateRequestId"];
+            serverName: null | string;
+            submitterName: null | string;
+            reason: string;
+            status: components["schemas"]["UpdateRequestStatus"];
+            /** Format: date-time */
+            submittedAt: string;
+            execSuccess: null | boolean;
         };
         /** Format: uuid */
         UserId: string;
@@ -832,6 +986,268 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    ListUpdates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListUpdateRequestsResponse"];
+                };
+            };
+        };
+    };
+    SubmitUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateRequestDetailResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateRequestDetailResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ApproveUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateRequestDetailResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+        };
+    };
+    RejectUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReviewUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateRequestDetailResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+        };
+    };
+    CancelUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CancelUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateRequestDetailResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+        };
+    };
+    ExecuteUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateRequestDetailResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
             };
         };
     };
