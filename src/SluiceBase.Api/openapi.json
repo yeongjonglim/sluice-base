@@ -133,7 +133,7 @@
         }
       }
     },
-    "/api/schema/{serverId}": {
+    "/api/schema/{databaseId}": {
       "get": {
         "tags": [
           "SchemaEndpoints"
@@ -141,7 +141,7 @@
         "operationId": "GetSchema",
         "parameters": [
           {
-            "name": "serverId",
+            "name": "databaseId",
             "in": "path",
             "required": true,
             "schema": {
@@ -162,6 +162,16 @@
           },
           "404": {
             "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -354,16 +364,6 @@
               }
             }
           },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
-                }
-              }
-            }
-          },
           "409": {
             "description": "Conflict"
           }
@@ -407,18 +407,11 @@
               }
             }
           },
-          "400": {
-            "description": "Bad Request",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
-                }
-              }
-            }
-          },
           "404": {
             "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
           }
         }
       },
@@ -447,15 +440,285 @@
         }
       }
     },
-    "/api/server/{id}/test": {
+    "/api/server/{serverId}/credential": {
       "post": {
         "tags": [
-          "ServerEndpoints"
+          "CredentialEndpoints"
         ],
-        "operationId": "TestConnection",
+        "operationId": "AddCredential",
         "parameters": [
           {
-            "name": "id",
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/server/{serverId}/credential/{credentialId}": {
+      "put": {
+        "tags": [
+          "CredentialEndpoints"
+        ],
+        "operationId": "UpdateCredential",
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "credentialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCredentialRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CredentialResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "CredentialEndpoints"
+        ],
+        "operationId": "DeleteCredential",
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "credentialId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/server/{serverId}/database": {
+      "post": {
+        "tags": [
+          "DatabaseEndpoints"
+        ],
+        "operationId": "AddDatabase",
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddDatabaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/server/{serverId}/database/{databaseId}": {
+      "put": {
+        "tags": [
+          "DatabaseEndpoints"
+        ],
+        "operationId": "UpdateDatabase",
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDatabaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "DatabaseEndpoints"
+        ],
+        "operationId": "DeleteDatabase",
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/server/{serverId}/database/{databaseId}/test": {
+      "post": {
+        "tags": [
+          "DatabaseEndpoints"
+        ],
+        "operationId": "TestDatabaseConnection",
+        "parameters": [
+          {
+            "name": "serverId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "databaseId",
             "in": "path",
             "required": true,
             "schema": {
@@ -789,6 +1052,45 @@
   },
   "components": {
     "schemas": {
+      "AddCredentialRequest": {
+        "required": [
+          "label",
+          "username",
+          "password"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        }
+      },
+      "AddDatabaseRequest": {
+        "required": [
+          "displayName",
+          "databaseName",
+          "readCredentialId"
+        ],
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "databaseName": {
+            "type": "string"
+          },
+          "readCredentialId": {
+            "$ref": "#/components/schemas/CredentialId"
+          },
+          "writeCredentialId": { }
+        }
+      },
       "AntiforgeryTokenResponse": {
         "required": [
           "headerName"
@@ -856,10 +1158,7 @@
           "name",
           "kind",
           "host",
-          "port",
-          "database",
-          "readUsername",
-          "readPassword"
+          "port"
         ],
         "type": "object",
         "properties": {
@@ -879,27 +1178,89 @@
               "string"
             ],
             "format": "int32"
+          }
+        }
+      },
+      "CredentialId": { },
+      "CredentialResponse": {
+        "required": [
+          "id",
+          "label",
+          "username",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/CredentialId"
           },
-          "database": {
+          "label": {
             "type": "string"
           },
-          "readUsername": {
+          "username": {
             "type": "string"
           },
-          "readPassword": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DatabaseId": { },
+      "DatabaseResponse": {
+        "required": [
+          "id",
+          "displayName",
+          "databaseName",
+          "readCredentialId",
+          "writeCredentialId",
+          "canWrite",
+          "isDisabled",
+          "createdAt",
+          "updatedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DatabaseId"
+          },
+          "displayName": {
             "type": "string"
           },
-          "writeUsername": {
-            "type": [
-              "null",
-              "string"
+          "databaseName": {
+            "type": "string"
+          },
+          "readCredentialId": {
+            "$ref": "#/components/schemas/CredentialId"
+          },
+          "writeCredentialId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CredentialId"
+              }
             ]
           },
-          "writePassword": {
-            "type": [
-              "null",
-              "string"
-            ]
+          "canWrite": {
+            "type": "boolean"
+          },
+          "isDisabled": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -1070,13 +1431,13 @@
       },
       "QueryRequest": {
         "required": [
-          "serverId",
+          "databaseId",
           "sql"
         ],
         "type": "object",
         "properties": {
-          "serverId": {
-            "$ref": "#/components/schemas/ServerId"
+          "databaseId": {
+            "$ref": "#/components/schemas/DatabaseId"
           },
           "sql": {
             "type": "string"
@@ -1192,9 +1553,9 @@
           "kind",
           "host",
           "port",
-          "database",
-          "isEnabled",
-          "hasWriteCredential",
+          "isDisabled",
+          "credentials",
+          "databases",
           "createdAt",
           "updatedAt"
         ],
@@ -1220,14 +1581,20 @@
             ],
             "format": "int32"
           },
-          "database": {
-            "type": "string"
-          },
-          "isEnabled": {
+          "isDisabled": {
             "type": "boolean"
           },
-          "hasWriteCredential": {
-            "type": "boolean"
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CredentialResponse"
+            }
+          },
+          "databases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatabaseResponse"
+            }
           },
           "createdAt": {
             "type": "string",
@@ -1241,14 +1608,14 @@
       },
       "SubmitUpdateRequest": {
         "required": [
-          "serverId",
+          "databaseId",
           "sqlText",
           "reason"
         ],
         "type": "object",
         "properties": {
-          "serverId": {
-            "$ref": "#/components/schemas/ServerId"
+          "databaseId": {
+            "$ref": "#/components/schemas/DatabaseId"
           },
           "sqlText": {
             "type": "string"
@@ -1298,11 +1665,66 @@
           }
         }
       },
+      "UpdateCredentialRequest": {
+        "required": [
+          "label",
+          "username"
+        ],
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "UpdateDatabaseRequest": {
+        "required": [
+          "displayName",
+          "databaseName",
+          "readCredentialId",
+          "writeCredentialId",
+          "isDisabled"
+        ],
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "databaseName": {
+            "type": "string"
+          },
+          "readCredentialId": {
+            "$ref": "#/components/schemas/CredentialId"
+          },
+          "writeCredentialId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CredentialId"
+              }
+            ]
+          },
+          "isDisabled": {
+            "type": "boolean"
+          }
+        }
+      },
       "UpdateRequestDetailResponse": {
         "required": [
           "id",
-          "serverId",
-          "serverName",
+          "databaseId",
+          "databaseDisplayName",
           "submitterId",
           "submitterName",
           "sqlText",
@@ -1330,17 +1752,17 @@
           "id": {
             "$ref": "#/components/schemas/UpdateRequestId"
           },
-          "serverId": {
+          "databaseId": {
             "oneOf": [
               {
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/ServerId"
+                "$ref": "#/components/schemas/DatabaseId"
               }
             ]
           },
-          "serverName": {
+          "databaseDisplayName": {
             "type": [
               "null",
               "string"
@@ -1507,7 +1929,7 @@
           "name",
           "host",
           "port",
-          "database"
+          "kind"
         ],
         "type": "object",
         "properties": {
@@ -1525,43 +1947,19 @@
             ],
             "format": "int32"
           },
-          "database": {
+          "kind": {
             "type": "string"
           },
-          "readUsername": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "readPassword": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "writeUsername": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "writePassword": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "isEnabled": {
+          "isDisabled": {
             "type": "boolean",
-            "default": true
+            "default": false
           }
         }
       },
       "UpdateSummaryItem": {
         "required": [
           "id",
-          "serverName",
+          "databaseDisplayName",
           "submitterName",
           "reason",
           "status",
@@ -1573,7 +1971,7 @@
           "id": {
             "$ref": "#/components/schemas/UpdateRequestId"
           },
-          "serverName": {
+          "databaseDisplayName": {
             "type": [
               "null",
               "string"
@@ -1665,6 +2063,12 @@
     },
     {
       "name": "ServerEndpoints"
+    },
+    {
+      "name": "CredentialEndpoints"
+    },
+    {
+      "name": "DatabaseEndpoints"
     },
     {
       "name": "UpdateEndpoints"

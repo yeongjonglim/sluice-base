@@ -64,20 +64,20 @@ internal static class UpdateEndpoints
             return TypedResults.Unauthorized();
         }
 
-        var server = await db.Servers.AsNoTracking()
-            .SingleOrDefaultAsync(s => s.Id == req.ServerId, ct);
-        if (server is null)
+        var database = await db.Databases.AsNoTracking()
+            .SingleOrDefaultAsync(s => s.Id == req.DatabaseId, ct);
+        if (database is null)
         {
             return TypedResults.NotFound();
         }
 
-        if (!server.HasWriteCredential)
+        if (!database.CanWrite)
         {
             return TypedResults.BadRequest("Server has no write credentials configured.");
         }
 
         var request = UpdateRequest.Create(
-            server.Id,
+            database.Id,
             req.SqlText,
             req.Reason,
             new Actioned(user.Id, timeProvider.GetUtcNow()));
@@ -96,7 +96,7 @@ internal static class UpdateEndpoints
         CancellationToken ct)
     {
         var requests = await db.UpdateRequests
-            .Include(r => r.Server)
+            .Include(r => r.Database)
             .Include(r => r.Submitter)
             .AsNoTracking()
             .OrderByDescending(r => r.SubmittedAt)
@@ -105,7 +105,7 @@ internal static class UpdateEndpoints
         var items = requests
             .Select(r => new UpdateSummaryItem(
                 r.Id,
-                r.Server?.Name,
+                r.Database?.DisplayName,
                 r.Submitter?.Name ?? r.Submitter?.Email,
                 r.Reason,
                 r.Status,
@@ -269,14 +269,14 @@ internal static class UpdateEndpoints
             return TypedResults.Conflict($"Cannot execute a request in '{request.Status}' state.");
         }
 
-        if (request.ServerId is null)
+        if (request.DatabaseId is null)
         {
             return TypedResults.Conflict("Server was deleted. Cannot execute.");
         }
 
-        var server = await db.Servers.AsNoTracking()
-            .SingleOrDefaultAsync(s => s.Id == request.ServerId, ct);
-        if (server is null || !server.HasWriteCredential)
+        var database = await db.Databases.AsNoTracking()
+            .SingleOrDefaultAsync(s => s.Id == request.DatabaseId, ct);
+        if (database is null || !database.CanWrite)
         {
             return TypedResults.Conflict("Server not found or has no write credentials configured.");
         }
@@ -302,7 +302,7 @@ internal static class UpdateEndpoints
         try
         {
             var connectionString = await connectionFactory
-                .GetConnectionStringAsync(server.Id, CredentialKind.Write, ct);
+                .GetConnectionStringAsync(database.Id, CredentialKind.Write, ct);
             var raw = await targetEngine.ExecuteUpdateAsync(
                 connectionString,
                 request.SqlText,
@@ -347,7 +347,7 @@ internal static class UpdateEndpoints
     private static Task<UpdateRequest?> LoadDetail(AppDbContext db, UpdateRequestId id, CancellationToken ct) =>
         db.UpdateRequests
             .AsNoTracking()
-            .Include(r => r.Server)
+            .Include(r => r.Database)
             .Include(r => r.Submitter)
             .Include(r => r.Reviewer)
             .Include(r => r.Executor)
@@ -360,8 +360,8 @@ internal static class UpdateEndpoints
 
     private static UpdateRequestDetailResponse ToDetail(UpdateRequest r) =>
         new(r.Id,
-            r.ServerId,
-            r.Server?.Name,
+            r.DatabaseId,
+            r.Database?.DisplayName,
             r.SubmitterId,
             r.Submitter?.Name ?? r.Submitter?.Email,
             r.SqlText,
@@ -386,14 +386,15 @@ internal static class UpdateEndpoints
 
     // ── request / response records ────────────────────────────────────────────
 
-    public sealed record SubmitUpdateRequest(ServerId ServerId, string SqlText, string Reason);
+    public sealed record SubmitUpdateRequest(DatabaseId DatabaseId, string SqlText, string Reason);
 
     public sealed record ReviewUpdateRequest(string Note);
+
     public sealed record CancelUpdateRequest(string Note);
 
     public sealed record UpdateSummaryItem(
         UpdateRequestId Id,
-        string? ServerName,
+        string? DatabaseDisplayName,
         string? SubmitterName,
         string Reason,
         UpdateRequestStatus Status,
@@ -404,13 +405,13 @@ internal static class UpdateEndpoints
 
     public sealed record UpdateRequestDetailResponse(
         UpdateRequestId Id,
-        ServerId? ServerId,
-        string? ServerName,
+        DatabaseId? DatabaseId,
+        string? DatabaseDisplayName,
         UserId? SubmitterId,
         string? SubmitterName,
         string SqlText,
         string Reason,
-        UpdateRequestStatus Status, // TODO: Check how to handle the status as a contract
+        UpdateRequestStatus Status,
         UserId? ReviewerId,
         string? ReviewerName,
         string? ReviewNote,

@@ -32,16 +32,11 @@ internal static class QueryEndpoints
         var user = await currentUser.GetAsync(ct);
         var startedAt = timeProvider.GetUtcNow();
 
-        var server = await db.Servers.AsNoTracking()
-            .SingleOrDefaultAsync(s => s.Id == request.ServerId, ct);
-        if (server is null)
+        var database = await db.Databases.AsNoTracking()
+            .SingleOrDefaultAsync(d => d.Id == request.DatabaseId, ct);
+        if (database is null)
         {
             return TypedResults.NotFound();
-        }
-
-        if (string.IsNullOrWhiteSpace(server.ReadUsername))
-        {
-            return TypedResults.BadRequest("Server has no read-only credentials configured.");
         }
 
         var timeoutSeconds = configuration.GetValue("Query:TimeoutSeconds", 30);
@@ -55,27 +50,30 @@ internal static class QueryEndpoints
         try
         {
             var connectionString = await connectionFactory
-                .GetConnectionStringAsync(server.Id, CredentialKind.Read, ct);
+                .GetConnectionStringAsync(database.Id, CredentialKind.Read, ct);
 
-            var data = await targetEngine.ExecuteQueryAsync(
-                connectionString,
-                request.Sql,
-                linkedCts.Token);
-
+            var data = await targetEngine.ExecuteQueryAsync(connectionString, request.Sql, linkedCts.Token);
             var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
             rowCount = data.Rows.Length;
             logStatus = QueryLogStatus.Success;
             response = new QueryResponse(data.Columns, data.Rows, rowCount.Value, durationMs, null);
         }
+        catch (InvalidOperationException ex)
+        {
+            var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
+            logStatus = QueryLogStatus.Error;
+            response = new QueryResponse(null, null, 0, durationMs, ex.Message);
+
+            var log = QueryLog.Create(user?.Id, database.Id, request.Sql, logStatus, startedAt, durationMs, null, ex.Message);
+            db.QueryLogs.Add(log);
+            await db.SaveChangesAsync(ct);
+            return TypedResults.BadRequest(ex.Message);
+        }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
         {
             var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
             logStatus = QueryLogStatus.Timeout;
-            response = new QueryResponse(null,
-                null,
-                0,
-                durationMs,
-                $"Query timed out after {timeoutSeconds}s.");
+            response = new QueryResponse(null, null, 0, durationMs, $"Query timed out after {timeoutSeconds}s.");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -84,23 +82,14 @@ internal static class QueryEndpoints
             response = new QueryResponse(null, null, 0, durationMs, ex.Message);
         }
 
-        var log = QueryLog.Create(
-            userId: user?.Id,
-            serverId: server.Id,
-            queryText: request.Sql,
-            status: logStatus,
-            executedAt: startedAt,
-            durationMs: response.DurationMs,
-            rowCount: rowCount,
-            error: response.Error);
-
-        db.QueryLogs.Add(log);
+        var queryLog = QueryLog.Create(user?.Id, database.Id, request.Sql, logStatus, startedAt, response.DurationMs, rowCount, response.Error);
+        db.QueryLogs.Add(queryLog);
         await db.SaveChangesAsync(ct);
 
         return TypedResults.Ok(response);
     }
 
-    public sealed record QueryRequest(ServerId ServerId, string Sql);
+    public sealed record QueryRequest(DatabaseId DatabaseId, string Sql);
 
     public sealed record QueryResponse(
         string[]? Columns,
