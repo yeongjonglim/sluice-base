@@ -19,6 +19,7 @@ import {
   IconChevronDown,
   IconChevronRight,
   IconDatabase,
+  IconDownload,
   IconPlayerPlay,
   IconPlaylistAdd,
   IconTable,
@@ -247,9 +248,21 @@ function QueryResults({
 
   return (
     <Stack mt="md" gap="xs">
-      <Text size="xs" c="dimmed">
-        {result.rowCount} {result.rowCount === 1 ? "row" : "rows"} · {result.durationMs} ms
-      </Text>
+      <Group justify="space-between" align="center">
+        <Text size="xs" c="dimmed">
+          {result.rowCount} {result.rowCount === 1 ? "row" : "rows"} · {result.durationMs} ms
+        </Text>
+        <Button
+          size="xs"
+          variant="subtle"
+          leftSection={<IconDownload size={14} />}
+          onClick={() =>
+            exportToCsv(columns, rows, `query-results-${Date.now()}.csv`)
+          }
+        >
+          Export CSV
+        </Button>
+      </Group>
       <ScrollArea type="auto">
         <Table striped withTableBorder withColumnBorders fz="xs" style={{ whiteSpace: "nowrap" }}>
           <Table.Thead>
