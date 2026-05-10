@@ -1,3 +1,4 @@
+// src/SluiceBase.Api/Data/AppDbContext.cs
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Conventions;
@@ -17,6 +18,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<User> Users => Set<User>();
     public DbSet<UserPermissionMap> UserPermissions => Set<UserPermissionMap>();
     public DbSet<Server> Servers => Set<Server>();
+    public DbSet<Credential> Credentials => Set<Credential>();
+    public DbSet<Database> Databases => Set<Database>();
     public DbSet<QueryLog> QueryLogs => Set<QueryLog>();
     public DbSet<UpdateRequest> UpdateRequests => Set<UpdateRequest>();
 
