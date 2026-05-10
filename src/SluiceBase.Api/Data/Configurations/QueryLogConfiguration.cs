@@ -1,3 +1,4 @@
+// src/SluiceBase.Api/Data/Configurations/QueryLogConfiguration.cs
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SluiceBase.Core.Queries;
@@ -19,8 +20,8 @@ internal sealed class QueryLogConfiguration : IEntityTypeConfiguration<QueryLog>
             .HasForeignKey(q => q.UserId)
             .OnDelete(DeleteBehavior.SetNull);
 
-        builder.HasOne<Server>().WithMany()
-            .HasForeignKey(q => q.ServerId)
-            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne<Database>().WithMany()
+            .HasForeignKey(q => q.DatabaseId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

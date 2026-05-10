@@ -11,7 +11,7 @@ public sealed class QueryLog
 
     public QueryLogId Id { get; private set; }
     public UserId? UserId { get; private set; }
-    public ServerId? ServerId { get; private set; }
+    public DatabaseId? DatabaseId { get; private set; }
     public string QueryText { get; private set; }
     public QueryLogStatus Status { get; private set; }
     public DateTimeOffset ExecutedAt { get; private set; }
@@ -21,7 +21,7 @@ public sealed class QueryLog
 
     public static QueryLog Create(
         UserId? userId,
-        ServerId? serverId,
+        DatabaseId? databaseId,
         string queryText,
         QueryLogStatus status,
         DateTimeOffset executedAt,
@@ -31,7 +31,7 @@ public sealed class QueryLog
     {
         Id = QueryLogId.FromNewVersion7Guid(),
         UserId = userId,
-        ServerId = serverId,
+        DatabaseId = databaseId,
         QueryText = queryText,
         Status = status,
         ExecutedAt = executedAt,
