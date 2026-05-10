@@ -1488,9 +1488,19 @@
           }
         }
       },
-      "UpdateRequestId": { },
+      "UpdateRequestId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "UpdateRequestStatus": {
-        "type": "integer"
+        "enum": [
+          "Pending",
+          "Approved",
+          "Rejected",
+          "Cancelled",
+          "Executed"
+        ],
+        "type": "string"
       },
       "UpdateServerRequest": {
         "required": [
