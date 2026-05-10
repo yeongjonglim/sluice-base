@@ -139,7 +139,7 @@ describe("useCancelUpdate", () => {
   it("posts to /api/update/:id/cancel", async () => {
     vi.mocked(apiRequest).mockResolvedValue({ ...fakeDetail, status: "cancelled" });
     const { result } = renderHook(() => useCancelUpdate(), { wrapper });
-    result.current.mutate("req-1");
+    result.current.mutate({ id: "req-1", note: "not required" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(apiRequest).toHaveBeenCalledWith(
       "/api/update/req-1/cancel",
