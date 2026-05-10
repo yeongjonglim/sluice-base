@@ -1,3 +1,4 @@
+// src/SluiceBase.Api/Data/Configurations/UpdateRequestConfiguration.cs
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using SluiceBase.Core.Updates;
@@ -14,9 +15,9 @@ internal sealed class UpdateRequestConfiguration : IEntityTypeConfiguration<Upda
         builder.Property(r => r.Reason).IsRequired();
         builder.Property(r => r.Status).HasMaxLength(16).IsRequired();
 
-        builder.HasOne(r => r.Server).WithMany()
-            .HasForeignKey(r => r.ServerId)
-            .OnDelete(DeleteBehavior.SetNull);
+        builder.HasOne(r => r.Database).WithMany()
+            .HasForeignKey(r => r.DatabaseId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(r => r.Submitter).WithMany()
             .HasForeignKey(r => r.SubmitterId)

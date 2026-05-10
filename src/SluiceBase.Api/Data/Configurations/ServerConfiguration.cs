@@ -11,13 +11,8 @@ internal sealed class ServerConfiguration : IEntityTypeConfiguration<Server>
         builder.ToTable("server");
         builder.HasKey(s => s.Id);
         builder.Property(s => s.Name).HasMaxLength(128).IsRequired();
-        builder.HasIndex(s => s.Name).IsUnique();
+        builder.HasIndex(s => s.Name).IsUnique().HasFilter("deleted_at IS NULL");
         builder.Property(s => s.Kind).HasMaxLength(32).IsRequired();
         builder.Property(s => s.Host).HasMaxLength(255).IsRequired();
-        builder.Property(s => s.Database).HasMaxLength(255).IsRequired();
-        builder.Property(s => s.ReadUsername).HasMaxLength(128).IsRequired();
-        builder.Property(s => s.EncryptedReadPassword).HasMaxLength(4096).IsRequired();
-        builder.Property(s => s.WriteUsername).HasMaxLength(128);
-        builder.Property(s => s.EncryptedWritePassword).HasMaxLength(4096);
     }
 }

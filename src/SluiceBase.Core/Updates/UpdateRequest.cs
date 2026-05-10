@@ -14,7 +14,7 @@ public sealed class UpdateRequest
 #pragma warning restore CS8618
 
     public UpdateRequestId Id { get; private set; }
-    public ServerId? ServerId { get; private set; }
+    public DatabaseId? DatabaseId { get; private set; }
     public UserId? SubmitterId { get; private set; }
     public string SqlText { get; private set; }
     public string Reason { get; private set; }
@@ -36,7 +36,7 @@ public sealed class UpdateRequest
     public string? ExecError { get; private set; }
 
     // Linked by EF relationship
-    public Server? Server { get; private set; }
+    public Database? Database { get; private set; }
     public User? Submitter { get; private set; }
     public User? Reviewer { get; private set; }
     public User? Executor { get; private set; }
@@ -128,18 +128,18 @@ public sealed class UpdateRequest
     }
 
     public static UpdateRequest Create(
-        ServerId serverId,
+        DatabaseId databaseId,
         string sqlText,
         string reason,
-        Actioned actioned) => new()
+        Actioned by) => new()
     {
         Id = UpdateRequestId.FromNewVersion7Guid(),
-        ServerId = serverId,
-        SubmitterId = actioned.UserId,
+        DatabaseId = databaseId,
+        SubmitterId = by.UserId,
         SqlText = sqlText,
         Reason = reason,
         Status = UpdateRequestStatus.Pending,
-        SubmittedAt = actioned.At,
+        SubmittedAt = by.At,
     };
 
     // Fires the machine trigger (throws InvalidOperationException on invalid transition),
