@@ -18,11 +18,11 @@ export const Route = createFileRoute("/_authed/update/")({
 });
 
 const STATUS_COLOR: Record<string, string> = {
-  pending: "blue",
-  approved: "green",
-  rejected: "red",
-  cancelled: "gray",
-  executed: "teal",
+  Pending: "blue",
+  Approved: "green",
+  Rejected: "red",
+  Cancelled: "gray",
+  Executed: "teal",
 };
 
 function statusBadge(

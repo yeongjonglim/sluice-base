@@ -11,8 +11,7 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import {
-  IconHeartRateMonitor,
-  IconHome,
+  IconArrowsExchange,
   IconLogout,
   IconMoon,
   IconServer,
@@ -37,6 +36,10 @@ function AuthedLayout() {
   const isAdmin = useHasPermission("permission:manage");
   const isServerAdmin = useHasPermission("server:manage");
   const canQuery = useHasPermission("query:execute");
+  const canSubmitUpdates = useHasPermission("update:submit");
+  const canApproveUpdates = useHasPermission("update:approve");
+  const canExecuteUpdates = useHasPermission("update:execute");
+  const canSeeUpdates = canSubmitUpdates || canApproveUpdates || canExecuteUpdates;
 
 
   if (!me.data) {
@@ -90,20 +93,20 @@ function AuthedLayout() {
         </AppShell.Header>
 
         <AppShell.Navbar p="sm">
-          <NavLink
-            label="Home"
-            leftSection={<IconHome size={16} />}
-            component={Link}
-            to="/"
-            active={location.pathname === "/"}
-          />
-          <NavLink
-            label="Health"
-            leftSection={<IconHeartRateMonitor size={16} />}
-            component={Link}
-            to="/health"
-            active={location.pathname === "/health"}
-          />
+          {/* <NavLink*/}
+          {/*  label="Home"*/}
+          {/*  leftSection={<IconHome size={16} />}*/}
+          {/*  component={Link}*/}
+          {/*  to="/"*/}
+          {/*  active={location.pathname === "/"}*/}
+          {/* />*/}
+          {/* <NavLink*/}
+          {/*  label="Health"*/}
+          {/*  leftSection={<IconHeartRateMonitor size={16} />}*/}
+          {/*  component={Link}*/}
+          {/*  to="/health"*/}
+          {/*  active={location.pathname === "/health"}*/}
+          {/* />*/}
           {canQuery && (
             <NavLink
               label="Query"
@@ -111,6 +114,15 @@ function AuthedLayout() {
               component={Link}
               to="/query"
               active={location.pathname === "/query"}
+            />
+          )}
+          {canSeeUpdates && (
+            <NavLink
+              label="Updates"
+              leftSection={<IconArrowsExchange size={16} />}
+              component={Link}
+              to="/update"
+              active={location.pathname.startsWith("/update")}
             />
           )}
           {isServerAdmin && (

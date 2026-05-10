@@ -5,18 +5,19 @@ import {
   Button,
   Group,
   Modal,
-  Paper,
   Skeleton,
   Stack,
   Text,
   Textarea,
+  Timeline,
   Title,
   useComputedColorScheme,
 } from "@mantine/core";
+import { IconBan, IconCheck, IconPlayerPlay, IconSend, IconX } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useState } from "react";
+import React, { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
@@ -44,11 +45,11 @@ export const Route = createFileRoute("/_authed/update/$id")({
 });
 
 const STATUS_COLOR: Record<string, string> = {
-  pending: "blue",
-  approved: "green",
-  rejected: "red",
-  cancelled: "gray",
-  executed: "teal",
+  Pending: "blue",
+  Approved: "green",
+  Rejected: "red",
+  Cancelled: "gray",
+  Executed: "teal",
 };
 
 function UpdateDetailPage() {
@@ -63,6 +64,7 @@ function UpdateDetailPage() {
 
   const [approveModalOpen, { open: openApprove, close: closeApprove }] = useDisclosure(false);
   const [rejectModalOpen, { open: openReject, close: closeReject }] = useDisclosure(false);
+  const [cancelModalOpen, { open: openCancel, close: closeCancel }] = useDisclosure(false);
   const [reviewNote, setReviewNote] = useState("");
 
   const canApprove = meData?.permissions.includes("update:approve") ?? false;
@@ -116,13 +118,16 @@ function UpdateDetailPage() {
   }
 
   function handleCancel() {
-    modals.openConfirmModal({
-      title: "Cancel request",
-      children: <Text>Are you sure you want to cancel this update request?</Text>,
-      labels: { confirm: "Cancel request", cancel: "Keep it" },
-      confirmProps: { color: "red" },
-      onConfirm: () => cancel.mutate(id),
-    });
+    if (!reviewNote.trim()) return;
+    cancel.mutate(
+      { id, note: reviewNote },
+      {
+        onSuccess: () => {
+          closeCancel();
+          setReviewNote("");
+        },
+      },
+    );
   }
 
   function handleExecute() {
@@ -175,117 +180,119 @@ function UpdateDetailPage() {
         />
       </Box>
 
-      {/* Metadata */}
-      <Paper withBorder p="md">
-        <Stack gap="xs">
-          <Group gap="xs">
-            <Text size="sm" fw={500}>
-              Server:
-            </Text>
-            <Text size="sm">{r.serverName ?? "—"}</Text>
-          </Group>
-          <Group gap="xs">
-            <Text size="sm" fw={500}>
-              Submitted by:
-            </Text>
-            <Text size="sm">{r.submitterName ?? "—"}</Text>
-          </Group>
-          <Group gap="xs">
-            <Text size="sm" fw={500}>
-              Submitted at:
-            </Text>
-            <Text size="sm">{new Date(r.submittedAt).toLocaleString()}</Text>
-          </Group>
-          <Group gap="xs" align="flex-start">
-            <Text size="sm" fw={500}>
-              Reason:
-            </Text>
-            <Text size="sm" style={{ flex: 1 }}>
-              {r.reason}
-            </Text>
-          </Group>
-        </Stack>
-      </Paper>
+      {/* Timeline */}
+      {(() => {
+        const eventItems: Array<{ ts: string; node: React.ReactNode }> = (
+          [
+            r.status !== "Pending" && r.reviewedAt
+              ? {
+                  ts: r.reviewedAt,
+                  node: (
+                    <Timeline.Item
+                      key="review"
+                      title={r.status === "Rejected" ? "Rejected" : "Approved"}
+                      bullet={
+                        r.status === "Rejected" ? (
+                          <IconX size={14} />
+                        ) : (
+                          <IconCheck size={14} />
+                        )
+                      }
+                      color={r.status === "Rejected" ? "red" : "green"}
+                    >
+                      <Stack gap={4} mt={4}>
+                        <Text size="sm" c="dimmed">
+                          {r.status === "Rejected" ? r.reviewerName : r.reviewerName} &middot;{" "}
+                          {new Date(r.reviewedAt).toLocaleString()}
+                        </Text>
+                        {r.reviewNote && <Text size="sm">{r.reviewNote}</Text>}
+                      </Stack>
+                    </Timeline.Item>
+                  ),
+                }
+              : null,
+            r.status === "Cancelled" && r.cancelledAt
+              ? {
+                  ts: r.cancelledAt,
+                  node: (
+                    <Timeline.Item
+                      key="cancel"
+                      title="Cancelled"
+                      bullet={<IconBan size={14} />}
+                      color="gray"
+                    >
+                      <Stack gap={4} mt={4}>
+                        <Text size="sm" c="dimmed">
+                          {r.cancelledByName} &middot;{" "}
+                          {new Date(r.cancelledAt).toLocaleString()}
+                        </Text>
+                        {r.cancelNote && <Text size="sm">{r.cancelNote}</Text>}
+                      </Stack>
+                    </Timeline.Item>
+                  ),
+                }
+              : null,
+            r.status === "Executed" && r.executedAt
+              ? {
+                  ts: r.executedAt,
+                  node: (
+                    <Timeline.Item
+                      key="exec"
+                      title="Executed"
+                      bullet={<IconPlayerPlay size={14} />}
+                      color={r.execSuccess ? "teal" : "red"}
+                    >
+                      <Stack gap={4} mt={4}>
+                        <Group gap="xs">
+                          <Text size="sm" c="dimmed">
+                            {r.executorName} &middot;{" "}
+                            {new Date(r.executedAt).toLocaleString()}
+                          </Text>
+                          {execBadge}
+                        </Group>
+                        {r.execDurationMs != null && (
+                          <Text size="sm" c="dimmed">
+                            {r.execDurationMs} ms
+                            {r.execAffectedRows != null &&
+                              ` · ${r.execAffectedRows} rows affected`}
+                          </Text>
+                        )}
+                        {r.execError && (
+                          <Alert color="red" title="Error" mt={4}>
+                            {r.execError}
+                          </Alert>
+                        )}
+                      </Stack>
+                    </Timeline.Item>
+                  ),
+                }
+              : null,
+          ] as Array<{ ts: string; node: React.ReactNode } | null>
+        )
+          .filter((x): x is { ts: string; node: React.ReactNode } => x !== null)
+          .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
 
-      {/* Review section */}
-      {r.status !== "Pending" && r.reviewedAt && (
-        <Paper withBorder p="md">
-          <Stack gap="xs">
-            <Text size="sm" fw={600}>
-              Review
-            </Text>
-            <Group gap="xs">
-              <Text size="sm" fw={500}>
-                {r.status === "Rejected" ? "Rejected by:" : "Approved by:"}
-              </Text>
-              <Text size="sm">{r.reviewerName ?? "—"}</Text>
-            </Group>
-            <Group gap="xs">
-              <Text size="sm" fw={500}>
-                At:
-              </Text>
-              <Text size="sm">{new Date(r.reviewedAt).toLocaleString()}</Text>
-            </Group>
-            {r.reviewNote && (
-              <Group gap="xs" align="flex-start">
-                <Text size="sm" fw={500}>
-                  Note:
+        return (
+          <Timeline active={eventItems.length} bulletSize={26} mt="xs">
+            <Timeline.Item
+              title="Submitted"
+              bullet={<IconSend size={14} />}
+              color="blue"
+            >
+              <Stack gap={4} mt={4}>
+                <Text size="sm" c="dimmed">
+                  {r.submitterName} &middot; {new Date(r.submittedAt).toLocaleString()}
                 </Text>
-                <Text size="sm" style={{ flex: 1 }}>
-                  {r.reviewNote}
+                <Text size="sm" c="dimmed">
+                  {r.serverName}
                 </Text>
-              </Group>
-            )}
-          </Stack>
-        </Paper>
-      )}
-
-      {/* Execution section */}
-      {r.status === "Executed" && r.executedAt && (
-        <Paper withBorder p="md">
-          <Stack gap="xs">
-            <Group gap="xs">
-              <Text size="sm" fw={600}>
-                Execution
-              </Text>
-              {execBadge}
-            </Group>
-            <Group gap="xs">
-              <Text size="sm" fw={500}>
-                Executed by:
-              </Text>
-              <Text size="sm">{r.executorName ?? "—"}</Text>
-            </Group>
-            <Group gap="xs">
-              <Text size="sm" fw={500}>
-                At:
-              </Text>
-              <Text size="sm">{new Date(r.executedAt).toLocaleString()}</Text>
-            </Group>
-            {r.execDurationMs != null && (
-              <Group gap="xs">
-                <Text size="sm" fw={500}>
-                  Duration:
-                </Text>
-                <Text size="sm">{r.execDurationMs} ms</Text>
-              </Group>
-            )}
-            {r.execAffectedRows != null && (
-              <Group gap="xs">
-                <Text size="sm" fw={500}>
-                  Affected rows:
-                </Text>
-                <Text size="sm">{r.execAffectedRows}</Text>
-              </Group>
-            )}
-            {r.execError && (
-              <Alert color="red" title="Error">
-                {r.execError}
-              </Alert>
-            )}
-          </Stack>
-        </Paper>
-      )}
+                <Text size="sm">{r.reason}</Text>
+              </Stack>
+            </Timeline.Item>
+            {eventItems.map((x) => x.node)}
+          </Timeline>
+        );
+      })()}
 
       {/* Action area */}
       <Group>
@@ -300,7 +307,7 @@ function UpdateDetailPage() {
           </>
         )}
         {(r.status === "Pending" || r.status === "Approved") && canSubmit && (
-          <Button color="gray" variant="outline" onClick={handleCancel} loading={cancel.isPending}>
+          <Button color="gray" variant="outline" onClick={openCancel} loading={cancel.isPending}>
             Cancel
           </Button>
         )}
@@ -334,6 +341,34 @@ function UpdateDetailPage() {
               loading={approve.isPending}
             >
               Confirm Approve
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Cancel modal */}
+      <Modal opened={cancelModalOpen} onClose={closeCancel} title="Cancel request">
+        <Stack gap="md">
+          <Textarea
+            label="Note"
+            description="Required — describe why you're cancelling."
+            placeholder="Submitted by mistake, resubmitting with corrected SQL."
+            required
+            minRows={3}
+            value={reviewNote}
+            onChange={(e) => setReviewNote(e.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="subtle" onClick={closeCancel}>
+              Back
+            </Button>
+            <Button
+              color="red"
+              onClick={handleCancel}
+              disabled={!reviewNote.trim()}
+              loading={cancel.isPending}
+            >
+              Confirm Cancel
             </Button>
           </Group>
         </Stack>

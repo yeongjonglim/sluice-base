@@ -31,11 +31,16 @@ var greenDbInstance = builder.AddPostgres("target-green-pg")
 // Add the default database to the application model so that it can be referenced by other resources.
 var greenDb = greenDbInstance.AddDatabase("green-appdb", appDbName);
 
-var keycloak = builder.AddKeycloak("keycloak")
+var keycloak = builder.AddKeycloak("keycloak", 63330)
     .WithRealmImport("seed/keycloak")
     .WithOtlpExporter()
     .WaitFor(keycloakDb)
-    .WithPostgres(keycloakDb);
+    .WithPostgres(keycloakDb)
+    .WithEndpoint("https", ep =>
+    {
+        ep.Port = 63331;
+        ep.UriScheme = "https";
+    });
 
 var api = builder.AddProject<Projects.SluiceBase_Api>("api")
     .WithReference(metadataDb, "Metadata").WaitFor(metadataDb)
