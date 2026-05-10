@@ -2,7 +2,7 @@ using SluiceBase.Core.Servers;
 
 namespace SluiceBase.Api.Servers;
 
-public interface IServerConnectionFactory
+internal interface IServerConnectionFactory
 {
-    Task<string> GetConnectionStringAsync(ServerId serverId, CredentialKind kind, CancellationToken ct);
+    Task<string> GetConnectionStringAsync(DatabaseId databaseId, CredentialKind kind, CancellationToken ct);
 }
