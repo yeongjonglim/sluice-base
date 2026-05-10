@@ -345,8 +345,11 @@ export function useRejectUpdate() {
 export function useCancelUpdate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) =>
-      apiRequest<void, UpdateRequestDetail>(`/api/update/${id}/cancel`, { method: "POST" }),
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      apiRequest<{ note: string }, UpdateRequestDetail>(`/api/update/${id}/cancel`, {
+        method: "POST",
+        body: { note },
+      }),
     onSuccess: (data) => {
       void qc.invalidateQueries({ queryKey: ["update"] });
       void qc.invalidateQueries({ queryKey: ["update", data.id] });
