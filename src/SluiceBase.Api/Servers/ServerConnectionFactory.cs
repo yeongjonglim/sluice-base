@@ -15,35 +15,43 @@ internal sealed class ServerConnectionFactory(
 
     public const string ProtectorPurpose = "SluiceBase.ServerPassword";
 
-    public async Task<string> GetConnectionStringAsync(ServerId serverId, CredentialKind kind, CancellationToken ct)
+    public async Task<string> GetConnectionStringAsync(DatabaseId databaseId, CredentialKind kind, CancellationToken ct)
     {
-        var server = await db.Servers
-                         .AsNoTracking()
-                         .SingleOrDefaultAsync(s => s.Id == serverId, ct)
-                     ?? throw new InvalidOperationException($"Server {serverId} not found.");
+        var database = await db.Databases
+            .AsNoTracking()
+            .Include(d => d.Server)
+            .SingleOrDefaultAsync(d => d.Id == databaseId, ct)
+            ?? throw new InvalidOperationException($"Database {databaseId} not found.");
 
-        if (kind == CredentialKind.Write && !server.HasWriteCredential)
+        if (database.Server!.IsDisabled)
         {
-            throw new InvalidOperationException(
-                $"Server '{server.Name}' has no write credential configured.");
+            throw new InvalidOperationException($"Server '{database.Server.Name}' is disabled.");
         }
 
-        var encryptedPassword = kind == CredentialKind.Read
-            ? server.EncryptedReadPassword
-            : server.EncryptedWritePassword!;
+        if (database.IsDisabled)
+        {
+            throw new InvalidOperationException($"Database '{database.DisplayName}' is disabled.");
+        }
 
-        var username = kind == CredentialKind.Read
-            ? server.ReadUsername
-            : server.WriteUsername!;
+        var credentialId = kind == CredentialKind.Read
+            ? database.ReadCredentialId
+            : database.WriteCredentialId
+                ?? throw new InvalidOperationException(
+                    $"Database '{database.DisplayName}' has no write credential configured.");
 
-        var password = _protector.Unprotect(encryptedPassword);
+        var credential = await db.Credentials
+            .AsNoTracking()
+            .SingleOrDefaultAsync(c => c.Id == credentialId, ct)
+            ?? throw new InvalidOperationException($"Credential {credentialId} not found.");
+
+        var password = _protector.Unprotect(credential.EncryptedPassword);
 
         return new NpgsqlConnectionStringBuilder
         {
-            Host = server.Host,
-            Port = server.Port,
-            Database = server.Database,
-            Username = username,
+            Host = database.Server.Host,
+            Port = database.Server.Port,
+            Database = database.DatabaseName,
+            Username = credential.Username,
             Password = password,
         }.ConnectionString;
     }
