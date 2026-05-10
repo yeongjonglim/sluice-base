@@ -34,6 +34,39 @@ import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
 import { meQueryOptions, useExecuteQuery, useSchema, useServers } from "@/api/hooks";
 
+export function buildCsv(
+  columns: string[],
+  rows: (string | null | undefined)[][],
+): string {
+  const escape = (val: string | null | undefined): string => {
+    const s = val == null ? "" : String(val);
+    if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+      return `"${s.replace(/"/g, '""')}"`;
+    }
+    return s;
+  };
+  const lines = [
+    columns.map(escape).join(","),
+    ...rows.map((row) => row.map(escape).join(",")),
+  ];
+  return lines.join("\n");
+}
+
+export function exportToCsv(
+  columns: string[],
+  rows: (string | null | undefined)[][],
+  filename: string,
+): void {
+  const csv = buildCsv(columns, rows);
+  const blob = new Blob([csv], { type: "text/csv" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export const Route = createFileRoute("/_authed/query")({
   beforeLoad: ({ context }) => {
     const me = context.queryClient.getQueryData(meQueryOptions.queryKey);
