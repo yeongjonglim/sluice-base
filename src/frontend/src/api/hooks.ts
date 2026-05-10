@@ -248,3 +248,136 @@ export function useExecuteQuery() {
       }),
   });
 }
+
+// ── Update requests ───────────────────────────────────────────────────────
+
+export type UpdateSummaryItem =
+  paths["/api/update"]["get"]["responses"][200]["content"]["application/json"]["requests"][0];
+export type UpdateRequestListResponse =
+  paths["/api/update"]["get"]["responses"][200]["content"]["application/json"];
+export type UpdateRequestDetail =
+  paths["/api/update/{id}"]["get"]["responses"][200]["content"]["application/json"];
+export type SubmitUpdateRequest =
+  paths["/api/update"]["post"]["requestBody"]["content"]["application/json"];
+
+export function useUpdateRequests() {
+  return useQuery({
+    queryKey: ["update"] as const,
+    queryFn: () => apiRequest<void, UpdateRequestListResponse>("/api/update"),
+  });
+}
+
+export function useUpdateRequest(id: string) {
+  return useQuery({
+    queryKey: ["update", id] as const,
+    queryFn: () => apiRequest<void, UpdateRequestDetail>(`/api/update/${id}`),
+  });
+}
+
+export function useSubmitUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SubmitUpdateRequest) =>
+      apiRequest<SubmitUpdateRequest, UpdateRequestDetail>("/api/update", {
+        method: "POST",
+        body,
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["update"] });
+      notifications.show({ title: "Request submitted", message: "", color: "teal" });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Submit failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useApproveUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      apiRequest<{ note: string }, UpdateRequestDetail>(`/api/update/${id}/approve`, {
+        method: "POST",
+        body: { note },
+      }),
+    onSuccess: (data) => {
+      void qc.invalidateQueries({ queryKey: ["update"] });
+      void qc.invalidateQueries({ queryKey: ["update", data.id] });
+      notifications.show({ title: "Request approved", message: "", color: "teal" });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Approve failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useRejectUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      apiRequest<{ note: string }, UpdateRequestDetail>(`/api/update/${id}/reject`, {
+        method: "POST",
+        body: { note },
+      }),
+    onSuccess: (data) => {
+      void qc.invalidateQueries({ queryKey: ["update"] });
+      void qc.invalidateQueries({ queryKey: ["update", data.id] });
+      notifications.show({ title: "Request rejected", message: "", color: "red" });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Reject failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useCancelUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiRequest<void, UpdateRequestDetail>(`/api/update/${id}/cancel`, { method: "POST" }),
+    onSuccess: (data) => {
+      void qc.invalidateQueries({ queryKey: ["update"] });
+      void qc.invalidateQueries({ queryKey: ["update", data.id] });
+      notifications.show({ title: "Request cancelled", message: "", color: "gray" });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Cancel failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useExecuteUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiRequest<void, UpdateRequestDetail>(`/api/update/${id}/execute`, { method: "POST" }),
+    onSuccess: (data) => {
+      void qc.invalidateQueries({ queryKey: ["update"] });
+      void qc.invalidateQueries({ queryKey: ["update", data.id] });
+      notifications.show({ title: "Executed", message: "", color: "teal" });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Execute failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
