@@ -127,9 +127,6 @@ public sealed class UpdateRequest
         return machine;
     }
 
-    // Exposed for the execute endpoint to pre-check before running expensive SQL.
-    public bool CanExecute => StateMachine.CanFire(Trigger.Execute);
-
     public static UpdateRequest Create(
         ServerId serverId,
         string sqlText,
@@ -182,7 +179,7 @@ public sealed class UpdateRequest
     )
     {
         var triggerWithParameters =
-            new StateMachine<UpdateRequestStatus, Trigger>.TriggerWithParameters<TriggerRequest>(
+            new StateMachine<UpdateRequestStatus, Trigger>.TriggerWithParameters<ExecuteTriggerRequest>(
                 Trigger.Execute);
         StateMachine.Fire(triggerWithParameters,
             new ExecuteTriggerRequest(actioned,
@@ -191,4 +188,25 @@ public sealed class UpdateRequest
                 affectedRows,
                 error));
     }
+
+    // Exposed for the execute endpoint to pre-check before running expensive SQL.
+    public bool CanExecute() => StateMachine.CanFire(Trigger.Execute);
+    // public bool CanExecute(
+    //     Actioned actioned,
+    //     bool success,
+    //     int durationMs,
+    //     int? affectedRows,
+    //     string? error
+    //     )
+    // {
+    //     var triggerWithParameters =
+    //         new StateMachine<UpdateRequestStatus, Trigger>.TriggerWithParameters<ExecuteTriggerRequest>(
+    //             Trigger.Execute);
+    //     return StateMachine.CanFire(triggerWithParameters,
+    //         new ExecuteTriggerRequest(actioned,
+    //             success,
+    //             durationMs,
+    //             affectedRows,
+    //             error));
+    // }
 }
