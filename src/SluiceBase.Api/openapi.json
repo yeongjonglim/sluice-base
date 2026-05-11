@@ -1110,6 +1110,52 @@
           }
         }
       }
+    },
+    "/api/branding": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "operationId": "GetBranding",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrandingResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/branding/api/branding/logo": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "operationId": "GetBrandingLogo",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/branding/api/branding/favicon": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "operationId": "GetBrandingFavicon",
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1170,6 +1216,35 @@
         "type": "object",
         "properties": {
           "headerName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "BrandingResponse": {
+        "required": [
+          "appName",
+          "primaryColor",
+          "logoUrl",
+          "faviconUrl"
+        ],
+        "type": "object",
+        "properties": {
+          "appName": {
+            "type": "string"
+          },
+          "primaryColor": {
+            "type": "string"
+          },
+          "logoUrl": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "faviconUrl": {
             "type": [
               "null",
               "string"
