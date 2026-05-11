@@ -32,20 +32,24 @@ function NewUpdatePage() {
   const submit = useSubmitUpdate();
   const computedColorScheme = useComputedColorScheme();
 
-  const [serverId, setServerId] = useState<string | null>(null);
+  const [databaseId, setDatabaseId] = useState<string | null>(null);
   const [sqlText, setSqlText] = useState("");
   const [reason, setReason] = useState("");
 
-  const serverOptions = (servers.data?.servers ?? [])
-    .filter((s) => s.hasWriteCredential && s.isEnabled)
-    .map((s) => ({ value: s.id, label: s.name }));
+  const databaseOptions = (servers.data?.servers ?? [])
+    .filter((s) => !s.isDisabled)
+    .flatMap((s) =>
+      s.databases
+        .filter((d) => d.canWrite && !d.isDisabled)
+        .map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
+    );
 
-  const canSubmit = serverId !== null && sqlText.trim() !== "" && reason.trim() !== "";
+  const canSubmit = databaseId !== null && sqlText.trim() !== "" && reason.trim() !== "";
 
   function handleSubmit() {
     if (!canSubmit) return;
     submit.mutate(
-      { serverId, sqlText, reason },
+      { databaseId, sqlText, reason },
       {
         onSuccess: (data) => {
           void navigate({ to: "/update/$id", params: { id: data.id } });
@@ -59,11 +63,11 @@ function NewUpdatePage() {
       <Title order={2}>New Update Request</Title>
 
       <Select
-        label="Server"
-        placeholder="Select a server with write credentials"
-        data={serverOptions}
-        value={serverId}
-        onChange={setServerId}
+        label="Database"
+        placeholder="Select a writable database"
+        data={databaseOptions}
+        value={databaseId}
+        onChange={setDatabaseId}
         required
       />
 

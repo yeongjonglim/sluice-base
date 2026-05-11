@@ -80,17 +80,20 @@ export const Route = createFileRoute("/_authed/query")({
 
 function QueryPage() {
   const servers = useServers();
-  const [selectedServerId, setSelectedServerId] = useState<string | null>(null);
-  const schema = useSchema(selectedServerId);
+  const [selectedDatabaseId, setSelectedDatabaseId] = useState<string | null>(null);
+  const schema = useSchema(selectedDatabaseId);
   const [editorContent, setEditorContent] = useState("");
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const executeQuery = useExecuteQuery();
   const computedColorScheme = useComputedColorScheme();
 
-  const serverOptions = (servers.data?.servers ?? []).map((s) => ({
-    value: s.id,
-    label: s.name,
-  }));
+  const databaseOptions = (servers.data?.servers ?? [])
+    .filter((s) => !s.isDisabled)
+    .flatMap((s) =>
+      s.databases
+        .filter((d) => !d.isDisabled)
+        .map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
+    );
 
   const handleTableClick = useCallback(
     (schemaName: string, tableName: string, columns: Array<{ name: string }>) => {
@@ -109,8 +112,8 @@ function QueryPage() {
         key: "Ctrl-Enter",
         mac: "Cmd-Enter",
         run: () => {
-          if (selectedServerId && editorContent.trim()) {
-            executeQuery.mutate({ serverId: selectedServerId, sql: editorContent });
+          if (selectedDatabaseId && editorContent.trim()) {
+            executeQuery.mutate({ databaseId: selectedDatabaseId, sql: editorContent });
           }
           return true;
         },
@@ -119,8 +122,8 @@ function QueryPage() {
   );
 
   const handleRun = () => {
-    if (selectedServerId && editorContent.trim()) {
-      executeQuery.mutate({ serverId: selectedServerId, sql: editorContent });
+    if (selectedDatabaseId && editorContent.trim()) {
+      executeQuery.mutate({ databaseId: selectedDatabaseId, sql: editorContent });
     }
   };
 
@@ -136,10 +139,10 @@ function QueryPage() {
       >
         <Stack gap={0} p="xs">
           <Select
-            placeholder="Select a server"
-            data={serverOptions}
-            value={selectedServerId}
-            onChange={setSelectedServerId}
+            placeholder="Select a database"
+            data={databaseOptions}
+            value={selectedDatabaseId}
+            onChange={setSelectedDatabaseId}
             mb="xs"
             size="sm"
           />
@@ -173,13 +176,13 @@ function QueryPage() {
               size="sm"
               onClick={handleRun}
               loading={executeQuery.isPending}
-              disabled={!selectedServerId || !editorContent.trim()}
+              disabled={!selectedDatabaseId || !editorContent.trim()}
             >
               Run
             </Button>
-            {!selectedServerId && (
+            {!selectedDatabaseId && (
               <Text size="xs" c="dimmed">
-                Select a server to run queries
+                Select a database to run queries
               </Text>
             )}
           </Group>
@@ -324,7 +327,7 @@ function SchemaSidebar({
   if (!schema.data) {
     return (
       <Text size="sm" c="dimmed" p="xs">
-        Select a server to browse its schema.
+        Select a database to browse its schema.
       </Text>
     );
   }

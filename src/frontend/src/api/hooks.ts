@@ -142,6 +142,8 @@ export type TestConnectionResponse =
   paths["/api/server/{serverId}/database/{databaseId}/test"]["post"]["responses"][200]["content"]["application/json"];
 export type CreateServerRequest =
   paths["/api/server"]["post"]["requestBody"]["content"]["application/json"];
+export type ExecuteQueryResponse =
+  paths["/api/query"]["post"]["responses"][200]["content"]["application/json"];
 
 export function useServers() {
   return useQuery({
