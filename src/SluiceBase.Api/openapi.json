@@ -1131,28 +1131,28 @@
         }
       }
     },
-    "/api/branding/api/branding/logo": {
+    "/api/branding/logo": {
       "get": {
         "tags": [
           "SluiceBase.Api"
         ],
         "operationId": "GetBrandingLogo",
         "responses": {
-          "200": {
-            "description": "OK"
+          "404": {
+            "description": "Not Found"
           }
         }
       }
     },
-    "/api/branding/api/branding/favicon": {
+    "/api/branding/favicon": {
       "get": {
         "tags": [
           "SluiceBase.Api"
         ],
         "operationId": "GetBrandingFavicon",
         "responses": {
-          "200": {
-            "description": "OK"
+          "404": {
+            "description": "Not Found"
           }
         }
       }
