@@ -2,7 +2,6 @@ import {
   ActionIcon,
   Alert,
   Badge,
-  Code,
   Group,
   ScrollArea,
   Select,
@@ -11,13 +10,17 @@ import {
   Text,
   TextInput,
   Title,
+  useComputedColorScheme,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
 import { IconCopy } from "@tabler/icons-react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
+import CodeMirror from "@uiw/react-codemirror";
+import { sql } from "@codemirror/lang-sql";
+import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
+import type { QueryHistoryFilters, QueryHistoryItem } from "@/api/hooks";
 import { meQueryOptions, useQueryHistory, useServers } from "@/api/hooks";
-import type { QueryHistoryItem, QueryHistoryFilters } from "@/api/hooks";
 import { useHasPermission } from "@/auth/permission";
 
 type HistorySearch = {
@@ -158,7 +161,7 @@ function QueryHistoryPage() {
 
       {history.data && displayedItems.length > 0 && (
         <ScrollArea type="auto">
-          <Table striped withTableBorder highlightOnHover fz="sm" style={{ whiteSpace: "nowrap" }}>
+          <Table striped withTableBorder highlightOnHover fz="sm">
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Status</Table.Th>
@@ -168,7 +171,6 @@ function QueryHistoryPage() {
                 <Table.Th>Executed At</Table.Th>
                 <Table.Th>Duration</Table.Th>
                 <Table.Th>Rows</Table.Th>
-                <Table.Th></Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -184,6 +186,8 @@ function QueryHistoryPage() {
 }
 
 function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: boolean }) {
+  const colorScheme = useComputedColorScheme();
+
   function copySql() {
     void navigator.clipboard.writeText(item.queryText).then(() => {
       notifications.show({ message: "SQL copied to clipboard", color: "teal" });
@@ -191,10 +195,6 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
       // Clipboard API unavailable — silent no-op per spec
     });
   }
-
-  const sqlPreview = item.queryText.length > 80
-    ? `${item.queryText.slice(0, 80)}…`
-    : item.queryText;
 
   return (
     <Table.Tr>
@@ -205,8 +205,23 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
       </Table.Td>
       <Table.Td>{item.databaseDisplayName ?? "—"}</Table.Td>
       {canAudit && <Table.Td>{item.userName ?? "—"}</Table.Td>}
-      <Table.Td style={{ maxWidth: 400 }}>
-        <Code fz="xs">{sqlPreview}</Code>
+      <Table.Td style={{ minWidth: 300, maxWidth: 600 }}>
+        <Group gap="xs" align="flex-start" wrap="nowrap">
+          <div style={{ flex: 1 }}>
+            <CodeMirror
+              value={item.queryText}
+              readOnly
+              editable={false}
+              extensions={[sql()]}
+              theme={colorScheme === "dark" ? githubDark : githubLight}
+              height="auto"
+              basicSetup={{ lineNumbers: false, foldGutter: false }}
+            />
+          </div>
+          <ActionIcon size="sm" variant="subtle" onClick={copySql} aria-label="Copy SQL">
+            <IconCopy size={14} />
+          </ActionIcon>
+        </Group>
       </Table.Td>
       <Table.Td>
         <Text size="xs">
@@ -223,11 +238,6 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
         {item.rowCount != null ? (
           <Text size="xs">{item.rowCount}</Text>
         ) : "—"}
-      </Table.Td>
-      <Table.Td>
-        <ActionIcon size="sm" variant="subtle" onClick={copySql} aria-label="Copy SQL">
-          <IconCopy size={14} />
-        </ActionIcon>
       </Table.Td>
     </Table.Tr>
   );
