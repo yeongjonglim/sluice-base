@@ -5,6 +5,7 @@ public static class Permissions
     public const string PermissionManage = "permission:manage";
     public const string ServerManage = "server:manage";
     public const string QueryExecute = "query:execute";
+    public const string QueryAudit = "query:audit";
     public const string UpdateSubmit = "update:submit";
     public const string UpdateApprove = "update:approve";
     public const string UpdateExecute = "update:execute";
@@ -17,6 +18,7 @@ public static class Permissions
         PermissionManage,
         ServerManage,
         QueryExecute,
+        QueryAudit,
         UpdateSubmit,
         UpdateApprove,
         UpdateExecute,

@@ -9,6 +9,7 @@ export type Permission =
   | "permission:manage"
   | "server:manage"
   | "query:execute"
+  | "query:audit"
   | "update:submit"
   | "update:approve"
   | "update:execute"; // Permissions that we know of in the frontend
