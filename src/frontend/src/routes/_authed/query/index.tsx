@@ -68,7 +68,7 @@ export function exportToCsv(
   URL.revokeObjectURL(url);
 }
 
-export const Route = createFileRoute("/_authed/query")({
+export const Route = createFileRoute("/_authed/query/")({
   beforeLoad: ({ context }) => {
     const me = context.queryClient.getQueryData(meQueryOptions.queryKey);
     if (!me?.permissions.includes("query:execute")) {

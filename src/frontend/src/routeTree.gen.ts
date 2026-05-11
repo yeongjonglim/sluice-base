@@ -12,12 +12,13 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedServerRouteImport } from './routes/_authed/server'
-import { Route as AuthedQueryRouteImport } from './routes/_authed/query'
 import { Route as AuthedPermissionRouteImport } from './routes/_authed/permission'
 import { Route as AuthedHealthRouteImport } from './routes/_authed/health'
 import { Route as AuthedUpdateIndexRouteImport } from './routes/_authed/update/index'
+import { Route as AuthedQueryIndexRouteImport } from './routes/_authed/query/index'
 import { Route as AuthedUpdateNewRouteImport } from './routes/_authed/update/new'
 import { Route as AuthedUpdateIdRouteImport } from './routes/_authed/update/$id'
+import { Route as AuthedQueryHistoryRouteImport } from './routes/_authed/query/history'
 
 const AuthedRoute = AuthedRouteImport.update({
   id: '/_authed',
@@ -31,11 +32,6 @@ const AuthedIndexRoute = AuthedIndexRouteImport.update({
 const AuthedServerRoute = AuthedServerRouteImport.update({
   id: '/server',
   path: '/server',
-  getParentRoute: () => AuthedRoute,
-} as any)
-const AuthedQueryRoute = AuthedQueryRouteImport.update({
-  id: '/query',
-  path: '/query',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedPermissionRoute = AuthedPermissionRouteImport.update({
@@ -53,6 +49,11 @@ const AuthedUpdateIndexRoute = AuthedUpdateIndexRouteImport.update({
   path: '/update/',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedQueryIndexRoute = AuthedQueryIndexRouteImport.update({
+  id: '/query/',
+  path: '/query/',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedUpdateNewRoute = AuthedUpdateNewRouteImport.update({
   id: '/update/new',
   path: '/update/new',
@@ -63,25 +64,32 @@ const AuthedUpdateIdRoute = AuthedUpdateIdRouteImport.update({
   path: '/update/$id',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedQueryHistoryRoute = AuthedQueryHistoryRouteImport.update({
+  id: '/query/history',
+  path: '/query/history',
+  getParentRoute: () => AuthedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/health': typeof AuthedHealthRoute
   '/permission': typeof AuthedPermissionRoute
-  '/query': typeof AuthedQueryRoute
   '/server': typeof AuthedServerRoute
+  '/query/history': typeof AuthedQueryHistoryRoute
   '/update/$id': typeof AuthedUpdateIdRoute
   '/update/new': typeof AuthedUpdateNewRoute
+  '/query/': typeof AuthedQueryIndexRoute
   '/update/': typeof AuthedUpdateIndexRoute
 }
 export interface FileRoutesByTo {
   '/health': typeof AuthedHealthRoute
   '/permission': typeof AuthedPermissionRoute
-  '/query': typeof AuthedQueryRoute
   '/server': typeof AuthedServerRoute
   '/': typeof AuthedIndexRoute
+  '/query/history': typeof AuthedQueryHistoryRoute
   '/update/$id': typeof AuthedUpdateIdRoute
   '/update/new': typeof AuthedUpdateNewRoute
+  '/query': typeof AuthedQueryIndexRoute
   '/update': typeof AuthedUpdateIndexRoute
 }
 export interface FileRoutesById {
@@ -89,11 +97,12 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/_authed/health': typeof AuthedHealthRoute
   '/_authed/permission': typeof AuthedPermissionRoute
-  '/_authed/query': typeof AuthedQueryRoute
   '/_authed/server': typeof AuthedServerRoute
   '/_authed/': typeof AuthedIndexRoute
+  '/_authed/query/history': typeof AuthedQueryHistoryRoute
   '/_authed/update/$id': typeof AuthedUpdateIdRoute
   '/_authed/update/new': typeof AuthedUpdateNewRoute
+  '/_authed/query/': typeof AuthedQueryIndexRoute
   '/_authed/update/': typeof AuthedUpdateIndexRoute
 }
 export interface FileRouteTypes {
@@ -102,31 +111,34 @@ export interface FileRouteTypes {
     | '/'
     | '/health'
     | '/permission'
-    | '/query'
     | '/server'
+    | '/query/history'
     | '/update/$id'
     | '/update/new'
+    | '/query/'
     | '/update/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/health'
     | '/permission'
-    | '/query'
     | '/server'
     | '/'
+    | '/query/history'
     | '/update/$id'
     | '/update/new'
+    | '/query'
     | '/update'
   id:
     | '__root__'
     | '/_authed'
     | '/_authed/health'
     | '/_authed/permission'
-    | '/_authed/query'
     | '/_authed/server'
     | '/_authed/'
+    | '/_authed/query/history'
     | '/_authed/update/$id'
     | '/_authed/update/new'
+    | '/_authed/query/'
     | '/_authed/update/'
   fileRoutesById: FileRoutesById
 }
@@ -157,13 +169,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedServerRouteImport
       parentRoute: typeof AuthedRoute
     }
-    '/_authed/query': {
-      id: '/_authed/query'
-      path: '/query'
-      fullPath: '/query'
-      preLoaderRoute: typeof AuthedQueryRouteImport
-      parentRoute: typeof AuthedRoute
-    }
     '/_authed/permission': {
       id: '/_authed/permission'
       path: '/permission'
@@ -185,6 +190,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedUpdateIndexRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/query/': {
+      id: '/_authed/query/'
+      path: '/query'
+      fullPath: '/query/'
+      preLoaderRoute: typeof AuthedQueryIndexRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/update/new': {
       id: '/_authed/update/new'
       path: '/update/new'
@@ -199,28 +211,37 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedUpdateIdRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/query/history': {
+      id: '/_authed/query/history'
+      path: '/query/history'
+      fullPath: '/query/history'
+      preLoaderRoute: typeof AuthedQueryHistoryRouteImport
+      parentRoute: typeof AuthedRoute
+    }
   }
 }
 
 interface AuthedRouteChildren {
   AuthedHealthRoute: typeof AuthedHealthRoute
   AuthedPermissionRoute: typeof AuthedPermissionRoute
-  AuthedQueryRoute: typeof AuthedQueryRoute
   AuthedServerRoute: typeof AuthedServerRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
+  AuthedQueryHistoryRoute: typeof AuthedQueryHistoryRoute
   AuthedUpdateIdRoute: typeof AuthedUpdateIdRoute
   AuthedUpdateNewRoute: typeof AuthedUpdateNewRoute
+  AuthedQueryIndexRoute: typeof AuthedQueryIndexRoute
   AuthedUpdateIndexRoute: typeof AuthedUpdateIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedHealthRoute: AuthedHealthRoute,
   AuthedPermissionRoute: AuthedPermissionRoute,
-  AuthedQueryRoute: AuthedQueryRoute,
   AuthedServerRoute: AuthedServerRoute,
   AuthedIndexRoute: AuthedIndexRoute,
+  AuthedQueryHistoryRoute: AuthedQueryHistoryRoute,
   AuthedUpdateIdRoute: AuthedUpdateIdRoute,
   AuthedUpdateNewRoute: AuthedUpdateNewRoute,
+  AuthedQueryIndexRoute: AuthedQueryIndexRoute,
   AuthedUpdateIndexRoute: AuthedUpdateIndexRoute,
 }
 

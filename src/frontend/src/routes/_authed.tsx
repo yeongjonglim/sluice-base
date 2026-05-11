@@ -17,6 +17,7 @@ import {
   IconMoon,
   IconServer,
   IconShieldLock,
+  IconSparkles,
   IconSun,
   IconTerminal2,
 } from "@tabler/icons-react";
@@ -32,6 +33,7 @@ export const Route = createFileRoute("/_authed")({
 function AuthedLayout() {
   const me = useMe();
   const [opened, { toggle }] = useDisclosure();
+  const [openedQuery, { toggle: toggleQuery }] = useDisclosure(true);
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const location = useLocation();
   const isAdmin = useHasPermission("permission:manage");
@@ -41,7 +43,6 @@ function AuthedLayout() {
   const canApproveUpdates = useHasPermission("update:approve");
   const canExecuteUpdates = useHasPermission("update:execute");
   const canSeeUpdates = canSubmitUpdates || canApproveUpdates || canExecuteUpdates;
-
 
   if (!me.data) {
     return null;
@@ -112,13 +113,16 @@ function AuthedLayout() {
             <NavLink
               label="Query"
               leftSection={<IconTerminal2 size={16} />}
-              active={location.pathname.startsWith("/query")}
-              defaultOpened={location.pathname.startsWith("/query")}
+              defaultOpened
+              opened={openedQuery}
+              onClick={toggleQuery}
             >
               <NavLink
                 label="Editor"
+                leftSection={<IconSparkles size={16} />}
                 component={Link}
                 to="/query"
+                activeOptions={{ exact: true }}
                 active={location.pathname === "/query"}
                 pl="xl"
               />
