@@ -10,10 +10,33 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
-import { createAppQueryClient } from "./api/hooks";
-import { theme } from "./theme/theme";
+import type { BrandingValue } from "@/theme/BrandingContext.tsx";
+import { createAppQueryClient } from "@/api/hooks.ts";
+import { createAppTheme } from "@/theme/theme.ts";
+import { BrandingContext } from "@/theme/BrandingContext.tsx";
+import { routeTree } from "@/routeTree.gen.ts";
 // @ts-ignore — generated at build/dev time by @tanstack/router-plugin
-import { routeTree } from "./routeTree.gen";
+
+const res = await fetch("/api/branding").catch(() => null);
+const branding = res?.ok ? await res.json() : null;
+
+const brandingValue: BrandingValue = {
+  appName: branding?.appName ?? "SluiceBase",
+  logoUrl: branding?.logoUrl ?? null,
+  faviconUrl: branding?.faviconUrl ?? null,
+};
+
+document.title = brandingValue.appName;
+
+if (brandingValue.faviconUrl) {
+  const link =
+    document.querySelector<HTMLLinkElement>("link[rel~='icon']") ??
+    Object.assign(document.createElement("link"), { rel: "icon" });
+  link.href = brandingValue.faviconUrl;
+  document.head.appendChild(link);
+}
+
+const appTheme = createAppTheme(branding?.primaryColor ?? "teal");
 
 const queryClient = createAppQueryClient();
 
@@ -32,15 +55,17 @@ declare module "@tanstack/react-router" {
 const rootElement = document.getElementById("root")!;
 createRoot(rootElement).render(
   <StrictMode>
-    <MantineProvider theme={theme} defaultColorScheme="auto">
-      <ModalsProvider>
-        <Notifications />
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-          <ReactQueryDevtools initialIsOpen={false} />
-          <TanStackRouterDevtools router={router} initialIsOpen={false} />
-        </QueryClientProvider>
-      </ModalsProvider>
-    </MantineProvider>
+    <BrandingContext value={brandingValue}>
+      <MantineProvider theme={appTheme} defaultColorScheme="auto">
+        <ModalsProvider>
+          <Notifications />
+          <QueryClientProvider client={queryClient}>
+            <RouterProvider router={router} />
+            <ReactQueryDevtools initialIsOpen={false} />
+            <TanStackRouterDevtools router={router} initialIsOpen={false} />
+          </QueryClientProvider>
+        </ModalsProvider>
+      </MantineProvider>
+    </BrandingContext>
   </StrictMode>,
 );
