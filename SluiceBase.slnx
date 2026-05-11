@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/Tests/">
+    <Project Path="tests\IntegrationTests\IntegrationTests.csproj" />
+  </Folder>
+  <Project Path="src\AppHost\AppHost.csproj" />
+  <Project Path="src\ServiceDefaults\ServiceDefaults.csproj" />
+  <Project Path="src\SluiceBase.Api\SluiceBase.Api.csproj" />
+  <Project Path="src\SluiceBase.Core\SluiceBase.Core.csproj" />
+</Solution>

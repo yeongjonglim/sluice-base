@@ -1,0 +1,53 @@
+root = true
+
+# Xml files
+[*.xml]
+indent_size = 2
+
+# C# files
+[*.cs]
+# Indentation and spacing
+indent_style = space
+indent_size = 4
+tab_width = 4
+max_line_length = 160
+
+#### Core EditorConfig Options ####
+
+# New line preferences
+end_of_line = lf
+insert_final_newline = false
+trim_trailing_whitespace = true
+
+#### .NET Coding Conventions ####
+dotnet_sort_system_directives_first = true
+csharp_style_namespace_declarations = file_scoped:warning
+
+[*.{cs,vb,razor}]
+dotnet_diagnostic.CA1000.severity = none # I do think we still have some generics that will scan and return types
+dotnet_diagnostic.CS8019.severity = error
+dotnet_diagnostic.IDE0005.severity = error
+dotnet_diagnostic.CS1591.severity = none # workaround to enable IDE0005 https://github.com/dotnet/roslyn/issues/41640
+dotnet_diagnostic.IDE0007.severity = error
+dotnet_diagnostic.CS0168.severity = error # Unused variables are not allowed
+dotnet_diagnostic.IDE0011.severity = error # Prefer braces
+csharp_style_var_for_built_in_types = true
+csharp_style_var_when_type_is_apparent = true
+csharp_style_var_elsewhere = true
+dotnet_diagnostic.IDE0022.severity = none # Allow expression body for methods
+dotnet_diagnostic.IDE0051.severity = none # Allow unused private members for constructor (assembly scanning)
+csharp_prefer_static_anonymous_function = false
+csharp_indent_case_contents_when_block = false
+csharp_wrap_arguments_style=chop_if_long
+dotnet_style_prefer_conditional_expression_over_return=false
+
+[tests/**.{cs,vb}]
+dotnet_diagnostic.CA1822.severity = none
+dotnet_diagnostic.CA1707.severity = none
+
+[**/Migrations/**.{cs,vb}]
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1711.severity = none
+dotnet_diagnostic.IDE0300.severity = none
+dotnet_diagnostic.IDE0161.severity = none
+dotnet_diagnostic.IDE0005.severity = none
