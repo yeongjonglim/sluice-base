@@ -17,17 +17,22 @@ public sealed class BrandingOptions
     public string LogoUrl { get; init; } = "";
     public string FaviconUrl { get; init; } = "";
 
-    public string GetValidatedPrimaryColor(ILogger logger)
+    public string GetValidatedPrimaryColor(ILogger? logger = null)
     {
         if (ValidMantineColors.Contains(PrimaryColor))
         {
             return PrimaryColor;
         }
-#pragma warning disable CA1848
-        logger.LogWarning(
-            "Branding:PrimaryColor '{Color}' is not a valid Mantine colour name. Falling back to 'teal'.",
-            PrimaryColor);
-#pragma warning restore CA1848
+
+        logger?.WarningInvalidColour(PrimaryColor);
         return "teal";
     }
+}
+
+public static partial class LoggerMessage
+{
+    [LoggerMessage(
+        LogLevel.Warning,
+        Message = "Branding:PrimaryColor '{Color}' is not a valid Mantine colour name. Falling back to 'teal'.")]
+    public static partial void WarningInvalidColour(this ILogger logger, string color);
 }
