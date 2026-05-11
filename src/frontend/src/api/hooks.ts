@@ -450,3 +450,43 @@ export function useExecuteUpdate() {
     },
   });
 }
+
+// ── Query history ─────────────────────────────────────────────────────────
+
+export interface QueryHistoryItem {
+  id: string;
+  databaseId: string | null;
+  databaseDisplayName: string | null;
+  queryText: string;
+  status: string;
+  executedAt: string;
+  durationMs: number | null;
+  rowCount: number | null;
+  error: string | null;
+  userId: string | null;
+  userName: string | null;
+}
+
+export interface QueryHistoryFilters {
+  from?: string;
+  to?: string;
+  databaseId?: string;
+  status?: string;
+}
+
+export function useQueryHistory(filters: QueryHistoryFilters) {
+  return useQuery({
+    queryKey: ["query", "history", filters] as const,
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (filters.from) params.set("from", filters.from);
+      if (filters.to) params.set("to", filters.to);
+      if (filters.databaseId) params.set("databaseId", filters.databaseId);
+      if (filters.status) params.set("status", filters.status);
+      const qs = params.toString();
+      return apiRequest<void, { items: QueryHistoryItem[] }>(
+        qs ? `/api/query/history?${qs}` : "/api/query/history",
+      );
+    },
+  });
+}
