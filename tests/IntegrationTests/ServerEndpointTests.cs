@@ -32,46 +32,62 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
     private async Task<(AuthenticatedSession session, string xsrf)> AuthorizedSessionAsync(CancellationToken ct)
     {
         var session = await LoginHelper.SignInAsync("alice", "dev", ct);
-
         var xsrf = await session.FetchXsrfTokenAsync(ct);
-
-        var users = await session.Client.GetFromJsonAsync<ListUserBody>(
-            "/api/admin/user",
-            ct);
+        var users = await session.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
         var alice = Assert.Single(users!.Users, u => u.Email == "alice@example.com");
-        using var grantReq = MutationRequest(
-            HttpMethod.Post,
+        using var grantReq = MutationRequest(HttpMethod.Post,
             $"/api/admin/user/{alice.Id}/permission",
             xsrf,
             new { permission = Permissions.ServerManage });
-        var grantResp = await session.Client.SendAsync(grantReq, ct);
-        grantResp.EnsureSuccessStatusCode();
-
+        (await session.Client.SendAsync(grantReq, ct)).EnsureSuccessStatusCode();
         return (session, xsrf);
     }
 
-    private static async Task<ServerEndpoints.ServerResponse> CreateServerAsync(
-        AuthenticatedSession session, string xsrf, string name,
-        string host, int port, CancellationToken ct)
+    // Creates a server with one read credential + one write credential + one database.
+    // Returns the DatabaseId needed for query/schema/update tests.
+    private static async Task<(ServerEndpoints.ServerResponse server, CredentialEndpoints.CredentialResponse readCred, CredentialEndpoints.CredentialResponse
+            writeCred, DatabaseEndpoints.DatabaseResponse database)>
+        CreateServerWithDatabaseAsync(AuthenticatedSession session, string xsrf, string host, int port, CancellationToken ct, string? name = null)
     {
-        using var req = MutationRequest(
-            HttpMethod.Post,
+        var serverName = name ?? UniqueName();
+
+        // Create server
+        using var sReq = MutationRequest(HttpMethod.Post,
             "/api/server",
             xsrf,
-            new ServerEndpoints.CreateServerRequest(name,
-                "postgres",
-                host,
-                port,
-                "appdb",
-                "reader_blue",
-                "reader_blue",
-                "writer_blue",
-                "writer_blue")
-        );
-        var resp = await session.Client.SendAsync(req, ct);
-        resp.EnsureSuccessStatusCode();
-        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
-        return body!;
+            new ServerEndpoints.CreateServerRequest(serverName, "postgres", host, port));
+        var sResp = await session.Client.SendAsync(sReq, ct);
+        sResp.EnsureSuccessStatusCode();
+        var server = (await sResp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct))!;
+
+        // Create read credential
+        using var rcReq = MutationRequest(HttpMethod.Post,
+            $"/api/server/{server.Id}/credential",
+            xsrf,
+            new CredentialEndpoints.AddCredentialRequest("Read-only role", "reader_blue", "reader_blue"));
+        var rcResp = await session.Client.SendAsync(rcReq, ct);
+        rcResp.EnsureSuccessStatusCode();
+        var readCred = (await rcResp.Content.ReadFromJsonAsync<CredentialEndpoints.CredentialResponse>(ct))!;
+
+        // Create write credential
+        using var wcReq = MutationRequest(HttpMethod.Post,
+            $"/api/server/{server.Id}/credential",
+            xsrf,
+            new CredentialEndpoints.AddCredentialRequest("Write role", "writer_blue", "writer_blue"));
+        var wcResp = await session.Client.SendAsync(wcReq, ct);
+        wcResp.EnsureSuccessStatusCode();
+        var writeCred = (await wcResp.Content.ReadFromJsonAsync<CredentialEndpoints.CredentialResponse>(ct))!;
+
+        // Create database
+        using var dbReq = MutationRequest(HttpMethod.Post,
+            $"/api/server/{server.Id}/database",
+            xsrf,
+            new DatabaseEndpoints.AddDatabaseRequest("App DB", "appdb", readCred.Id, writeCred.Id));
+        var dbResp = await session.Client.SendAsync(dbReq, ct);
+        dbResp.EnsureSuccessStatusCode();
+        var database = (await dbResp.Content.ReadFromJsonAsync<DatabaseEndpoints.DatabaseResponse>(ct))!;
+
+        return (server, readCred, writeCred, database);
     }
 
     // ── anonymous / unauthorized ───────────────────────────────────────────────
@@ -95,63 +111,24 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
     // ── create ────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task CreateServer_HappyPath_HasPasswordTrueNeverReturnsPlaintext()
+    public async Task CreateServer_HappyPath_ReturnsServerWithEmptyCredentialsAndDatabases()
     {
         var ct = TestContext.Current.CancellationToken;
         var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
-        var name = UniqueName();
-        using var req = MutationRequest(
-            HttpMethod.Post,
+        using var req = MutationRequest(HttpMethod.Post,
             "/api/server",
             xsrf,
-            new ServerEndpoints.CreateServerRequest(name,
-                "postgres",
-                "localhost",
-                5432,
-                "appdb",
-                "reader_blue",
-                "s3cr3t"
-            )
-        );
+            new ServerEndpoints.CreateServerRequest(UniqueName(), "postgres", "localhost", 5432));
         var resp = await session.Client.SendAsync(req, ct);
         Assert.Equal(HttpStatusCode.Created, resp.StatusCode);
 
         var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
         Assert.NotNull(body);
-        Assert.Equal(name, body.Name);
-        Assert.False(body.HasWriteCredential);
-
-        // Verify no plaintext in the JSON response
-        var raw = await resp.Content.ReadAsStringAsync(ct);
-        Assert.DoesNotContain("s3cr3t", raw);
-    }
-
-    [Fact]
-    public async Task CreateServer_MismatchedWriteCredentials_Returns400()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AuthorizedSessionAsync(ct);
-        using var _ = session;
-
-        using var req = MutationRequest(
-            HttpMethod.Post,
-            "/api/server",
-            xsrf,
-            new ServerEndpoints.CreateServerRequest(
-                UniqueName(),
-                "postgres",
-                "localhost",
-                5432,
-                "appdb",
-                "reader",
-                "pass",
-                "writer"
-            )
-        );
-        var resp = await session.Client.SendAsync(req, ct);
-        Assert.Equal(HttpStatusCode.BadRequest, resp.StatusCode);
+        Assert.Empty(body.Credentials);
+        Assert.Empty(body.Databases);
+        Assert.False(body.IsDisabled);
     }
 
     [Fact]
@@ -162,123 +139,67 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
         using var _ = session;
 
         var name = UniqueName();
-        var body = new ServerEndpoints.CreateServerRequest(
-            name,
-            "postgres",
-            "localhost",
-            5432,
-            "appdb",
-            "r",
-            "p"
-        );
-
+        var body = new ServerEndpoints.CreateServerRequest(name, "postgres", "localhost", 5432);
         using var req1 = MutationRequest(HttpMethod.Post, "/api/server", xsrf, body);
-        var resp1 = await session.Client.SendAsync(req1, ct);
-        resp1.EnsureSuccessStatusCode();
+        (await session.Client.SendAsync(req1, ct)).EnsureSuccessStatusCode();
 
         using var req2 = MutationRequest(HttpMethod.Post, "/api/server", xsrf, body);
-        var resp2 = await session.Client.SendAsync(req2, ct);
-        Assert.Equal(HttpStatusCode.Conflict, resp2.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, (await session.Client.SendAsync(req2, ct)).StatusCode);
     }
 
     // ── update ────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task UpdateServer_NullReadPassword_PreservesExistingCiphertext()
+    public async Task UpdateServer_ChangesNameAndIsDisabled()
     {
         var ct = TestContext.Current.CancellationToken;
         var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
-        var connStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct)
-                      ?? throw new InvalidOperationException("blue-appdb not found");
-        var pg = new NpgsqlConnectionStringBuilder(connStr);
+        using var cReq = MutationRequest(HttpMethod.Post,
+            "/api/server",
+            xsrf,
+            new ServerEndpoints.CreateServerRequest(UniqueName(), "postgres", "localhost", 5432));
+        var created = (await (await session.Client.SendAsync(cReq, ct)).Content
+            .ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct))!;
 
-        var created = await CreateServerAsync(session, xsrf, UniqueName(), pg.Host!, pg.Port, ct);
-
-        // Update name only — no new password
-        using var req = MutationRequest(
-            HttpMethod.Put,
+        using var uReq = MutationRequest(HttpMethod.Put,
             $"/api/server/{created.Id}",
             xsrf,
-            new ServerEndpoints.UpdateServerRequest(
-                created.Name + "-renamed",
-                created.Host,
-                created.Port,
-                created.Database
-            )
-        );
-        var resp = await session.Client.SendAsync(req, ct);
+            new ServerEndpoints.UpdateServerRequest(created.Name + "-renamed", created.Host, created.Port, created.Kind, true));
+        var resp = await session.Client.SendAsync(uReq, ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
 
         var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
-        Assert.True(body!.HasWriteCredential);
+        Assert.True(body!.IsDisabled);
+        Assert.EndsWith("-renamed", body.Name);
     }
 
+    // ── soft-delete ───────────────────────────────────────────────────────────
+
     [Fact]
-    public async Task UpdateServer_ClearsWriteCredential()
+    public async Task SoftDeleteServer_RemovesFromList()
     {
         var ct = TestContext.Current.CancellationToken;
         var (session, xsrf) = await AuthorizedSessionAsync(ct);
         using var _ = session;
 
-        var connStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct)
-                      ?? throw new InvalidOperationException("blue-appdb not found");
-        var pg = new NpgsqlConnectionStringBuilder(connStr);
-
-        var created = await CreateServerAsync(session, xsrf, UniqueName(), pg.Host!, pg.Port, ct);
-        Assert.True(created.HasWriteCredential);
-
-        // Clear write credentials by sending empty strings
-        using var req = MutationRequest(
-            HttpMethod.Put,
-            $"/api/server/{created.Id}",
+        using var cReq = MutationRequest(HttpMethod.Post,
+            "/api/server",
             xsrf,
-            new ServerEndpoints.UpdateServerRequest(
-                created.Name,
-                created.Host,
-                created.Port,
-                created.Database,
-                "new_read_user",
-                "new_read_pass",
-                string.Empty,
-                string.Empty
-            )
-        );
-        var resp = await session.Client.SendAsync(req, ct);
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+            new ServerEndpoints.CreateServerRequest(UniqueName(), "postgres", "localhost", 5432));
+        var created = (await (await session.Client.SendAsync(cReq, ct)).Content
+            .ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct))!;
 
-        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
-        Assert.False(body!.HasWriteCredential);
-    }
-
-    // ── delete ────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task DeleteServer_RemovesFromList()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AuthorizedSessionAsync(ct);
-        using var _ = session;
-
-        var connStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct)
-                      ?? throw new InvalidOperationException("blue-appdb not found");
-        var pg = new NpgsqlConnectionStringBuilder(connStr);
-
-        var created = await CreateServerAsync(session, xsrf, UniqueName(), pg.Host!, pg.Port, ct);
-
-        using var req = MutationRequest(HttpMethod.Delete, $"/api/server/{created.Id}", xsrf);
-        var resp = await session.Client.SendAsync(req, ct);
-        Assert.Equal(HttpStatusCode.NoContent, resp.StatusCode);
+        using var dReq = MutationRequest(HttpMethod.Delete, $"/api/server/{created.Id}", xsrf);
+        Assert.Equal(HttpStatusCode.NoContent, (await session.Client.SendAsync(dReq, ct)).StatusCode);
 
         var list = await session.Client.GetFromJsonAsync<ServerEndpoints.ListServersResponse>("/api/server", ct);
         Assert.DoesNotContain(list!.Servers, s => s.Id == created.Id);
     }
 
-    // ── test connection ───────────────────────────────────────────────────────
-
     [Fact]
-    public async Task TestConnection_Read_Succeeds_AgainstBlue()
+    public async Task SoftDeleteServer_CascadesToCredentialsAndDatabases()
     {
         var ct = TestContext.Current.CancellationToken;
         var (session, xsrf) = await AuthorizedSessionAsync(ct);
@@ -287,84 +208,18 @@ public class ServerEndpointTests(SluiceBaseStackFactory factory)
         var connStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct)
                       ?? throw new InvalidOperationException("blue-appdb not found");
         var pg = new NpgsqlConnectionStringBuilder(connStr);
+        var (server, _, _, _) = await CreateServerWithDatabaseAsync(session, xsrf, pg.Host!, pg.Port, ct);
 
-        var created = await CreateServerAsync(session, xsrf, UniqueName(), pg.Host!, pg.Port, ct);
+        // Soft-delete the server
+        using var dReq = MutationRequest(HttpMethod.Delete, $"/api/server/{server.Id}", xsrf);
+        Assert.Equal(HttpStatusCode.NoContent, (await session.Client.SendAsync(dReq, ct)).StatusCode);
 
-        using var req = MutationRequest(HttpMethod.Post, $"/api/server/{created.Id}/test", xsrf);
-        var resp = await session.Client.SendAsync(req, ct);
-        resp.EnsureSuccessStatusCode();
+        // Server no longer in list
+        var list = await session.Client.GetFromJsonAsync<ServerEndpoints.ListServersResponse>("/api/server", ct);
+        Assert.DoesNotContain(list!.Servers, s => s.Id == server.Id);
 
-        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.TestConnectionResponse>(ct);
-        Assert.True(body!.Read.Ok, body.Read.Error);
-        Assert.True(body.Write?.Ok, body.Write?.Error);
-    }
-
-    [Fact]
-    public async Task TestConnection_Write_IsNull_ForReadOnlyServer()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AuthorizedSessionAsync(ct);
-        using var _ = session;
-
-        var name = UniqueName();
-        using var createReq = MutationRequest(
-            HttpMethod.Post,
-            "/api/server",
-            xsrf,
-            new ServerEndpoints.CreateServerRequest(
-                name,
-                "postgres",
-                "localhost",
-                5432,
-                "appdb",
-                "reader_blue",
-                "reader_blue"
-            )
-        );
-        var createResp = await session.Client.SendAsync(createReq, ct);
-        createResp.EnsureSuccessStatusCode();
-        var created = await createResp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
-
-        using var req = MutationRequest(HttpMethod.Post, $"/api/server/{created!.Id}/test", xsrf);
-        var resp = await session.Client.SendAsync(req, ct);
-        resp.EnsureSuccessStatusCode();
-
-        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.TestConnectionResponse>(ct);
-        Assert.Null(body!.Write);
-    }
-
-    [Fact]
-    public async Task TestConnection_BadHost_ReturnsOkFalse()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AuthorizedSessionAsync(ct);
-        using var _ = session;
-
-        using var createReq = MutationRequest(
-            HttpMethod.Post,
-            "/api/server",
-            xsrf,
-            new ServerEndpoints.CreateServerRequest(
-                UniqueName(),
-                "postgres",
-                "no-such-host-xyz.invalid",
-                5432,
-                "appdb",
-                "r",
-                "p"
-            )
-        );
-        var createResp = await session.Client.SendAsync(createReq, ct);
-        createResp.EnsureSuccessStatusCode();
-        var created = await createResp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
-
-        using var req = MutationRequest(HttpMethod.Post, $"/api/server/{created!.Id}/test", xsrf);
-        var resp = await session.Client.SendAsync(req, ct);
-        resp.EnsureSuccessStatusCode();
-
-        var body = await resp.Content.ReadFromJsonAsync<ServerEndpoints.TestConnectionResponse>(ct);
-        Assert.False(body!.Read.Ok);
-        Assert.NotNull(body.Read.Error);
+        // Credentials and databases also gone (no longer returned in any server's nested list)
+        Assert.DoesNotContain(list.Servers.SelectMany(s => s.Credentials), c => c.Id.Value == server.Id.Value);
     }
 
     // ── response types ────────────────────────────────────────────────────────

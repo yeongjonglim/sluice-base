@@ -71,6 +71,11 @@ internal static class UpdateEndpoints
             return TypedResults.NotFound();
         }
 
+        if (database.IsDisabled)
+        {
+            return TypedResults.BadRequest("Server is disabled.");
+        }
+
         if (!database.CanWrite)
         {
             return TypedResults.BadRequest("Server has no write credentials configured.");
