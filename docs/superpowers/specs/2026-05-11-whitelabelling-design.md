@@ -83,20 +83,25 @@ Returns:
 {
   "appName": "Acme",
   "primaryColor": "violet",
-  "hasLogo": true,
-  "hasFavicon": true
+  "logoUrl": "https://example.com/logo.png",
+  "faviconUrl": "/api/branding/favicon"
 }
 ```
 
-`hasLogo` is `true` when `LogoUrl` is non-empty. `hasFavicon` is `true` when `FaviconUrl` is non-empty. The raw URLs are not exposed.
+The backend resolves each asset URL before returning it:
+
+- Empty `LogoUrl`/`FaviconUrl` → `null` in the response.
+- Remote URL (starts with `http://` or `https://`) → returned as-is so the frontend can load it directly.
+- Local file path → returned as `/api/branding/logo` or `/api/branding/favicon` so the frontend uses the backend serving endpoint.
+
+The raw file path is never exposed.
 
 **`GET /api/branding/logo`** and **`GET /api/branding/favicon`**
 
-Both use the same serving logic:
+These endpoints only serve **local files**. Remote URLs are handled directly by the frontend.
 
-1. If the configured URL is empty → 404.
-2. If the URL starts with `http://` or `https://` → proxy via `HttpClient`, stream the response body back with the upstream `Content-Type`.
-3. Otherwise → treat as a local file path, read and stream the file. Content type is inferred from the file extension, defaulting to `image/png`. Missing file → 404.
+1. If the configured URL is empty or a remote URL → 404.
+2. Otherwise → treat as a local file path, read and stream the file. Content type is inferred from the file extension, defaulting to `image/png`. Missing file → 404.
 
 ## 3. Frontend
 
@@ -126,14 +131,16 @@ The existing `theme.ts` is refactored to export a `createAppTheme(primaryColor: 
 
 ### 3.3 BrandingContext
 
-A `BrandingContext` (in `src/theme/BrandingContext.tsx`) provides `appName`, `hasLogo`, and `hasFavicon` to the component tree. It is populated from the pre-mount fetch result and never changes at runtime.
+A `BrandingContext` (in `src/theme/BrandingContext.tsx`) provides `appName`, `logoUrl`, and `faviconUrl` to the component tree. It is populated from the pre-mount fetch result and never changes at runtime.
 
 ### 3.4 Header (\_authed.tsx)
 
 The hardcoded `<Title order={4}>SluiceBase</Title>` is replaced:
 
-- If `hasLogo`: render `<img src="/api/branding/logo" alt={appName} style={{ maxHeight: 24 }} onError={...} />`. On image error, fall back to the text title.
+- If `logoUrl` is non-null: render `<img src={logoUrl} alt={appName} style={{ maxHeight: 24 }} onError={...} />`. On image error, fall back to the text title.
 - Otherwise: render `<Title order={4}>{appName}</Title>`.
+
+No special-casing of remote vs local URLs is needed in the header — the backend has already resolved the correct URL.
 
 ### 3.5 Document title and favicon
 
@@ -142,10 +149,10 @@ Applied once in `main.tsx` before mount (not in a component, to avoid hydration 
 ```ts
 document.title = branding?.appName ?? "SluiceBase";
 
-if (branding?.hasFavicon) {
+if (branding?.faviconUrl) {
   const link = document.querySelector<HTMLLinkElement>("link[rel~='icon']")
     ?? Object.assign(document.createElement("link"), { rel: "icon" });
-  link.href = "/api/branding/favicon";
+  link.href = branding.faviconUrl; // remote URL or /api/branding/favicon — resolved by backend
   document.head.appendChild(link);
 }
 ```
@@ -154,9 +161,10 @@ if (branding?.hasFavicon) {
 
 | Failure | Behaviour |
 |---|---|
-| `GET /api/branding` network error or non-200 | App mounts with defaults: `appName="SluiceBase"`, `primaryColor="teal"`, no logo, no favicon |
-| Logo/favicon URL is empty | Backend returns 404; frontend never requests the endpoint (`hasLogo`/`hasFavicon` is false) |
-| Logo/favicon file not found or remote URL unreachable | Backend returns 404; `<img onError>` hides the broken image and renders text title instead; favicon stays as default static file |
+| `GET /api/branding` network error or non-200 | App mounts with defaults: `appName="SluiceBase"`, `primaryColor="teal"`, `logoUrl=null`, `faviconUrl=null` |
+| Logo/favicon URL is empty | Backend returns `null` for the field; frontend never attempts to load an image or set the favicon |
+| Remote logo/favicon URL unreachable | Backend passes URL through to frontend; `<img onError>` hides the broken image and falls back to text title; favicon stays as browser default |
+| Local logo/favicon file not found | Backend `GET /api/branding/logo` or `/favicon` returns 404; same `<img onError>` / favicon fallback as above |
 | `PrimaryColor` is an invalid Mantine colour name | Backend logs a warning, returns `"teal"` in the API response; operator is informed via logs |
 
 ## 5. OpenAPI / codegen
