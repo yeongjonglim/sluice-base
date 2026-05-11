@@ -1,4 +1,4 @@
-g'"name: Publish Docker image
+name: Publish Docker image
 
 on:
   push:
