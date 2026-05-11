@@ -1,0 +1,141 @@
+import { expect, test } from "@playwright/test";
+
+test.describe("Query schema browser — alice", () => {
+  test("can browse schema of a registered server", async ({ page }) => {
+    // Sign in as alice
+    await page.goto("http://localhost:5173");
+    await page.waitForURL(/realms\/sluicebase/);
+    await page.fill('[name="username"]', "alice");
+    await page.fill('[name="password"]', "dev");
+    await page.click('[type="submit"]');
+    await page.waitForURL("http://localhost:5173/");
+
+    // Grant query:execute via the Permission page
+    await page.getByRole("link", { name: "Permission" }).click();
+    await expect(page).toHaveURL("/permission");
+
+    const aliceRow = page.getByRole("row").filter({ hasText: "alice@example.com" });
+    await expect(aliceRow).toBeVisible();
+    const querySwitch = aliceRow.getByRole("switch", { name: /Run read queries/i });
+    if (!(await querySwitch.isChecked())) {
+      await querySwitch.click({ force: true });
+      await page.reload({ waitUntil: "domcontentloaded" });
+    }
+
+    // Navigate to /query
+    await page.goto("http://localhost:5173/query");
+    await expect(page.getByPlaceholder("Select a server")).toBeVisible();
+
+    // Select Blue server from the dropdown
+    await page.getByPlaceholder("Select a server").click({ force: true });
+    await page.getByRole("option", { name: "Blue" }).click();
+
+    // Schema tree should populate — public schema visible
+    await expect(page.getByText("public")).toBeVisible({ timeout: 10_000 });
+
+    // Expand the public schema
+    await page.getByText("public").click();
+
+    // At least one table visible (Blue has users, orders, products)
+    await expect(page.getByText("users")).toBeVisible();
+
+    // Expand the users table
+    await page.getByText("users").click();
+
+    // At least one column with a data type visible
+    await expect(page.getByRole("paragraph").filter({ hasText: "id" })).toBeVisible();
+    await expect(page.getByText("integer")).toBeVisible();
+  });
+
+  test("bob is redirected to / when navigating to /query", async ({ page, context }) => {
+    await context.clearCookies();
+    await page.goto("http://localhost:5173");
+    await page.waitForURL(/realms\/sluicebase/);
+    await page.fill('[name="username"]', "bob");
+    await page.fill('[name="password"]', "dev");
+    await page.click('[type="submit"]');
+    await page.waitForURL("http://localhost:5173/");
+
+    await page.goto("http://localhost:5173/query");
+    await expect(page).toHaveURL("http://localhost:5173/");
+  });
+
+  test("alice can run a query and see results", async ({ page }) => {
+    // Sign in as alice
+    await page.goto("http://localhost:5173");
+    await page.waitForURL(/realms\/sluicebase/);
+    await page.fill('[name="username"]', "alice");
+    await page.fill('[name="password"]', "dev");
+    await page.click('[type="submit"]');
+    await page.waitForURL("http://localhost:5173/");
+
+    // Grant query:execute if not already set
+    await page.getByRole("link", { name: "Permission" }).click();
+    await expect(page).toHaveURL("/permission");
+    const aliceRow = page.getByRole("row").filter({ hasText: "alice@example.com" });
+    const querySwitch = aliceRow.getByRole("switch", { name: /Run read queries/i });
+    if (!(await querySwitch.isChecked())) {
+      await querySwitch.click({ force: true });
+      await page.reload({ waitUntil: "domcontentloaded" });
+    }
+
+    // Navigate to /query and select a server
+    await page.goto("http://localhost:5173/query");
+    await page.getByPlaceholder("Select a server").click({ force: true });
+    await page.getByRole("option", { name: "Blue" }).click();
+
+    // Wait for schema to load, then click users table to generate snippet
+    await expect(page.getByText("public")).toBeVisible({ timeout: 10_000 });
+    await page.getByText("public").click();
+    await page.getByText("users").first().click();
+
+    // The editor should now contain a SELECT snippet
+    const editorContent = await page.locator(".cm-content").textContent();
+    expect(editorContent).toContain("SELECT");
+    expect(editorContent).toContain("users");
+    expect(editorContent).toContain("LIMIT 100");
+
+    // Click Run
+    await page.getByRole("button", { name: /run/i }).click();
+
+    // Results table should appear
+    await expect(page.getByRole("table")).toBeVisible({ timeout: 15_000 });
+
+    // Status line should show row count and duration
+    await expect(page.getByText(/rows? · \d+ ms/)).toBeVisible();
+  });
+
+  test("alice sees error message for invalid SQL", async ({ page }) => {
+    // Sign in as alice (query:execute assumed already granted from previous test in session)
+    await page.goto("http://localhost:5173");
+    await page.waitForURL(/realms\/sluicebase/);
+    await page.fill('[name="username"]', "alice");
+    await page.fill('[name="password"]', "dev");
+    await page.click('[type="submit"]');
+    await page.waitForURL("http://localhost:5173/");
+
+    // Grant query:execute if needed
+    await page.getByRole("link", { name: "Permission" }).click();
+    const aliceRow = page.getByRole("row").filter({ hasText: "alice@example.com" });
+    const querySwitch = aliceRow.getByRole("switch", { name: /Run read queries/i });
+    if (!(await querySwitch.isChecked())) {
+      await querySwitch.click({ force: true });
+      await page.reload({ waitUntil: "domcontentloaded" });
+    }
+
+    await page.goto("http://localhost:5173/query");
+    await page.getByPlaceholder("Select a server").click({ force: true });
+    await page.getByRole("option", { name: "Blue" }).click();
+    await expect(page.getByText("public")).toBeVisible({ timeout: 10_000 });
+
+    // Type invalid SQL directly into the editor
+    await page.locator(".cm-content").click();
+    await page.keyboard.type("SELECT naem FROM public.users LIMIT 5");
+
+    await page.getByRole("button", { name: /run/i }).click();
+
+    // Error alert should appear
+    await expect(page.getByRole("alert")).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText("Query error")).toBeVisible();
+  });
+});
