@@ -108,7 +108,7 @@ In `src/SluiceBase.Api/appsettings.json`, add the `Branding` block after the `"Q
 
 - [ ] **Step 3: Register BrandingOptions in Program.cs**
 
-In `src/SluiceBase.Api/Program.cs`, add the using and two registrations after `builder.AddSluiceBaseAuth();`:
+In `src/SluiceBase.Api/Program.cs`, add the using and registration after `builder.AddSluiceBaseAuth();`:
 
 ```csharp
 using SluiceBase.Core.Branding;
@@ -117,7 +117,6 @@ using SluiceBase.Core.Branding;
 ```csharp
 builder.Services.Configure<BrandingOptions>(
     builder.Configuration.GetSection(BrandingOptions.SectionName));
-builder.Services.AddHttpClient("branding");
 ```
 
 - [ ] **Step 4: Build to verify it compiles**
@@ -179,8 +178,8 @@ public sealed class BrandingEndpointTests(SluiceBaseStackFactory factory)
         Assert.NotNull(content);
         Assert.Equal("SluiceBase", content.AppName);
         Assert.Equal("teal", content.PrimaryColor);
-        Assert.False(content.HasLogo);
-        Assert.False(content.HasFavicon);
+        Assert.Null(content.LogoUrl);
+        Assert.Null(content.FaviconUrl);
     }
 
     [Fact]
@@ -204,7 +203,7 @@ public sealed class BrandingEndpointTests(SluiceBaseStackFactory factory)
     }
 }
 
-internal sealed record BrandingResponseDto(string AppName, string PrimaryColor, bool HasLogo, bool HasFavicon);
+internal sealed record BrandingResponseDto(string AppName, string PrimaryColor, string? LogoUrl, string? FaviconUrl);
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -245,19 +244,29 @@ internal static class BrandingEndpoints
                     return TypedResults.Ok(new BrandingResponse(
                         AppName: branding.AppName,
                         PrimaryColor: branding.GetValidatedPrimaryColor(logger),
-                        HasLogo: !string.IsNullOrEmpty(branding.LogoUrl),
-                        HasFavicon: !string.IsNullOrEmpty(branding.FaviconUrl)));
+                        LogoUrl: ResolveAssetUrl(branding.LogoUrl, "/api/branding/logo"),
+                        FaviconUrl: ResolveAssetUrl(branding.FaviconUrl, "/api/branding/favicon")));
                 })
             .WithName("GetBranding")
             .AllowAnonymous();
     }
+
+    private static string? ResolveAssetUrl(string configUrl, string localEndpoint)
+    {
+        if (string.IsNullOrEmpty(configUrl)) return null;
+        return IsRemoteUrl(configUrl) ? configUrl : localEndpoint;
+    }
+
+    private static bool IsRemoteUrl(string url) =>
+        url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+        url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 }
 
 internal sealed record BrandingResponse(
     string AppName,
     string PrimaryColor,
-    bool HasLogo,
-    bool HasFavicon);
+    string? LogoUrl,
+    string? FaviconUrl);
 ```
 
 - [ ] **Step 2: Register BrandingEndpoints in EndpointMapper.cs**
@@ -329,56 +338,44 @@ internal static class BrandingEndpoints
                     return TypedResults.Ok(new BrandingResponse(
                         AppName: branding.AppName,
                         PrimaryColor: branding.GetValidatedPrimaryColor(logger),
-                        HasLogo: !string.IsNullOrEmpty(branding.LogoUrl),
-                        HasFavicon: !string.IsNullOrEmpty(branding.FaviconUrl)));
+                        LogoUrl: ResolveAssetUrl(branding.LogoUrl, "/api/branding/logo"),
+                        FaviconUrl: ResolveAssetUrl(branding.FaviconUrl, "/api/branding/favicon")));
                 })
             .WithName("GetBranding")
             .AllowAnonymous();
 
         app.MapGet("/api/branding/logo",
-                (IOptions<BrandingOptions> options, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
-                    ServeAsset(options.Value.LogoUrl, httpClientFactory, ct))
+                (IOptions<BrandingOptions> options) =>
+                    ServeLocalFile(options.Value.LogoUrl))
             .WithName("GetBrandingLogo")
             .AllowAnonymous();
 
         app.MapGet("/api/branding/favicon",
-                (IOptions<BrandingOptions> options, IHttpClientFactory httpClientFactory, CancellationToken ct) =>
-                    ServeAsset(options.Value.FaviconUrl, httpClientFactory, ct))
+                (IOptions<BrandingOptions> options) =>
+                    ServeLocalFile(options.Value.FaviconUrl))
             .WithName("GetBrandingFavicon")
             .AllowAnonymous();
     }
 
-    private static async Task<IResult> ServeAsset(
-        string url, IHttpClientFactory httpClientFactory, CancellationToken ct)
+    private static IResult ServeLocalFile(string url)
     {
-        if (string.IsNullOrEmpty(url))
+        if (string.IsNullOrEmpty(url) || IsRemoteUrl(url))
             return Results.NotFound();
-
-        if (url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-            url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            var client = httpClientFactory.CreateClient("branding");
-            HttpResponseMessage upstream;
-            try
-            {
-                upstream = await client.GetAsync(url, ct);
-            }
-            catch
-            {
-                return Results.NotFound();
-            }
-
-            if (!upstream.IsSuccessStatusCode) return Results.NotFound();
-
-            var contentType = upstream.Content.Headers.ContentType?.MediaType ?? "image/png";
-            var stream = await upstream.Content.ReadAsStreamAsync(ct);
-            return Results.Stream(stream, contentType);
-        }
 
         if (!File.Exists(url)) return Results.NotFound();
 
         return Results.Stream(File.OpenRead(url), GetContentType(url));
     }
+
+    private static string? ResolveAssetUrl(string configUrl, string localEndpoint)
+    {
+        if (string.IsNullOrEmpty(configUrl)) return null;
+        return IsRemoteUrl(configUrl) ? configUrl : localEndpoint;
+    }
+
+    private static bool IsRemoteUrl(string url) =>
+        url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+        url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 
     private static string GetContentType(string url) =>
         Path.GetExtension(url).ToLowerInvariant() switch
@@ -395,8 +392,8 @@ internal static class BrandingEndpoints
 internal sealed record BrandingResponse(
     string AppName,
     string PrimaryColor,
-    bool HasLogo,
-    bool HasFavicon);
+    string? LogoUrl,
+    string? FaviconUrl);
 ```
 
 - [ ] **Step 2: Run all branding integration tests**
@@ -491,12 +488,12 @@ describe("BrandingContext", () => {
 
     const result = JSON.parse(screen.getByTestId("result").textContent!);
     expect(result.appName).toBe("SluiceBase");
-    expect(result.hasLogo).toBe(false);
-    expect(result.hasFavicon).toBe(false);
+    expect(result.logoUrl).toBeNull();
+    expect(result.faviconUrl).toBeNull();
   });
 
   it("provides custom branding values", () => {
-    const value = { appName: "Acme", hasLogo: true, hasFavicon: true };
+    const value = { appName: "Acme", logoUrl: "https://example.com/logo.png", faviconUrl: null };
 
     render(
       <BrandingContext value={value}>
@@ -506,8 +503,8 @@ describe("BrandingContext", () => {
 
     const result = JSON.parse(screen.getByTestId("result").textContent!);
     expect(result.appName).toBe("Acme");
-    expect(result.hasLogo).toBe(true);
-    expect(result.hasFavicon).toBe(true);
+    expect(result.logoUrl).toBe("https://example.com/logo.png");
+    expect(result.faviconUrl).toBeNull();
   });
 });
 ```
@@ -529,14 +526,14 @@ import { createContext, useContext } from "react";
 
 export interface BrandingValue {
   appName: string;
-  hasLogo: boolean;
-  hasFavicon: boolean;
+  logoUrl: string | null;
+  faviconUrl: string | null;
 }
 
 const DEFAULT_BRANDING: BrandingValue = {
   appName: "SluiceBase",
-  hasLogo: false,
-  hasFavicon: false,
+  logoUrl: null,
+  faviconUrl: null,
 };
 
 export const BrandingContext = createContext<BrandingValue>(DEFAULT_BRANDING);
@@ -643,17 +640,17 @@ const branding = res?.ok ? await res.json() : null;
 
 const brandingValue: BrandingValue = {
   appName: branding?.appName ?? "SluiceBase",
-  hasLogo: branding?.hasLogo ?? false,
-  hasFavicon: branding?.hasFavicon ?? false,
+  logoUrl: branding?.logoUrl ?? null,
+  faviconUrl: branding?.faviconUrl ?? null,
 };
 
 document.title = brandingValue.appName;
 
-if (brandingValue.hasFavicon) {
+if (brandingValue.faviconUrl) {
   const link =
     document.querySelector<HTMLLinkElement>("link[rel~='icon']") ??
     Object.assign(document.createElement("link"), { rel: "icon" });
-  link.href = "/api/branding/favicon";
+  link.href = brandingValue.faviconUrl;
   document.head.appendChild(link);
 }
 
@@ -736,7 +733,7 @@ import { useBranding } from "@/theme/BrandingContext";
 Inside `AuthedLayout`, after the existing hooks (after `const canSeeUpdates = ...`), add:
 
 ```tsx
-const { appName, hasLogo } = useBranding();
+const { appName, logoUrl } = useBranding();
 ```
 
 - [ ] **Step 3: Replace the hardcoded title in the header**
@@ -750,7 +747,7 @@ Find this line in `AuthedLayout`:
 Replace it with:
 
 ```tsx
-{hasLogo ? <BrandingLogo appName={appName} /> : <Title order={4}>{appName}</Title>}
+{logoUrl ? <BrandingLogo appName={appName} logoUrl={logoUrl} /> : <Title order={4}>{appName}</Title>}
 ```
 
 - [ ] **Step 4: Add BrandingLogo component below AuthedLayout**
@@ -758,12 +755,12 @@ Replace it with:
 After the closing brace of `AuthedLayout`, add:
 
 ```tsx
-function BrandingLogo({ appName }: { appName: string }) {
+function BrandingLogo({ appName, logoUrl }: { appName: string; logoUrl: string }) {
   const [imgError, setImgError] = useState(false);
   if (imgError) return <Title order={4}>{appName}</Title>;
   return (
     <img
-      src="/api/branding/logo"
+      src={logoUrl}
       alt={appName}
       style={{ maxHeight: 24 }}
       onError={() => setImgError(true)}
