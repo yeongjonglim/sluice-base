@@ -235,6 +235,9 @@ namespace SluiceBase.Api.Endpoints;
 
 internal static class BrandingEndpoints
 {
+    private static readonly string[] SupportedExtensions =
+        [".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp", ".ico"];
+
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/branding",
@@ -244,17 +247,32 @@ internal static class BrandingEndpoints
                     return TypedResults.Ok(new BrandingResponse(
                         AppName: branding.AppName,
                         PrimaryColor: branding.GetValidatedPrimaryColor(logger),
-                        LogoUrl: ResolveAssetUrl(branding.LogoUrl, "/api/branding/logo"),
-                        FaviconUrl: ResolveAssetUrl(branding.FaviconUrl, "/api/branding/favicon")));
+                        LogoUrl: ResolveAssetUrl(branding.LogoUrl, "/branding/logo", "/api/branding/logo", logger),
+                        FaviconUrl: ResolveAssetUrl(branding.FaviconUrl, "/branding/favicon", "/api/branding/favicon", logger)));
                 })
             .WithName("GetBranding")
             .AllowAnonymous();
     }
 
-    private static string? ResolveAssetUrl(string configUrl, string localEndpoint)
+    private static string? ResolveAssetUrl(
+        string configUrl, string localBasePath, string serveEndpoint, ILogger logger)
     {
-        if (string.IsNullOrEmpty(configUrl)) return null;
-        return IsRemoteUrl(configUrl) ? configUrl : localEndpoint;
+        if (!string.IsNullOrEmpty(configUrl))
+        {
+            if (IsRemoteUrl(configUrl)) return configUrl;
+            logger.LogWarning(
+                "Branding URL '{Url}' is not a remote URL. For local files, mount at {BasePath}.<ext>",
+                configUrl, localBasePath);
+        }
+
+        return HasLocalAsset(localBasePath) ? serveEndpoint : null;
+    }
+
+    private static bool HasLocalAsset(string basePath)
+    {
+        foreach (var ext in SupportedExtensions)
+            if (File.Exists(basePath + ext)) return true;
+        return false;
     }
 
     private static bool IsRemoteUrl(string url) =>
@@ -329,6 +347,9 @@ namespace SluiceBase.Api.Endpoints;
 
 internal static class BrandingEndpoints
 {
+    private static readonly string[] SupportedExtensions =
+        [".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp", ".ico"];
+
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/branding",
@@ -338,55 +359,68 @@ internal static class BrandingEndpoints
                     return TypedResults.Ok(new BrandingResponse(
                         AppName: branding.AppName,
                         PrimaryColor: branding.GetValidatedPrimaryColor(logger),
-                        LogoUrl: ResolveAssetUrl(branding.LogoUrl, "/api/branding/logo"),
-                        FaviconUrl: ResolveAssetUrl(branding.FaviconUrl, "/api/branding/favicon")));
+                        LogoUrl: ResolveAssetUrl(branding.LogoUrl, "/branding/logo", "/api/branding/logo", logger),
+                        FaviconUrl: ResolveAssetUrl(branding.FaviconUrl, "/branding/favicon", "/api/branding/favicon", logger)));
                 })
             .WithName("GetBranding")
             .AllowAnonymous();
 
         app.MapGet("/api/branding/logo",
-                (IOptions<BrandingOptions> options) =>
-                    ServeLocalFile(options.Value.LogoUrl))
+                () => ServeLocalAsset("/branding/logo"))
             .WithName("GetBrandingLogo")
             .AllowAnonymous();
 
         app.MapGet("/api/branding/favicon",
-                (IOptions<BrandingOptions> options) =>
-                    ServeLocalFile(options.Value.FaviconUrl))
+                () => ServeLocalAsset("/branding/favicon"))
             .WithName("GetBrandingFavicon")
             .AllowAnonymous();
     }
 
-    private static IResult ServeLocalFile(string url)
+    private static IResult ServeLocalAsset(string basePath)
     {
-        if (string.IsNullOrEmpty(url) || IsRemoteUrl(url))
-            return Results.NotFound();
-
-        if (!File.Exists(url)) return Results.NotFound();
-
-        return Results.Stream(File.OpenRead(url), GetContentType(url));
+        foreach (var ext in SupportedExtensions)
+        {
+            var path = basePath + ext;
+            if (File.Exists(path))
+                return Results.Stream(File.OpenRead(path), GetContentType(ext));
+        }
+        return Results.NotFound();
     }
 
-    private static string? ResolveAssetUrl(string configUrl, string localEndpoint)
+    private static string? ResolveAssetUrl(
+        string configUrl, string localBasePath, string serveEndpoint, ILogger logger)
     {
-        if (string.IsNullOrEmpty(configUrl)) return null;
-        return IsRemoteUrl(configUrl) ? configUrl : localEndpoint;
+        if (!string.IsNullOrEmpty(configUrl))
+        {
+            if (IsRemoteUrl(configUrl)) return configUrl;
+            logger.LogWarning(
+                "Branding URL '{Url}' is not a remote URL. For local files, mount at {BasePath}.<ext>",
+                configUrl, localBasePath);
+        }
+
+        return HasLocalAsset(localBasePath) ? serveEndpoint : null;
+    }
+
+    private static bool HasLocalAsset(string basePath)
+    {
+        foreach (var ext in SupportedExtensions)
+            if (File.Exists(basePath + ext)) return true;
+        return false;
     }
 
     private static bool IsRemoteUrl(string url) =>
         url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
         url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 
-    private static string GetContentType(string url) =>
-        Path.GetExtension(url).ToLowerInvariant() switch
-        {
-            ".svg" => "image/svg+xml",
-            ".jpg" or ".jpeg" => "image/jpeg",
-            ".gif" => "image/gif",
-            ".webp" => "image/webp",
-            ".ico" => "image/x-icon",
-            _ => "image/png"
-        };
+    private static string GetContentType(string ext) => ext switch
+    {
+        ".svg" => "image/svg+xml",
+        ".jpg" or ".jpeg" => "image/jpeg",
+        ".gif" => "image/gif",
+        ".webp" => "image/webp",
+        ".ico" => "image/x-icon",
+        _ => "image/png"
+    };
 }
 
 internal sealed record BrandingResponse(
