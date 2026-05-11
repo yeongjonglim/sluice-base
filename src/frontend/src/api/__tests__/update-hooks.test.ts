@@ -97,7 +97,7 @@ describe("useSubmitUpdate", () => {
     vi.mocked(apiRequest).mockResolvedValue(fakeDetail);
     const { result } = renderHook(() => useSubmitUpdate(), { wrapper });
     result.current.mutate({
-      serverId: "srv-1",
+      databaseId: "db-1",
       sqlText: "UPDATE public.users SET email = email WHERE 1=0",
       reason: "fix data",
     });
