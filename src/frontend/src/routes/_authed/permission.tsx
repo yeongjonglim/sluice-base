@@ -16,6 +16,7 @@ const PERMISSION_LABELS: Record<string, { short: string; full: string }> = {
   "permission:manage": { short: "Permission", full: "Manage permissions" },
   "server:manage": { short: "Server", full: "Manage servers" },
   "query:execute": { short: "Query", full: "Run read queries" },
+  "query:audit": { short: "Audit", full: "Audit read queries" },
   "update:submit": { short: "Submit", full: "Submit update requests" },
   "update:approve": { short: "Approve", full: "Approve update requests" },
   "update:execute": { short: "Execute", full: "Execute approved updates" },
