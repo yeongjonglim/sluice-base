@@ -16,6 +16,7 @@ WORKDIR /src
 
 # Copy project files first for restore layer caching
 COPY Directory.Build.props .
+COPY .editorconfig .
 COPY src/SluiceBase.Api/SluiceBase.Api.csproj src/SluiceBase.Api/
 COPY src/SluiceBase.Core/SluiceBase.Core.csproj src/SluiceBase.Core/
 COPY src/ServiceDefaults/ServiceDefaults.csproj src/ServiceDefaults/
