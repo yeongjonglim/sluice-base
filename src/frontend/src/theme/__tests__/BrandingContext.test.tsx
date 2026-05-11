@@ -1,8 +1,8 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
+import { BrandingContext, useBranding } from '@/theme/BrandingContext';
 
 afterEach(cleanup);
-import { BrandingContext, useBranding } from '@/theme/BrandingContext';
 
 function TestConsumer() {
   const branding = useBranding();
