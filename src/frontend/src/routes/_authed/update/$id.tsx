@@ -284,7 +284,7 @@ function UpdateDetailPage() {
                   {r.submitterName} &middot; {new Date(r.submittedAt).toLocaleString()}
                 </Text>
                 <Text size="sm" c="dimmed">
-                  {r.serverName}
+                  {r.databaseDisplayName}
                 </Text>
                 <Text size="sm">{r.reason}</Text>
               </Stack>

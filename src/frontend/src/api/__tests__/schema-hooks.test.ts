@@ -32,7 +32,7 @@ beforeEach(() => {
 });
 
 describe("useSchema", () => {
-  it("is disabled and does not fetch when serverId is null", async () => {
+  it("is disabled and does not fetch when databaseId is null", async () => {
     vi.mocked(apiRequest).mockResolvedValue({ schemas: [] });
 
     const { result } = renderHook(() => useSchema(null), { wrapper });
@@ -42,7 +42,7 @@ describe("useSchema", () => {
     expect(result.current.fetchStatus).toBe("idle");
   });
 
-  it("fetches /api/schema/{serverId} and uses correct query key", async () => {
+  it("fetches /api/schema/{databaseId} and uses correct query key", async () => {
     const mockTree = {
       schemas: [
         {
@@ -58,10 +58,10 @@ describe("useSchema", () => {
     };
     vi.mocked(apiRequest).mockResolvedValue(mockTree);
 
-    const { result } = renderHook(() => useSchema("server-abc"), { wrapper });
+    const { result } = renderHook(() => useSchema("db-abc"), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(apiRequest).toHaveBeenCalledWith("/api/schema/server-abc");
+    expect(apiRequest).toHaveBeenCalledWith("/api/schema/db-abc");
     expect(result.current.data).toEqual(mockTree);
   });
 });

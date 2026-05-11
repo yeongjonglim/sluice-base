@@ -78,7 +78,7 @@ function UpdateListPage() {
                 onClick={() => void navigate({ to: "/update/$id", params: { id: r.id } })}
               >
                 <Table.Td>{statusBadge(r.status, r.execSuccess)}</Table.Td>
-                <Table.Td>{r.serverName ?? "—"}</Table.Td>
+                <Table.Td>{r.databaseDisplayName ?? "—"}</Table.Td>
                 <Table.Td>{r.submitterName ?? "—"}</Table.Td>
                 <Table.Td
                   style={{

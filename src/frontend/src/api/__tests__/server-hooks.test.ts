@@ -45,7 +45,7 @@ beforeEach(() => {
 });
 
 describe("useServers", () => {
-  it("fetches /api/server and returns server list without password fields", async () => {
+  it("fetches /api/server and returns server list with nested credentials and databases", async () => {
     const mockData = {
       servers: [
         {
@@ -54,7 +54,17 @@ describe("useServers", () => {
           kind: "postgres",
           host: "localhost",
           port: 5432,
-          isEnabled: true,
+          isDisabled: false,
+          credentials: [
+            { id: "cred-1", label: "Read-only role", username: "reader_blue",
+              createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+          ],
+          databases: [
+            { id: "db-1", displayName: "Blue App DB", databaseName: "appdb",
+              readCredentialId: "cred-1", writeCredentialId: null,
+              canWrite: false, isDisabled: false,
+              createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+          ],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         },
@@ -66,6 +76,10 @@ describe("useServers", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(apiRequest).toHaveBeenCalledWith("/api/server");
+    const server = result.current.data?.servers[0];
+    expect(server).toBeDefined();
+    expect("credentials" in server!).toBe(true);
+    expect("databases" in server!).toBe(true);
   });
 });
 
@@ -77,7 +91,9 @@ describe("useCreateServer", () => {
       kind: "postgres",
       host: "localhost",
       port: 5432,
-      isEnabled: true,
+      isDisabled: false,
+      credentials: [],
+      databases: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -179,7 +195,9 @@ describe("useUpdateServer", () => {
       kind: "postgres",
       host: "localhost",
       port: 5432,
-      isEnabled: true,
+      isDisabled: false,
+      credentials: [],
+      databases: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -246,7 +264,7 @@ describe("useUpdateDatabase", () => {
     });
 
     const { result } = renderHook(() => useUpdateDatabase("srv-1"), { wrapper });
-    result.current.mutate({ databaseId: "db-1", displayName: "Updated DB", databaseName: "appdb", readCredentialId: "cred-1", isDisabled: false });
+    result.current.mutate({ databaseId: "db-1", displayName: "Updated DB", databaseName: "appdb", readCredentialId: "cred-1", writeCredentialId: null, isDisabled: false });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(apiRequest).toHaveBeenCalledWith(
