@@ -49,9 +49,11 @@ Operators override via standard .NET env var convention:
 ```
 Branding__AppName=Acme
 Branding__PrimaryColor=violet
-Branding__LogoUrl=/config/logo.png
-Branding__FaviconUrl=/config/favicon.png
+Branding__LogoUrl=https://cdn.example.com/logo.png   # remote URLs only
+Branding__FaviconUrl=https://cdn.example.com/fav.ico # remote URLs only
 ```
+
+`LogoUrl` and `FaviconUrl` accept **remote URLs only** (`http://` or `https://`). Local asset files are not configured here — they are mounted at hardcoded paths (see §2.3). If a non-remote value is provided, the backend logs a warning and ignores it.
 
 ### 2.2 BrandingOptions
 
@@ -69,6 +71,8 @@ public record BrandingOptions
 
 `PrimaryColor` is validated at startup against the set of Mantine built-in colour names. Invalid values log a warning and fall back to `"teal"` — no startup failure.
 
+`LogoUrl`/`FaviconUrl` are validated to be remote URLs. Non-remote (or empty) values are treated as unconfigured; the backend then checks for a locally mounted file instead (see §2.3).
+
 Valid Mantine colour names: `dark`, `gray`, `red`, `pink`, `grape`, `violet`, `indigo`, `blue`, `cyan`, `green`, `lime`, `yellow`, `orange`, `teal`.
 
 ### 2.3 Endpoints
@@ -83,25 +87,36 @@ Returns:
 {
   "appName": "Acme",
   "primaryColor": "violet",
-  "logoUrl": "https://example.com/logo.png",
+  "logoUrl": "https://cdn.example.com/logo.png",
   "faviconUrl": "/api/branding/favicon"
 }
 ```
 
-The backend resolves each asset URL before returning it:
+The backend resolves each asset URL using this priority:
 
-- Empty `LogoUrl`/`FaviconUrl` → `null` in the response.
-- Remote URL (starts with `http://` or `https://`) → returned as-is so the frontend can load it directly.
-- Local file path → returned as `/api/branding/logo` or `/api/branding/favicon` so the frontend uses the backend serving endpoint.
+1. If `LogoUrl`/`FaviconUrl` config is a valid remote URL → return it as-is (frontend loads directly).
+2. Else if a locally mounted file exists at the hardcoded path → return the serving endpoint URL (`/api/branding/logo` or `/api/branding/favicon`).
+3. Else → `null`.
 
-The raw file path is never exposed.
+No operator-supplied path string is ever passed to the filesystem.
 
 **`GET /api/branding/logo`** and **`GET /api/branding/favicon`**
 
-These endpoints only serve **local files**. Remote URLs are handled directly by the frontend.
+These endpoints only serve **locally mounted files** at hardcoded paths. Remote URLs are handled directly by the frontend and never proxied.
 
-1. If the configured URL is empty or a remote URL → 404.
-2. Otherwise → treat as a local file path, read and stream the file. Content type is inferred from the file extension, defaulting to `image/png`. Missing file → 404.
+The backend tries the following extensions in order for `/branding/logo` and `/branding/favicon`:
+
+`.png`, `.svg`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.ico`
+
+It serves the first file found with the matching content type. If no file is found → 404.
+
+Operators mount files via Docker volume:
+
+```
+docker run -v /host/logo.svg:/branding/logo.svg ...
+```
+
+No path is accepted from config or request parameters, so path traversal is impossible.
 
 ## 3. Frontend
 
@@ -162,9 +177,9 @@ if (branding?.faviconUrl) {
 | Failure | Behaviour |
 |---|---|
 | `GET /api/branding` network error or non-200 | App mounts with defaults: `appName="SluiceBase"`, `primaryColor="teal"`, `logoUrl=null`, `faviconUrl=null` |
-| Logo/favicon URL is empty | Backend returns `null` for the field; frontend never attempts to load an image or set the favicon |
+| `LogoUrl`/`FaviconUrl` is empty or not a remote URL | Backend logs a warning (if non-empty), checks for a local mounted file; returns `null` if neither is found |
 | Remote logo/favicon URL unreachable | Backend passes URL through to frontend; `<img onError>` hides the broken image and falls back to text title; favicon stays as browser default |
-| Local logo/favicon file not found | Backend `GET /api/branding/logo` or `/favicon` returns 404; same `<img onError>` / favicon fallback as above |
+| No local file at `/branding/logo.*` or `/branding/favicon.*` | `GET /api/branding/logo` or `/favicon` returns 404; same `<img onError>` / favicon fallback as above |
 | `PrimaryColor` is an invalid Mantine colour name | Backend logs a warning, returns `"teal"` in the API response; operator is informed via logs |
 
 ## 5. OpenAPI / codegen
