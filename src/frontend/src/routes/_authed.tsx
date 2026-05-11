@@ -27,6 +27,8 @@ import { Link, Outlet, createFileRoute, useLocation } from "@tanstack/react-rout
 import { useMe } from "@/api/hooks.ts";
 import { AuthProvider } from "@/auth/AuthProvider.tsx";
 import { useHasPermission } from "@/auth/permission.ts";
+import { useState } from "react";
+import { useBranding } from "@/theme/BrandingContext";
 
 export const Route = createFileRoute("/_authed")({
   component: AuthedLayout,
@@ -46,6 +48,7 @@ function AuthedLayout() {
   const canApproveUpdates = useHasPermission("update:approve");
   const canExecuteUpdates = useHasPermission("update:execute");
   const canSeeUpdates = canSubmitUpdates || canApproveUpdates || canExecuteUpdates;
+  const { appName, logoUrl } = useBranding();
 
   if (!me.data) {
     return null;
@@ -74,11 +77,17 @@ function AuthedLayout() {
                 visibleFrom="sm"
                 aria-label="Toggle sidebar"
               >
-                {sidebarCollapsed
-                  ? <IconLayoutSidebarLeftExpand size={18} />
-                  : <IconLayoutSidebarLeftCollapse size={18} />}
+                {sidebarCollapsed ? (
+                  <IconLayoutSidebarLeftExpand size={18} />
+                ) : (
+                  <IconLayoutSidebarLeftCollapse size={18} />
+                )}
               </ActionIcon>
-              <Title order={4}>SluiceBase</Title>
+              {logoUrl ? (
+                <BrandingLogo appName={appName} logoUrl={logoUrl} />
+              ) : (
+                <Title order={4}>{appName}</Title>
+              )}
             </Group>
             <Group gap="xs">
               <ActionIcon
@@ -183,5 +192,13 @@ function AuthedLayout() {
         </AppShell.Main>
       </AppShell>
     </AuthProvider>
+  );
+}
+
+function BrandingLogo({ appName, logoUrl }: { appName: string; logoUrl: string }) {
+  const [imgError, setImgError] = useState(false);
+  if (imgError) return <Title order={4}>{appName}</Title>;
+  return (
+    <img src={logoUrl} alt={appName} style={{ maxHeight: 24 }} onError={() => setImgError(true)} />
   );
 }
