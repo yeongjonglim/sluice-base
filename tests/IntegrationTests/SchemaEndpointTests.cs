@@ -6,6 +6,7 @@ using Npgsql;
 using SluiceBase.Api.Endpoints;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Schemas;
+using SluiceBase.Core.Servers;
 
 namespace IntegrationTests;
 
@@ -26,13 +27,13 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         return req;
     }
 
-    private async Task<(AuthenticatedSession session, string serverId)> AuthorizedSessionWithBlueServerAsync(
+    private async Task<(AuthenticatedSession session, DatabaseId databaseId)> AuthorizedSessionWithBlueServerAsync(
         CancellationToken ct)
     {
         var session = await LoginHelper.SignInAsync("alice", "dev", ct);
         var xsrf = await session.FetchXsrfTokenAsync(ct);
 
-        var users = await session.Client.GetFromJsonAsync<ListUsersResponse>("/api/admin/user", ct);
+        var users = await session.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
         var alice = users!.Users.Single(u => u.Email == "alice@example.com");
 
         using var grantServer = MutationRequest(HttpMethod.Post,
@@ -49,26 +50,37 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         var blueBuilder = new NpgsqlConnectionStringBuilder(blueConnStr!);
 
         var serverName = $"sch-{Guid.NewGuid():N}"[..24];
-        using var createReq = MutationRequest(HttpMethod.Post, "/api/server", xsrf,
-            new ServerEndpoints.CreateServerRequest(
-                serverName, "postgres",
-                blueBuilder.Host!, blueBuilder.Port, "appdb",
-                "reader_blue", "reader_blue"));
-        var createResp = await session.Client.SendAsync(createReq, ct);
-        createResp.EnsureSuccessStatusCode();
-        var server = await createResp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct);
+        using var sReq = MutationRequest(HttpMethod.Post, "/api/server", xsrf,
+            new ServerEndpoints.CreateServerRequest(serverName, "postgres", blueBuilder.Host!, blueBuilder.Port));
+        var sResp = await session.Client.SendAsync(sReq, ct);
+        sResp.EnsureSuccessStatusCode();
+        var server = (await sResp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct))!;
 
-        return (session, server!.Id.Value.ToString());
+        using var rcReq = MutationRequest(HttpMethod.Post,
+            $"/api/server/{server.Id}/credential", xsrf,
+            new CredentialEndpoints.AddCredentialRequest("Read-only role", "reader_blue", "reader_blue"));
+        var rcResp = await session.Client.SendAsync(rcReq, ct);
+        rcResp.EnsureSuccessStatusCode();
+        var readCred = (await rcResp.Content.ReadFromJsonAsync<CredentialEndpoints.CredentialResponse>(ct))!;
+
+        using var dbReq = MutationRequest(HttpMethod.Post,
+            $"/api/server/{server.Id}/database", xsrf,
+            new DatabaseEndpoints.AddDatabaseRequest("App DB", "appdb", readCred.Id));
+        var dbResp = await session.Client.SendAsync(dbReq, ct);
+        dbResp.EnsureSuccessStatusCode();
+        var database = (await dbResp.Content.ReadFromJsonAsync<DatabaseEndpoints.DatabaseResponse>(ct))!;
+
+        return (session, database.Id);
     }
 
     [Fact]
-    public async Task GetSchema_ReturnsTree_ForBlueServer()
+    public async Task GetSchema_ReturnsTree_ForBlueDatabase()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, serverId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        var (session, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
         using var _ = session;
 
-        var resp = await session.Client.GetAsync($"/api/schema/{serverId}", ct);
+        var resp = await session.Client.GetAsync($"/api/schema/{databaseId}", ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
 
         var tree = await resp.Content.ReadFromJsonAsync<SchemaTree>(ct);
@@ -103,14 +115,14 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
     }
 
     [Fact]
-    public async Task GetSchema_Returns404_ForUnknownServer()
+    public async Task GetSchema_Returns404_ForUnknownDatabase()
     {
         var ct = TestContext.Current.CancellationToken;
         var session = await LoginHelper.SignInAsync("alice", "dev", ct);
         using var _ = session;
         var xsrf = await session.FetchXsrfTokenAsync(ct);
 
-        var users = await session.Client.GetFromJsonAsync<ListUsersResponse>("/api/admin/user", ct);
+        var users = await session.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
         var alice = users!.Users.Single(u => u.Email == "alice@example.com");
         using var grant = MutationRequest(HttpMethod.Post,
             $"/api/admin/user/{alice.Id}/permission", xsrf,
@@ -120,4 +132,7 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         var resp = await session.Client.GetAsync($"/api/schema/{Guid.NewGuid()}", ct);
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
+
+    private sealed record ListUserBody(UserRow[] Users);
+    private sealed record UserRow(string Id, string Email);
 }
