@@ -2,7 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { useExecuteQuery } from "@/api/hooks";
+import { useExecuteQuery, useSchema } from "@/api/hooks";
 
 vi.mock("@/api/client", () => ({
   apiRequest: vi.fn(),
@@ -27,6 +27,21 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+describe("useSchema", () => {
+  it("fetches GET /api/schema/{databaseId} when databaseId is provided", async () => {
+    vi.mocked(apiRequest).mockResolvedValue({ tables: [{ name: "users", columns: [] }] });
+    const { result } = renderHook(() => useSchema("db-1"), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiRequest).toHaveBeenCalledWith("/api/schema/db-1");
+  });
+
+  it("does not fetch when databaseId is null", () => {
+    const { result } = renderHook(() => useSchema(null), { wrapper });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(apiRequest).not.toHaveBeenCalled();
+  });
+});
+
 describe("useExecuteQuery", () => {
   it("posts to /api/query with serverId and sql", async () => {
     vi.mocked(apiRequest).mockResolvedValue({
@@ -39,7 +54,7 @@ describe("useExecuteQuery", () => {
 
     const { result } = renderHook(() => useExecuteQuery(), { wrapper });
 
-    result.current.mutate({ serverId: "server-uuid", sql: "SELECT id, email FROM users LIMIT 1" });
+    result.current.mutate({ databaseId: "database-uuid", sql: "SELECT id, email FROM users LIMIT 1" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -47,7 +62,7 @@ describe("useExecuteQuery", () => {
       "/api/query",
       expect.objectContaining({
         method: "POST",
-        body: { serverId: "server-uuid", sql: "SELECT id, email FROM users LIMIT 1" },
+        body: { databaseId: "database-uuid", sql: "SELECT id, email FROM users LIMIT 1" },
       }),
     );
     expect(result.current.data?.columns).toEqual(["id", "email"]);
@@ -65,7 +80,7 @@ describe("useExecuteQuery", () => {
 
     const { result } = renderHook(() => useExecuteQuery(), { wrapper });
 
-    result.current.mutate({ serverId: "server-uuid", sql: "SELECT naem FROM users" });
+    result.current.mutate({ databaseId: "database-uuid", sql: "SELECT naem FROM users" });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 

@@ -116,7 +116,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/schema/{serverId}": {
+    "/api/schema/{databaseId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -228,7 +228,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/server/{id}/test": {
+    "/api/server/{serverId}/credential": {
         parameters: {
             query?: never;
             header?: never;
@@ -237,7 +237,71 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post: operations["TestConnection"];
+        post: operations["AddCredential"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/{serverId}/credential/{credentialId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateCredential"];
+        post?: never;
+        delete: operations["DeleteCredential"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/{serverId}/database": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AddDatabase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/{serverId}/database/{databaseId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["UpdateDatabase"];
+        post?: never;
+        delete: operations["DeleteDatabase"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/server/{serverId}/database/{databaseId}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["TestDatabaseConnection"];
         delete?: never;
         options?: never;
         head?: never;
@@ -344,6 +408,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AddCredentialRequest: {
+            label: string;
+            username: string;
+            password: string;
+        };
+        AddDatabaseRequest: {
+            displayName: string;
+            databaseName: string;
+            readCredentialId: components["schemas"]["CredentialId"];
+            /** Format: uuid */
+            writeCredentialId?: null | string;
+        };
         AntiforgeryTokenResponse: {
             headerName: null | string;
         };
@@ -365,11 +441,32 @@ export interface components {
             host: string;
             /** Format: int32 */
             port: number | string;
-            database: string;
-            readUsername: string;
-            readPassword: string;
-            writeUsername?: null | string;
-            writePassword?: null | string;
+        };
+        /** Format: uuid */
+        CredentialId: string;
+        CredentialResponse: {
+            id: components["schemas"]["CredentialId"];
+            label: string;
+            username: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** Format: uuid */
+        DatabaseId: string;
+        DatabaseResponse: {
+            id: components["schemas"]["DatabaseId"];
+            displayName: string;
+            databaseName: string;
+            readCredentialId: components["schemas"]["CredentialId"];
+            writeCredentialId: null | components["schemas"]["CredentialId"];
+            canWrite: boolean;
+            isDisabled: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         GrantPermissionRequest: {
             permission: string;
@@ -409,7 +506,7 @@ export interface components {
             permissions: string[];
         };
         QueryRequest: {
-            serverId: components["schemas"]["ServerId"];
+            databaseId: components["schemas"]["DatabaseId"];
             sql: string;
         };
         QueryResponse: {
@@ -440,16 +537,16 @@ export interface components {
             host: string;
             /** Format: int32 */
             port: number | string;
-            database: string;
-            isEnabled: boolean;
-            hasWriteCredential: boolean;
+            isDisabled: boolean;
+            credentials: components["schemas"]["CredentialResponse"][];
+            databases: components["schemas"]["DatabaseResponse"][];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
         };
         SubmitUpdateRequest: {
-            serverId: components["schemas"]["ServerId"];
+            databaseId: components["schemas"]["DatabaseId"];
             sqlText: string;
             reason: string;
         };
@@ -461,10 +558,22 @@ export interface components {
             read: components["schemas"]["ConnectivityResult"];
             write: null | components["schemas"]["ConnectivityResult"];
         };
+        UpdateCredentialRequest: {
+            label: string;
+            username: string;
+            password?: null | string;
+        };
+        UpdateDatabaseRequest: {
+            displayName: string;
+            databaseName: string;
+            readCredentialId: components["schemas"]["CredentialId"];
+            writeCredentialId: null | components["schemas"]["CredentialId"];
+            isDisabled: boolean;
+        };
         UpdateRequestDetailResponse: {
             id: components["schemas"]["UpdateRequestId"];
-            serverId: null | components["schemas"]["ServerId"];
-            serverName: null | string;
+            databaseId: null | components["schemas"]["DatabaseId"];
+            databaseDisplayName: null | string;
             submitterId: null | components["schemas"]["UserId"];
             submitterName: null | string;
             sqlText: string;
@@ -502,17 +611,13 @@ export interface components {
             host: string;
             /** Format: int32 */
             port: number | string;
-            database: string;
-            readUsername?: null | string;
-            readPassword?: null | string;
-            writeUsername?: null | string;
-            writePassword?: null | string;
-            /** @default true */
-            isEnabled: boolean;
+            kind: string;
+            /** @default false */
+            isDisabled: boolean;
         };
         UpdateSummaryItem: {
             id: components["schemas"]["UpdateRequestId"];
-            serverName: null | string;
+            databaseDisplayName: null | string;
             submitterName: null | string;
             reason: string;
             status: components["schemas"]["UpdateRequestStatus"];
@@ -681,7 +786,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                serverId: string;
+                databaseId: string;
             };
             cookie?: never;
         };
@@ -694,6 +799,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SchemaTree"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
                 };
             };
             /** @description Not Found */
@@ -875,15 +989,6 @@ export interface operations {
                     "application/json": components["schemas"]["ServerResponse"];
                 };
             };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
-                };
-            };
             /** @description Conflict */
             409: {
                 headers: {
@@ -917,17 +1022,15 @@ export interface operations {
                     "application/json": components["schemas"]["ServerResponse"];
                 };
             };
-            /** @description Bad Request */
-            400: {
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
-                };
+                content?: never;
             };
-            /** @description Not Found */
-            404: {
+            /** @description Conflict */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -962,12 +1065,212 @@ export interface operations {
             };
         };
     };
-    TestConnection: {
+    AddCredential: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                id: string;
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UpdateCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+                credentialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeleteCredential: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+                credentialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+        };
+    };
+    AddDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddDatabaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UpdateDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+                databaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateDatabaseRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeleteDatabase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+                databaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    TestDatabaseConnection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                serverId: string;
+                databaseId: string;
             };
             cookie?: never;
         };

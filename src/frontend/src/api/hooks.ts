@@ -139,7 +139,7 @@ export type ServerListResponse =
   paths["/api/server"]["get"]["responses"][200]["content"]["application/json"];
 export type ServerItem = ServerListResponse["servers"][0];
 export type TestConnectionResponse =
-  paths["/api/server/{id}/test"]["post"]["responses"][200]["content"]["application/json"];
+  paths["/api/server/{serverId}/database/{databaseId}/test"]["post"]["responses"][200]["content"]["application/json"];
 export type CreateServerRequest =
   paths["/api/server"]["post"]["requestBody"]["content"]["application/json"];
 
@@ -215,6 +215,109 @@ export function useDeleteServer() {
   });
 }
 
+// Add after useDeleteServer:
+
+export function useCreateCredential(serverId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: paths["/api/server/{serverId}/credential"]["post"]["requestBody"]["content"]["application/json"]) =>
+      apiRequest<typeof req, paths["/api/server/{serverId}/credential"]["post"]["responses"][201]["content"]["application/json"]>(
+        `/api/server/${serverId}/credential`,
+        { method: "POST", body: req },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["server"] }),
+  });
+}
+
+export function useUpdateCredential(serverId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ credentialId, ...req }: { credentialId: string } & paths["/api/server/{serverId}/credential/{credentialId}"]["put"]["requestBody"]["content"]["application/json"]) =>
+      apiRequest<typeof req, paths["/api/server/{serverId}/credential/{credentialId}"]["put"]["responses"][200]["content"]["application/json"]>(
+        `/api/server/${serverId}/credential/${credentialId}`,
+        { method: "PUT", body: req },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["server"] }),
+  });
+}
+
+export function useDeleteCredential(serverId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (credentialId: string) =>
+      apiRequest<void, void>(`/api/server/${serverId}/credential/${credentialId}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["server"] }),
+  });
+}
+
+export function useCreateDatabase(serverId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: paths["/api/server/{serverId}/database"]["post"]["requestBody"]["content"]["application/json"]) =>
+      apiRequest<typeof req, paths["/api/server/{serverId}/database"]["post"]["responses"][201]["content"]["application/json"]>(
+        `/api/server/${serverId}/database`,
+        { method: "POST", body: req },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["server"] }),
+  });
+}
+
+export function useUpdateDatabase(serverId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ databaseId, ...req }: { databaseId: string } & paths["/api/server/{serverId}/database/{databaseId}"]["put"]["requestBody"]["content"]["application/json"]) =>
+      apiRequest<typeof req, paths["/api/server/{serverId}/database/{databaseId}"]["put"]["responses"][200]["content"]["application/json"]>(
+        `/api/server/${serverId}/database/${databaseId}`,
+        { method: "PUT", body: req },
+      ),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["server"] }),
+  });
+}
+
+export function useDeleteDatabase(serverId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (databaseId: string) =>
+      apiRequest<void, void>(`/api/server/${serverId}/database/${databaseId}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["server"] }),
+  });
+}
+
+export function useTestDatabaseConnection(serverId: string) {
+  return useMutation({
+    mutationFn: (databaseId: string) =>
+      apiRequest<void, paths["/api/server/{serverId}/database/{databaseId}/test"]["post"]["responses"][200]["content"]["application/json"]>(
+        `/api/server/${serverId}/database/${databaseId}/test`,
+        { method: "POST" },
+      ),
+  });
+}
+
+// hooks.ts — update useServers return type annotation (auto-inferred from new schema.ts)
+// useSchema: change parameter name and path
+export function useSchema(databaseId: string | null) {
+  return useQuery({
+    queryKey: ["schema", databaseId] as const,
+    enabled: databaseId !== null,
+    queryFn: () =>
+      apiRequest<void, paths["/api/schema/{databaseId}"]["get"]["responses"][200]["content"]["application/json"]>(
+        `/api/schema/${databaseId}`,
+      ),
+  });
+}
+
+// useExecuteQuery: change body field name
+export function useExecuteQuery() {
+  return useMutation({
+    mutationFn: ({ databaseId, sql }: { databaseId: string; sql: string }) =>
+      apiRequest<
+        paths["/api/query"]["post"]["requestBody"]["content"]["application/json"],
+        paths["/api/query"]["post"]["responses"][200]["content"]["application/json"]
+      >("/api/query", { method: "POST", body: { databaseId, sql } }),
+  });
+}
+
+
 export function useTestConnection() {
   return useMutation({
     mutationFn: (id: string) =>
@@ -222,43 +325,12 @@ export function useTestConnection() {
   });
 }
 
-export type SchemaResponse =
-  paths["/api/schema/{serverId}"]["get"]["responses"][200]["content"]["application/json"];
-
-export function useSchema(serverId: string | null) {
-  return useQuery({
-    queryKey: ["schema", serverId] as const,
-    queryFn: () => apiRequest<void, SchemaResponse>(`/api/schema/${serverId}`),
-    enabled: serverId !== null,
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
-export type ExecuteQueryRequest =
-  paths["/api/query"]["post"]["requestBody"]["content"]["application/json"];
-export type ExecuteQueryResponse =
-  paths["/api/query"]["post"]["responses"][200]["content"]["application/json"];
-
-export function useExecuteQuery() {
-  return useMutation({
-    mutationFn: (body: ExecuteQueryRequest) =>
-      apiRequest<ExecuteQueryRequest, ExecuteQueryResponse>("/api/query", {
-        method: "POST",
-        body,
-      }),
-  });
-}
-
 // ── Update requests ───────────────────────────────────────────────────────
 
-export type UpdateSummaryItem =
-  paths["/api/update"]["get"]["responses"][200]["content"]["application/json"]["requests"][0];
 export type UpdateRequestListResponse =
   paths["/api/update"]["get"]["responses"][200]["content"]["application/json"];
 export type UpdateRequestDetail =
   paths["/api/update/{id}"]["get"]["responses"][200]["content"]["application/json"];
-export type SubmitUpdateRequest =
-  paths["/api/update"]["post"]["requestBody"]["content"]["application/json"];
 
 export function useUpdateRequests() {
   return useQuery({
@@ -274,27 +346,19 @@ export function useUpdateRequest(id: string) {
   });
 }
 
+// useSubmitUpdate: change body field name
 export function useSubmitUpdate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: SubmitUpdateRequest) =>
-      apiRequest<SubmitUpdateRequest, UpdateRequestDetail>("/api/update", {
-        method: "POST",
-        body,
-      }),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["update"] });
-      notifications.show({ title: "Request submitted", message: "", color: "teal" });
-    },
-    onError: (error) => {
-      notifications.show({
-        title: "Submit failed",
-        message: error instanceof ApiError ? formatApiError(error) : error.message,
-        color: "red",
-      });
-    },
+    mutationFn: ({ databaseId, sqlText, reason }: { databaseId: string; sqlText: string; reason: string }) =>
+      apiRequest<
+        paths["/api/update"]["post"]["requestBody"]["content"]["application/json"],
+        paths["/api/update"]["post"]["responses"][201]["content"]["application/json"]
+      >("/api/update", { method: "POST", body: { databaseId, sqlText, reason } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["update"] }),
   });
 }
+
 
 export function useApproveUpdate() {
   const qc = useQueryClient();
