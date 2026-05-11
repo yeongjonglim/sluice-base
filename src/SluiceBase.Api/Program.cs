@@ -45,12 +45,17 @@ builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment()
-    && builder.Configuration.GetValue("Migrations:AutoApply", false))
+if (builder.Configuration.GetValue("Migrations:AutoApply", true))
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+}
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseDefaultFiles();
+    app.UseStaticFiles();
 }
 
 app.UseAuthentication();
@@ -60,5 +65,10 @@ app.UseAntiforgery();
 app.MapOpenApi();
 app.MapDefaultEndpoints();
 app.MapAllEndpoints();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.MapFallbackToFile("index.html");
+}
 
 app.Run();
