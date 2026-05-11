@@ -12,6 +12,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import {
   IconArrowsExchange,
+  IconHistory,
   IconLogout,
   IconMoon,
   IconServer,
@@ -111,10 +112,25 @@ function AuthedLayout() {
             <NavLink
               label="Query"
               leftSection={<IconTerminal2 size={16} />}
-              component={Link}
-              to="/query"
-              active={location.pathname === "/query"}
-            />
+              active={location.pathname.startsWith("/query")}
+              defaultOpened={location.pathname.startsWith("/query")}
+            >
+              <NavLink
+                label="Editor"
+                component={Link}
+                to="/query"
+                active={location.pathname === "/query"}
+                pl="xl"
+              />
+              <NavLink
+                label="History"
+                leftSection={<IconHistory size={16} />}
+                component={Link}
+                to="/query/history"
+                active={location.pathname === "/query/history"}
+                pl="xl"
+              />
+            </NavLink>
           )}
           {canSeeUpdates && (
             <NavLink
