@@ -83,11 +83,13 @@ function AuthedLayout() {
                   <IconLayoutSidebarLeftCollapse size={18} />
                 )}
               </ActionIcon>
-              {logoUrl ? (
-                <BrandingLogo appName={appName} logoUrl={logoUrl} />
-              ) : (
-                <Title order={4}>{appName}</Title>
-              )}
+              <Link to="/" style={{ textDecoration: "none", color: "inherit" }}>
+                {logoUrl ? (
+                  <BrandingLogo appName={appName} logoUrl={logoUrl} />
+                ) : (
+                  <Title order={4}>{appName}</Title>
+                )}
+              </Link>
             </Group>
             <Group gap="xs">
               <ActionIcon

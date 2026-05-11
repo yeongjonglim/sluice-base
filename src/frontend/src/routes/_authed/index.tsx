@@ -14,10 +14,7 @@ function HomePage() {
   return (
     <Stack gap="xs">
       <Title order={2}>Welcome, {displayName}</Title>
-      <Text c="dimmed">
-        SluiceBase Foundations is up. Server registry, schema browser, query workspace, and approval
-        workflow ship in later sub-projects.
-      </Text>
+      <Text c="dimmed">Your secure gateway for database queries and controlled updates.</Text>
     </Stack>
   );
 }
