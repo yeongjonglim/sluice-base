@@ -26,29 +26,29 @@ internal static class BrandingEndpoints
                 })
             .WithName("GetBranding");
 
-        brandingGroup.MapGet("/api/branding/logo",
-                () => ServeLocalAsset("/branding/logo"))
+        brandingGroup.MapGet("/logo",
+                Results<FileStreamHttpResult, NotFound> () => ServeLocalAsset("/branding/logo"))
             .WithName("GetBrandingLogo")
             .AllowAnonymous();
 
-        brandingGroup.MapGet("/api/branding/favicon",
-                () => ServeLocalAsset("/branding/favicon"))
+        brandingGroup.MapGet("/favicon",
+                Results<FileStreamHttpResult, NotFound> () => ServeLocalAsset("/branding/favicon"))
             .WithName("GetBrandingFavicon")
             .AllowAnonymous();
     }
 
-    private static IResult ServeLocalAsset(string basePath)
+    private static Results<FileStreamHttpResult, NotFound> ServeLocalAsset(string basePath)
     {
         foreach (var ext in SupportedExtensions)
         {
             var path = basePath + ext;
             if (File.Exists(path))
             {
-                return Results.Stream(File.OpenRead(path), GetContentType(ext));
+                return TypedResults.File(File.OpenRead(path), GetContentType(ext));
             }
         }
 
-        return Results.NotFound();
+        return TypedResults.NotFound();
     }
 
     private static string GetContentType(string ext) => ext switch
