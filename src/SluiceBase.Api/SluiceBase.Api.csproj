@@ -2,7 +2,8 @@
 
   <PropertyGroup>
     <OpenApiDocumentsDirectory>.</OpenApiDocumentsDirectory>
-    <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions> 
+    <OpenApiGenerateDocumentsOptions>--file-name openapi</OpenApiGenerateDocumentsOptions>
+    <OpenApiGenerateDocuments Condition="'$(Configuration)' == 'Release'">false</OpenApiGenerateDocuments>
   </PropertyGroup>
 
   <ItemGroup>
