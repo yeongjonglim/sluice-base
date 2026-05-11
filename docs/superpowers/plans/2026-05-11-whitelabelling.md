@@ -507,9 +507,11 @@ git commit -m "chore: regenerate OpenAPI schema with branding endpoints"
 Create `src/frontend/src/theme/__tests__/BrandingContext.test.tsx`:
 
 ```tsx
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { cleanup, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 import { BrandingContext, useBranding } from "@/theme/BrandingContext";
+
+afterEach(cleanup);
 
 function TestConsumer() {
   const branding = useBranding();
