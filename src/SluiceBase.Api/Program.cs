@@ -7,6 +7,7 @@ using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Extensions;
 using SluiceBase.Api.Servers;
 using SluiceBase.Api.Targets;
+using SluiceBase.Core.Branding;
 using SluiceBase.Core.Targets;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,6 +21,10 @@ builder.Services.AddDataProtection()
     .PersistKeysToDbContext<AppDbContext>();
 
 builder.AddSluiceBaseAuth();
+
+builder.Services.Configure<BrandingOptions>(
+    builder.Configuration.GetSection(BrandingOptions.SectionName));
+builder.Services.AddHttpClient("branding");
 
 builder.Services.AddAntiforgery(o =>
 {
