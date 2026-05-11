@@ -161,16 +161,16 @@ function QueryHistoryPage() {
 
       {history.data && displayedItems.length > 0 && (
         <ScrollArea type="auto">
-          <Table striped withTableBorder highlightOnHover fz="sm">
+          <Table striped withTableBorder highlightOnHover fz="sm" style={{ tableLayout: "fixed", width: "100%" }}>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Status</Table.Th>
-                <Table.Th>Database</Table.Th>
-                {canAudit && <Table.Th>User</Table.Th>}
+                <Table.Th style={{ width: 80 }}>Status</Table.Th>
+                <Table.Th style={{ width: 170 }}>Database</Table.Th>
+                {canAudit && <Table.Th style={{ width: 120 }}>User</Table.Th>}
                 <Table.Th>SQL</Table.Th>
-                <Table.Th>Executed At</Table.Th>
-                <Table.Th>Duration</Table.Th>
-                <Table.Th>Rows</Table.Th>
+                <Table.Th style={{ width: 155 }}>Executed At</Table.Th>
+                <Table.Th style={{ width: 90 }}>Duration</Table.Th>
+                <Table.Th style={{ width: 60 }}>Rows</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
@@ -205,9 +205,9 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
       </Table.Td>
       <Table.Td>{item.databaseDisplayName ?? "—"}</Table.Td>
       {canAudit && <Table.Td>{item.userName ?? "—"}</Table.Td>}
-      <Table.Td style={{ minWidth: 300, maxWidth: 600 }}>
+      <Table.Td>
         <Group gap="xs" align="flex-start" wrap="nowrap">
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
             <CodeMirror
               value={item.queryText}
               readOnly
@@ -215,6 +215,7 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
               extensions={[sql()]}
               theme={colorScheme === "dark" ? githubDark : githubLight}
               height="auto"
+              maxHeight="120px"
               basicSetup={{ lineNumbers: false, foldGutter: false }}
             />
           </div>

@@ -5,6 +5,7 @@ import {
   Code,
   Flex,
   Group,
+  Kbd,
   NavLink,
   ScrollArea,
   Select,
@@ -25,7 +26,7 @@ import {
   IconTable,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
@@ -106,31 +107,47 @@ function QueryPage() {
     [],
   );
 
+  const handleRun = useCallback(() => {
+    if (selectedDatabaseId && editorContent.trim()) {
+      executeQuery.mutate({ databaseId: selectedDatabaseId, sql: editorContent });
+    }
+  }, [selectedDatabaseId, editorContent, executeQuery]);
+
   const runKeymap = Prec.highest(
     keymap.of([
       {
         key: "Ctrl-Enter",
         mac: "Cmd-Enter",
-        run: () => {
-          if (selectedDatabaseId && editorContent.trim()) {
-            executeQuery.mutate({ databaseId: selectedDatabaseId, sql: editorContent });
-          }
-          return true;
-        },
+        run: () => { handleRun(); return true; },
+      },
+      {
+        key: "F5",
+        run: () => { handleRun(); return true; },
       },
     ]),
   );
 
-  const handleRun = () => {
-    if (selectedDatabaseId && editorContent.trim()) {
-      executeQuery.mutate({ databaseId: selectedDatabaseId, sql: editorContent });
-    }
-  };
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "F5") {
+        e.preventDefault();
+        handleRun();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [handleRun]);
 
   return (
-    <Flex h="calc(100vh - 90px)" style={{ overflow: "hidden" }}>
+    <Flex
+      style={{
+        margin: "calc(-1 * var(--mantine-spacing-sm))",
+        height: "calc(100vh - 44px)",
+        overflow: "hidden",
+      }}
+    >
       <Box
-        w={280}
+        w={240}
         style={{
           borderRight: "1px solid var(--mantine-color-default-border)",
           overflow: "auto",
@@ -150,8 +167,14 @@ function QueryPage() {
         </Stack>
       </Box>
 
-      <Box flex={1} style={{ overflowY: "auto" }}>
-        <Stack gap={0} p="md">
+      <Flex direction="column" flex={1} style={{ overflow: "hidden", minWidth: 0 }}>
+        <Box
+          p="xs"
+          style={{
+            borderBottom: "1px solid var(--mantine-color-default-border)",
+            flexShrink: 0,
+          }}
+        >
           <Box
             style={{
               border: "1px solid var(--mantine-color-default-border)",
@@ -165,7 +188,7 @@ function QueryPage() {
               onChange={setEditorContent}
               extensions={[sql(), runKeymap]}
               theme={computedColorScheme === "dark" ? githubDark : githubLight}
-              height="300px"
+              height="200px"
               basicSetup={{ lineNumbers: true, foldGutter: false }}
             />
           </Box>
@@ -173,6 +196,7 @@ function QueryPage() {
           <Group mt="xs" gap="xs">
             <Button
               leftSection={<IconPlayerPlay size={14} />}
+              rightSection={<Kbd size="xs">F5</Kbd>}
               size="sm"
               onClick={handleRun}
               loading={executeQuery.isPending}
@@ -186,14 +210,16 @@ function QueryPage() {
               </Text>
             )}
           </Group>
+        </Box>
 
+        <Box style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
           <QueryResults
             result={executeQuery.data ?? null}
             isPending={executeQuery.isPending}
             isError={executeQuery.isError}
           />
-        </Stack>
-      </Box>
+        </Box>
+      </Flex>
     </Flex>
   );
 }
@@ -209,9 +235,9 @@ function QueryResults({
 }) {
   if (isPending) {
     return (
-      <Stack mt="md" gap="xs">
+      <Stack p="xs" gap="xs">
         {[1, 2, 3].map((i) => (
-          <Skeleton key={i} h={28} radius="sm" />
+          <Skeleton key={i} h={24} radius="sm" />
         ))}
       </Stack>
     );
@@ -219,7 +245,7 @@ function QueryResults({
 
   if (isError) {
     return (
-      <Alert color="red" title="Request failed" mt="md">
+      <Alert color="red" title="Request failed" m="xs">
         Could not reach the server. Check your connection and try again.
       </Alert>
     );
@@ -227,7 +253,7 @@ function QueryResults({
 
   if (!result) {
     return (
-      <Text mt="md" size="sm" c="dimmed">
+      <Text p="xs" size="sm" c="dimmed">
         Run a query to see results.
       </Text>
     );
@@ -235,7 +261,7 @@ function QueryResults({
 
   if (result.error) {
     return (
-      <Stack mt="md" gap="xs">
+      <Stack p="xs" gap="xs">
         <Text size="xs" c="dimmed">
           Error · {result.durationMs} ms
         </Text>
@@ -250,24 +276,33 @@ function QueryResults({
   const rows = result.rows ?? [];
 
   return (
-    <Stack mt="md" gap="xs">
-      <Group justify="space-between" align="center">
+    <Flex direction="column" style={{ height: "100%" }}>
+      <Group
+        justify="space-between"
+        align="center"
+        px="xs"
+        style={{
+          flexShrink: 0,
+          height: 32,
+          borderBottom: "1px solid var(--mantine-color-default-border)",
+        }}
+      >
         <Text size="xs" c="dimmed">
           {result.rowCount} {result.rowCount === 1 ? "row" : "rows"} · {result.durationMs} ms
         </Text>
         <Button
           size="xs"
           variant="subtle"
-          leftSection={<IconDownload size={14} />}
+          leftSection={<IconDownload size={12} />}
           onClick={() =>
             exportToCsv(columns, rows, `query-results-${Date.now()}.csv`)
           }
         >
-          Export CSV
+          CSV
         </Button>
       </Group>
-      <ScrollArea type="auto">
-        <Table striped withTableBorder withColumnBorders fz="xs" style={{ whiteSpace: "nowrap" }}>
+      <ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto">
+        <Table stickyHeader striped withTableBorder withColumnBorders fz="xs" style={{ whiteSpace: "nowrap" }}>
           <Table.Thead>
             <Table.Tr>
               {columns.map((col) => (
@@ -286,7 +321,7 @@ function QueryResults({
           </Table.Tbody>
         </Table>
       </ScrollArea>
-    </Stack>
+    </Flex>
   );
 }
 

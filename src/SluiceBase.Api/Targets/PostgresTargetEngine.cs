@@ -1,3 +1,4 @@
+using System.Globalization;
 using Npgsql;
 using SluiceBase.Core.Queries;
 using SluiceBase.Core.Schemas;
@@ -93,7 +94,7 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                 var row = new string?[reader.FieldCount];
                 for (var i = 0; i < reader.FieldCount; i++)
                 {
-                    row[i] = reader.IsDBNull(i) ? null : reader.GetValue(i).ToString();
+                    row[i] = reader.IsDBNull(i) ? null : FormatValue(reader.GetValue(i));
                 }
 
                 rows.Add(row);
@@ -103,6 +104,15 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         await tx.CommitAsync(ct);
         return new QueryData(columns, [.. rows]);
     }
+
+    private static string FormatValue(object value) => value switch
+    {
+        DateTime dt => dt.ToString("O"),
+        DateTimeOffset dto => dto.ToUniversalTime().ToString("O"),
+        DateOnly d => d.ToString("O", DateTimeFormatInfo.InvariantInfo),
+        TimeOnly t => t.ToString("O", DateTimeFormatInfo.InvariantInfo),
+        _ => value.ToString()!
+    };
 
     public async Task<int> ExecuteUpdateAsync(string connectionString, string sql, CancellationToken ct)
     {

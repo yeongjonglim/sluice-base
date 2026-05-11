@@ -13,6 +13,8 @@ import { useDisclosure } from "@mantine/hooks";
 import {
   IconArrowsExchange,
   IconHistory,
+  IconLayoutSidebarLeftCollapse,
+  IconLayoutSidebarLeftExpand,
   IconLogout,
   IconMoon,
   IconServer,
@@ -34,6 +36,7 @@ function AuthedLayout() {
   const me = useMe();
   const [opened, { toggle }] = useDisclosure();
   const [openedQuery, { toggle: toggleQuery }] = useDisclosure(true);
+  const [sidebarCollapsed, { toggle: toggleSidebar }] = useDisclosure(false);
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const location = useLocation();
   const isAdmin = useHasPermission("permission:manage");
@@ -53,19 +56,29 @@ function AuthedLayout() {
   return (
     <AuthProvider user={me.data}>
       <AppShell
-        header={{ height: 56 }}
+        header={{ height: 44 }}
         navbar={{
-          width: 240,
+          width: 200,
           breakpoint: "sm",
-          collapsed: { mobile: !opened },
+          collapsed: { desktop: sidebarCollapsed, mobile: !opened },
         }}
-        padding="md"
+        padding="sm"
       >
         <AppShell.Header>
-          <Group h="100%" px="md" justify="space-between">
-            <Group gap="sm">
+          <Group h="100%" px="sm" justify="space-between">
+            <Group gap="xs">
               <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
-              <Title order={3}>SluiceBase</Title>
+              <ActionIcon
+                variant="subtle"
+                onClick={toggleSidebar}
+                visibleFrom="sm"
+                aria-label="Toggle sidebar"
+              >
+                {sidebarCollapsed
+                  ? <IconLayoutSidebarLeftExpand size={18} />
+                  : <IconLayoutSidebarLeftCollapse size={18} />}
+              </ActionIcon>
+              <Title order={4}>SluiceBase</Title>
             </Group>
             <Group gap="xs">
               <ActionIcon
@@ -94,7 +107,7 @@ function AuthedLayout() {
           </Group>
         </AppShell.Header>
 
-        <AppShell.Navbar p="sm">
+        <AppShell.Navbar p="xs">
           {/* <NavLink*/}
           {/*  label="Home"*/}
           {/*  leftSection={<IconHome size={16} />}*/}
@@ -124,7 +137,7 @@ function AuthedLayout() {
                 to="/query"
                 activeOptions={{ exact: true }}
                 active={location.pathname === "/query"}
-                pl="xl"
+                pl="md"
               />
               <NavLink
                 label="History"
@@ -132,7 +145,7 @@ function AuthedLayout() {
                 component={Link}
                 to="/query/history"
                 active={location.pathname === "/query/history"}
-                pl="xl"
+                pl="md"
               />
             </NavLink>
           )}
