@@ -24,7 +24,6 @@ builder.AddSluiceBaseAuth();
 
 builder.Services.Configure<BrandingOptions>(
     builder.Configuration.GetSection(BrandingOptions.SectionName));
-builder.Services.AddHttpClient("branding");
 
 builder.Services.AddAntiforgery(o =>
 {
@@ -63,5 +62,3 @@ app.MapDefaultEndpoints();
 app.MapAllEndpoints();
 
 app.Run();
-
-public partial class Program;

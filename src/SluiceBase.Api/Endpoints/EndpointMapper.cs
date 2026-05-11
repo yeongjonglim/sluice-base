@@ -13,6 +13,7 @@ internal static class EndpointMapper
         SchemaEndpoints.Map(app);
         QueryEndpoints.Map(app);
         UpdateEndpoints.Map(app);
+        BrandingEndpoints.Map(app);
 
         if (app.Environment.IsDevelopment())
         {
