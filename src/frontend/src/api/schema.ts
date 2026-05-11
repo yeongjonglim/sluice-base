@@ -148,6 +148,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/query/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetQueryHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/user": {
         parameters: {
             query?: never;
@@ -505,6 +521,28 @@ export interface components {
         PermissionCatalogResponse: {
             permissions: string[];
         };
+        QueryHistoryItem: {
+            id: components["schemas"]["QueryLogId"];
+            databaseId: null | components["schemas"]["DatabaseId"];
+            databaseDisplayName: null | string;
+            queryText: string;
+            status: components["schemas"]["QueryLogStatus"];
+            /** Format: date-time */
+            executedAt: string;
+            /** Format: int32 */
+            durationMs: null | number | string;
+            /** Format: int32 */
+            rowCount: null | number | string;
+            error: null | string;
+            userId: null | components["schemas"]["UserId"];
+            userName: null | string;
+        };
+        QueryHistoryResponse: {
+            items: components["schemas"]["QueryHistoryItem"][];
+        };
+        QueryLogId: unknown;
+        /** @enum {string} */
+        QueryLogStatus: "Unknown" | "Success" | "Error" | "Timeout";
         QueryRequest: {
             databaseId: components["schemas"]["DatabaseId"];
             sql: string;
@@ -856,6 +894,40 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    GetQueryHistory: {
+        parameters: {
+            query?: {
+                from?: string;
+                to?: string;
+                databaseId?: string;
+                status?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryHistoryResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
             };
         };
     };
