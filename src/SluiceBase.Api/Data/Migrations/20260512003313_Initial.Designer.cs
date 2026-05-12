@@ -12,7 +12,7 @@ using SluiceBase.Api.Data;
 namespace SluiceBase.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260510170053_Initial")]
+    [Migration("20260512003313_Initial")]
     partial class Initial
     {
         /// <inheritdoc />
@@ -406,11 +406,63 @@ namespace SluiceBase.Api.Data.Migrations
                     b.ToTable("update_request", (string)null);
                 });
 
+            modelBuilder.Entity("SluiceBase.Core.Users.ExternalLogin", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Email")
+                        .HasColumnType("text")
+                        .HasColumnName("email");
+
+                    b.Property<string>("Issuer")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("issuer");
+
+                    b.Property<DateTimeOffset?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_login_at");
+
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("subject");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_external_login");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_external_login_user_id");
+
+                    b.HasIndex("Issuer", "Subject")
+                        .HasDatabaseName("ix_external_login_issuer_subject");
+
+                    b.ToTable("external_login", (string)null);
+                });
+
             modelBuilder.Entity("SluiceBase.Core.Users.User", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
                         .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -418,27 +470,13 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasColumnType("character varying(320)")
                         .HasColumnName("email");
 
-                    b.Property<DateTimeOffset?>("LastLoginAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("last_login_at");
-
                     b.Property<string>("Name")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("name");
 
-                    b.Property<string>("Sub")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)")
-                        .HasColumnName("sub");
-
                     b.HasKey("Id")
                         .HasName("pk_user");
-
-                    b.HasIndex("Sub")
-                        .IsUnique()
-                        .HasDatabaseName("ix_user_sub");
 
                     b.ToTable("user", (string)null);
                 });
@@ -550,6 +588,49 @@ namespace SluiceBase.Api.Data.Migrations
                     b.Navigation("Reviewer");
 
                     b.Navigation("Submitter");
+                });
+
+            modelBuilder.Entity("SluiceBase.Core.Users.ExternalLogin", b =>
+                {
+                    b.HasOne("SluiceBase.Core.Users.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_external_login_user_user_id");
+
+                    b.OwnsMany("SluiceBase.Core.Users.ClaimRecord", "Claims", b1 =>
+                        {
+                            b1.Property<Guid>("ExternalLoginId");
+
+                            b1.Property<int>("__synthesizedOrdinal")
+                                .ValueGeneratedOnAdd();
+
+                            b1.Property<string>("Type")
+                                .IsRequired();
+
+                            b1.Property<string>("Value")
+                                .IsRequired();
+
+                            b1.Property<string>("ValueType")
+                                .IsRequired();
+
+                            b1.HasKey("ExternalLoginId", "__synthesizedOrdinal");
+
+                            b1.ToTable("external_login");
+
+                            b1
+                                .ToJson("claims")
+                                .HasColumnType("jsonb");
+
+                            b1.WithOwner()
+                                .HasForeignKey("ExternalLoginId")
+                                .HasConstraintName("fk_external_login_external_login_external_login_id");
+                        });
+
+                    b.Navigation("Claims");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("SluiceBase.Core.Servers.Server", b =>

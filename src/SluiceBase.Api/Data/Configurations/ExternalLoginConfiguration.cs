@@ -23,6 +23,12 @@ public class ExternalLoginConfiguration : IEntityTypeConfiguration<ExternalLogin
             x =>
             {
                 x.ToJson();
+                x.Property(c => c.Type)
+                    .HasJsonPropertyName("type");
+                x.Property(c => c.Value)
+                    .HasJsonPropertyName("value");
+                x.Property(c => c.ValueType)
+                    .HasJsonPropertyName("valueType");
             });
 
         builder.HasOne(x => x.User)

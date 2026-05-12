@@ -8,6 +8,7 @@ using Vogen;
 namespace SluiceBase.Api.Data.Converters;
 
 [EfCoreConverter<UserId>]
+[EfCoreConverter<ExternalLoginId>]
 [EfCoreConverter<UserPermissionId>]
 [EfCoreConverter<ServerId>]
 [EfCoreConverter<DatabaseId>]
