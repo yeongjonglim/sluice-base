@@ -161,6 +161,18 @@ public class QueryEndpointTests(SluiceBaseStackFactory factory)
     public async Task PostQuery_Returns403_ForBob()
     {
         var ct = TestContext.Current.CancellationToken;
+        using var initialBobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await initialBobSession.Client.GetAsync("/api/me", ct);
+
+        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var adminXsrf = await adminSession.FetchXsrfTokenAsync(ct);
+        await PermissionTestHelper.RevokePermissionAsync(
+            adminSession,
+            "bob@example.com",
+            Permissions.QueryExecute,
+            adminXsrf,
+            ct);
+
         using var session = await LoginHelper.SignInAsync("bob", "dev", ct);
         var xsrf = await session.FetchXsrfTokenAsync(ct);
         using var req = MutationRequest(HttpMethod.Post,

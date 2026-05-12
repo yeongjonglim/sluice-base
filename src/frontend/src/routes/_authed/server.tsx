@@ -129,7 +129,7 @@ function ServerRow({ server, onEdit }: { server: ServerItem; onEdit: () => void 
   const [editingCred, setEditingCred] = useState<CredentialItem | null>(null);
   const [dbModalOpen, { open: openDbModal, close: closeDbModal }] = useDisclosure(false);
   const [editingDb, setEditingDb] = useState<DatabaseItem | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, TestConnectionResponse>>({});
+  const [testResults, setTestResults] = useState<Partial<Record<string, TestConnectionResponse>>>({});
 
   function handleAddCred() {
     setEditingCred(null);
@@ -597,7 +597,7 @@ function DatabaseForm({
   onSuccess,
 }: {
   database: DatabaseItem | null;
-  credentials: CredentialItem[];
+  credentials: Array<CredentialItem>;
   createMutation: ReturnType<typeof useCreateDatabase>;
   updateMutation: ReturnType<typeof useUpdateDatabase>;
   onSuccess: () => void;

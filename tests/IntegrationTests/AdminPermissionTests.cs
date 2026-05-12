@@ -86,6 +86,12 @@ public class AdminPermissionTests(SluiceBaseStackFactory factory)
         // Alice grants bob query:execute
         using var aliceSession = await LoginHelper.SignInAsync("alice", "dev", ct);
         var xsrf = await GetXsrfAsync(aliceSession, ct);
+        await PermissionTestHelper.RevokePermissionAsync(
+            aliceSession,
+            "bob@example.com",
+            Permissions.QueryExecute,
+            xsrf,
+            ct);
 
         var users = await aliceSession.Client.GetFromJsonAsync<ListBody>(
             "/api/admin/user", ct);
