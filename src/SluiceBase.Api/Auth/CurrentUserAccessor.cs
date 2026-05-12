@@ -1,4 +1,3 @@
-using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Data;
 using SluiceBase.Core.Users;
@@ -26,16 +25,17 @@ internal sealed class CurrentUserAccessor(
 
         _loaded = true;
 
-        var sub = http.HttpContext?.User.FindFirstValue(AppClaims.Sub);
-        if (string.IsNullOrEmpty(sub))
+        if (http.HttpContext?.User is null)
         {
             return null;
         }
 
+        var userId = http.HttpContext.User.GetInternalUserId();
+
         _cached = await db.Users
             .Include(u => u.Permissions)
             .AsNoTracking()
-            .SingleOrDefaultAsync(u => u.Sub == sub, ct);
+            .SingleOrDefaultAsync(u => u.Id == userId, ct);
         return _cached;
     }
 }

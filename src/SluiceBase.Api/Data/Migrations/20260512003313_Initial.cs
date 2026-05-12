@@ -50,10 +50,9 @@ namespace SluiceBase.Api.Data.Migrations
                 columns: table => new
                 {
                     id = table.Column<Guid>(type: "uuid", nullable: false),
-                    sub = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     email = table.Column<string>(type: "character varying(320)", maxLength: 320, nullable: false),
                     name = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
-                    last_login_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -82,6 +81,31 @@ namespace SluiceBase.Api.Data.Migrations
                         principalTable: "server",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "external_login",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    user_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    issuer = table.Column<string>(type: "text", nullable: false),
+                    subject = table.Column<string>(type: "text", nullable: false),
+                    email = table.Column<string>(type: "text", nullable: true),
+                    name = table.Column<string>(type: "text", nullable: true),
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
+                    last_login_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    claims = table.Column<string>(type: "jsonb", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_external_login", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_external_login_user_user_id",
+                        column: x => x.user_id,
+                        principalTable: "user",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -240,6 +264,16 @@ namespace SluiceBase.Api.Data.Migrations
                 });
 
             migrationBuilder.CreateIndex(
+                name: "ix_external_login_issuer_subject",
+                table: "external_login",
+                columns: new[] { "issuer", "subject" });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_external_login_user_id",
+                table: "external_login",
+                column: "user_id");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_query_log_database_id",
                 table: "query_log",
                 column: "database_id");
@@ -302,12 +336,6 @@ namespace SluiceBase.Api.Data.Migrations
                 column: "submitter_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_user_sub",
-                table: "user",
-                column: "sub",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "ix_user_permission_granted_by_id",
                 table: "user_permission",
                 column: "granted_by_id");
@@ -324,6 +352,9 @@ namespace SluiceBase.Api.Data.Migrations
         {
             migrationBuilder.DropTable(
                 name: "data_protection_key");
+
+            migrationBuilder.DropTable(
+                name: "external_login");
 
             migrationBuilder.DropTable(
                 name: "query_log");
