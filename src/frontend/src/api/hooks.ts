@@ -484,7 +484,7 @@ export function useQueryHistory(filters: QueryHistoryFilters) {
       if (filters.databaseId) params.set("databaseId", filters.databaseId);
       if (filters.status) params.set("status", filters.status);
       const qs = params.toString();
-      return apiRequest<void, { items: QueryHistoryItem[] }>(
+      return apiRequest<void, { items: Array<QueryHistoryItem> }>(
         qs ? `/api/query/history?${qs}` : "/api/query/history",
       );
     },
