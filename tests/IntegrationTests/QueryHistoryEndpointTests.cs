@@ -45,6 +45,12 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
                 $"/api/admin/user/{alice.Id}/permission", xsrf, new { permission = perm });
             (await session.Client.SendAsync(grant, ct)).EnsureSuccessStatusCode();
         }
+        await PermissionTestHelper.RevokePermissionAsync(
+            session,
+            "alice@example.com",
+            Permissions.QueryAudit,
+            xsrf,
+            ct);
 
         var blueConnStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
         var blueBuilder = new NpgsqlConnectionStringBuilder(blueConnStr!);
@@ -85,8 +91,19 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
     public async Task GetHistory_Returns403_WithoutQueryExecute()
     {
         var ct = TestContext.Current.CancellationToken;
+        using var initialBobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await initialBobSession.Client.GetAsync("/api/me", ct);
+
+        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var xsrf = await adminSession.FetchXsrfTokenAsync(ct);
+        await PermissionTestHelper.RevokePermissionAsync(
+            adminSession,
+            "bob@example.com",
+            Permissions.QueryExecute,
+            xsrf,
+            ct);
+
         using var session = await LoginHelper.SignInAsync("bob", "dev", ct);
-        var xsrf = await session.FetchXsrfTokenAsync(ct);
         var resp = await session.Client.GetAsync("/api/query/history", ct);
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }

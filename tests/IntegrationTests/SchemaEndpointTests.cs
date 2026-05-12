@@ -106,11 +106,24 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
     [Fact]
     public async Task GetSchema_Returns403_ForBob()
     {
+        var ct = TestContext.Current.CancellationToken;
+        using var initialBobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await initialBobSession.Client.GetAsync("/api/me", ct);
+
+        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var xsrf = await adminSession.FetchXsrfTokenAsync(ct);
+        await PermissionTestHelper.RevokePermissionAsync(
+            adminSession,
+            "bob@example.com",
+            Permissions.QueryExecute,
+            xsrf,
+            ct);
+
         using var session = await LoginHelper.SignInAsync(
             "bob", "dev", TestContext.Current.CancellationToken);
         var resp = await session.Client.GetAsync(
             $"/api/schema/{Guid.NewGuid()}",
-            TestContext.Current.CancellationToken);
+            ct);
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
