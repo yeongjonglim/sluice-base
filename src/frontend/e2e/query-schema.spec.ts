@@ -93,7 +93,7 @@ test.describe("Query schema browser — alice", () => {
     const editorContent = await page.locator(".cm-content").textContent();
     expect(editorContent).toContain("SELECT");
     expect(editorContent).toContain("users");
-    expect(editorContent).toContain("LIMIT 100");
+    expect(editorContent).toContain("LIMIT 1000");
 
     // Click Run
     await page.getByRole("button", { name: /run/i }).click();
