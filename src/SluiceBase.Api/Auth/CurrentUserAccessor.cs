@@ -30,7 +30,10 @@ internal sealed class CurrentUserAccessor(
             return null;
         }
 
-        var userId = http.HttpContext.User.GetInternalUserId();
+        if (!http.HttpContext.User.TryGetInternalUserId(out var userId))
+        {
+            return null;
+        }
 
         _cached = await db.Users
             .Include(u => u.Permissions)

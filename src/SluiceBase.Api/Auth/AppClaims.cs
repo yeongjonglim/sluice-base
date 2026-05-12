@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Security.Claims;
 using SluiceBase.Core.Users;
 
@@ -29,12 +28,16 @@ internal static class AppClaims
 
     extension(ClaimsPrincipal principal)
     {
-        public UserId GetInternalUserId()
+        public bool TryGetInternalUserId(out UserId userId)
         {
-            var userId = principal.FindFirstValue(InternalUserIdClaim);
-            return string.IsNullOrEmpty(userId)
-                ? throw new InvalidOperationException("No internal user id claim found.")
-                : UserId.Parse(userId, CultureInfo.InvariantCulture);
+            var userIdValue = principal.FindFirstValue(InternalUserIdClaim);
+            if (!string.IsNullOrEmpty(userIdValue) && UserId.TryParse(userIdValue, out userId))
+            {
+                return true;
+            }
+
+            userId = UserId.Unknown;
+            return false;
         }
 
         public IEnumerable<ClaimRecord> GetClaims() => principal.Claims.Select(c => new ClaimRecord(c.Type, c.Value, c.ValueType));
