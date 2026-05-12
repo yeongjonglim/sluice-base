@@ -110,7 +110,7 @@ function QueryPage() {
   const handleTableClick = useCallback(
     (schemaName: string, tableName: string, columns: Array<{ name: string }>) => {
       const colList = columns.map((c) => c.name).join(", ");
-      const snippet = `SELECT ${colList}\nFROM ${schemaName}.${tableName}\nLIMIT 100;\n`;
+      const snippet = `SELECT ${colList}\nFROM ${schemaName}.${tableName}\nLIMIT 1000;\n`;
       setEditorContent((prev) =>
         prev.trimEnd() === "" ? snippet : `${prev.trimEnd()}\n\n${snippet}`,
       );
