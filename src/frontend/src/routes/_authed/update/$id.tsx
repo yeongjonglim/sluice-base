@@ -174,7 +174,6 @@ function UpdateDetailPage() {
           value={r.sqlText}
           extensions={[sql()]}
           theme={computedColorScheme === "dark" ? githubDark : githubLight}
-          height="200px"
           basicSetup={{ lineNumbers: true, foldGutter: false }}
           editable={false}
         />

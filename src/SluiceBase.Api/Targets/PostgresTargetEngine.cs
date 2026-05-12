@@ -1,4 +1,9 @@
+using System.Collections;
 using System.Globalization;
+using System.Text;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Xml;
 using Npgsql;
 using SluiceBase.Core.Queries;
 using SluiceBase.Core.Schemas;
@@ -105,14 +110,36 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         return new QueryData(columns, [.. rows]);
     }
 
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = false,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+    };
+
     private static string FormatValue(object value) => value switch
     {
         DateTime dt => dt.ToString("O"),
         DateTimeOffset dto => dto.ToUniversalTime().ToString("O"),
         DateOnly d => d.ToString("O", DateTimeFormatInfo.InvariantInfo),
         TimeOnly t => t.ToString("O", DateTimeFormatInfo.InvariantInfo),
+        TimeSpan ts => XmlConvert.ToString(ts), // Format it to ISO8601
+        JsonDocument doc => doc.RootElement.GetRawText(),
+        JsonElement el => el.GetRawText(),
+        BitArray bits => FormatBitArray(bits),
+        IDictionary dict => JsonSerializer.Serialize(dict, dict.GetType(), JsonOptions),
+        Array arr => JsonSerializer.Serialize(arr, arr.GetType(), JsonOptions),
         _ => value.ToString()!
     };
+
+    private static string FormatBitArray(BitArray bits)
+    {
+        var sb = new StringBuilder(bits.Length);
+        for (var i = 0; i < bits.Length; i++)
+        {
+            sb.Append(bits[i] ? '1' : '0');
+        }
+        return sb.ToString();
+    }
 
     public async Task<int> ExecuteUpdateAsync(string connectionString, string sql, CancellationToken ct)
     {

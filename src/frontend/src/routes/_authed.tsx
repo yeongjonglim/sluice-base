@@ -24,10 +24,10 @@ import {
   IconTerminal2,
 } from "@tabler/icons-react";
 import { Link, Outlet, createFileRoute, useLocation } from "@tanstack/react-router";
+import { useState } from "react";
 import { useMe } from "@/api/hooks.ts";
 import { AuthProvider } from "@/auth/AuthProvider.tsx";
 import { useHasPermission } from "@/auth/permission.ts";
-import { useState } from "react";
 import { useBranding } from "@/theme/BrandingContext";
 
 export const Route = createFileRoute("/_authed")({
@@ -36,7 +36,7 @@ export const Route = createFileRoute("/_authed")({
 
 function AuthedLayout() {
   const me = useMe();
-  const [opened, { toggle }] = useDisclosure();
+  const [opened, { toggle, close: closeMobileNav }] = useDisclosure();
   const [openedQuery, { toggle: toggleQuery }] = useDisclosure(true);
   const [sidebarCollapsed, { toggle: toggleSidebar }] = useDisclosure(false);
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
@@ -61,7 +61,7 @@ function AuthedLayout() {
       <AppShell
         header={{ height: 44 }}
         navbar={{
-          width: 200,
+          width: 150,
           breakpoint: "sm",
           collapsed: { desktop: sidebarCollapsed, mobile: !opened },
         }}
@@ -149,6 +149,7 @@ function AuthedLayout() {
                 activeOptions={{ exact: true }}
                 active={location.pathname === "/query"}
                 pl="md"
+                onClick={closeMobileNav}
               />
               <NavLink
                 label="History"
@@ -157,6 +158,7 @@ function AuthedLayout() {
                 to="/query/history"
                 active={location.pathname === "/query/history"}
                 pl="md"
+                onClick={closeMobileNav}
               />
             </NavLink>
           )}
@@ -167,6 +169,7 @@ function AuthedLayout() {
               component={Link}
               to="/update"
               active={location.pathname.startsWith("/update")}
+              onClick={closeMobileNav}
             />
           )}
           {isServerAdmin && (
@@ -176,6 +179,7 @@ function AuthedLayout() {
               component={Link}
               to="/server"
               active={location.pathname === "/server"}
+              onClick={closeMobileNav}
             />
           )}
           {isAdmin && (
@@ -185,6 +189,7 @@ function AuthedLayout() {
               component={Link}
               to="/permission"
               active={location.pathname === "/permission"}
+              onClick={closeMobileNav}
             />
           )}
         </AppShell.Navbar>
