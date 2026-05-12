@@ -46,7 +46,6 @@ internal static class AuthEndpoints
 
                     return TypedResults.Ok(new MeResponse(
                         Id: user.Id,
-                        Sub: user.Sub,
                         Email: user.Email,
                         Name: user.Name,
                         Permissions: [.. user.Permissions.Select(p => p.Permission)]));
@@ -67,8 +66,7 @@ internal static class AuthEndpoints
 
 internal sealed record MeResponse(
     UserId Id,
-    string Sub,
-    string Email,
+    string? Email,
     string? Name,
     string[] Permissions);
 

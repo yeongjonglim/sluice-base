@@ -28,16 +28,17 @@ internal static class PermissionEndpoints
 
     private static async Task<Ok<ListUsersResponse>> ListUsers(AppDbContext db, CancellationToken ct)
     {
-        var users = await db.Users
+        var users = await db.ExternalLogins
+            .Include(u => u.User)
+            .ThenInclude(u => u.Permissions)
             .AsNoTracking()
             .OrderBy(u => u.Email)
             .Select(u => new UserSummaryResponse(
-                u.Id,
-                u.Sub,
+                u.UserId,
                 u.Email,
                 u.Name,
                 u.LastLoginAt,
-                u.Permissions.Select(p => p.Permission).ToArray()))
+                u.User.Permissions.Select(p => p.Permission).ToArray()))
             .ToListAsync(ct);
         return TypedResults.Ok(new ListUsersResponse(users));
     }
@@ -107,8 +108,7 @@ internal sealed record GrantPermissionRequest(string Permission);
 
 internal sealed record UserSummaryResponse(
     UserId Id,
-    string Sub,
-    string Email,
+    string? Email,
     string? Name,
     DateTimeOffset? LastLoginAt,
     string[] Permissions);

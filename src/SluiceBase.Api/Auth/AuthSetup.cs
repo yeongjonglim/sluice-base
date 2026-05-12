@@ -2,7 +2,6 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.IdentityModel.Tokens;
 using SluiceBase.Core.Permissions;
 
 namespace SluiceBase.Api.Auth;
@@ -74,11 +73,6 @@ internal static class AuthSetup
                 options.SignedOutCallbackPath = "/signout-callback-oidc";
 
                 options.MapInboundClaims = false;
-                options.TokenValidationParameters = new TokenValidationParameters
-                {
-                    // NameClaimType = "preferred_username",
-                    // RoleClaimType = "role"
-                };
 
                 options.Events.OnRedirectToIdentityProvider = ctx =>
                 {
@@ -98,18 +92,24 @@ internal static class AuthSetup
                     var recorder = requestServices.GetRequiredService<IUserLoginRecorder>();
                     var clock = requestServices.GetRequiredService<TimeProvider>();
 
-                    var sub = ctx.Principal?.FindFirstValue(AppClaims.Sub);
-                    var email = ctx.Principal?.FindFirstValue(AppClaims.Email);
-                    var name = ctx.Principal?.FindFirstValue(AppClaims.Name);
-
-                    if (string.IsNullOrEmpty(sub) || string.IsNullOrEmpty(email))
+                    if (ctx.Principal is null)
                     {
-                        throw new InvalidOperationException($"Missing {AppClaims.Sub} or {AppClaims.Email}");
+                        throw new InvalidOperationException("Principal is null");
                     }
 
-                    await recorder.RecordLoginAsync(
-                        sub, email, name, clock.GetUtcNow(),
+                    var issuer = ctx.Principal.GetIssuer();
+                    var sub = ctx.Principal.GetSubject();
+                    var email = ctx.Principal.GetEmail();
+                    var name = ctx.Principal.GetName();
+
+                    var user = await recorder.RecordLoginAsync(
+                        issuer, sub, email, name, clock.GetUtcNow(),
+                        ctx.Principal.GetClaims(),
                         ctx.HttpContext.RequestAborted);
+
+                    var claimsIdentity = new ClaimsIdentity();
+                    claimsIdentity.AddClaim(new Claim(AppClaims.InternalUserIdClaim, user.Id.ToString()));
+                    ctx.Principal.AddIdentity(claimsIdentity);
                 };
             });
 

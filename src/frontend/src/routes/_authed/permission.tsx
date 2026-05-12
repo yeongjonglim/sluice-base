@@ -46,7 +46,7 @@ function PermissionsAdminPage() {
   const allUsers = users.data?.users ?? [];
   const filtered = allUsers.filter(
     (u) =>
-      u.email.toLowerCase().includes(search.toLowerCase()) ||
+      (u.email ?? "").toLowerCase().includes(search.toLowerCase()) ||
       (u.name ?? "").toLowerCase().includes(search.toLowerCase()),
   );
 

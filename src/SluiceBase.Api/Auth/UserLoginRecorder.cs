@@ -8,36 +8,40 @@ namespace SluiceBase.Api.Auth;
 
 internal interface IUserLoginRecorder
 {
-    Task<User> RecordLoginAsync(string sub, string email, string? name, DateTimeOffset at, CancellationToken ct);
+    Task<User> RecordLoginAsync(string issuer, string sub, string? email, string? name, DateTimeOffset at, IEnumerable<ClaimRecord> claims, CancellationToken ct);
 }
 
 internal sealed class UserLoginRecorder(
     AppDbContext db,
     IOptions<BootstrapAdminOptions> bootstrap) : IUserLoginRecorder
 {
-    public async Task<User> RecordLoginAsync(string sub, string email, string? name, DateTimeOffset at, CancellationToken ct)
+    public async Task<User> RecordLoginAsync(string issuer, string sub, string? email, string? name, DateTimeOffset at, IEnumerable<ClaimRecord> claims, CancellationToken
+            ct)
     {
-        var user = await db.Users
-            .Include(u => u.Permissions)
-            .SingleOrDefaultAsync(u => u.Sub == sub, ct);
+        var externalLogin = await db.ExternalLogins
+            .Include(x => x.User)
+            .ThenInclude(u => u.Permissions)
+            .SingleOrDefaultAsync(u => u.Issuer == issuer && u.Subject == sub, ct);
 
-        if (user is null)
+        if (externalLogin is null)
         {
-            user = User.Create(sub, email, name, at);
+            var user = User.Create(email, name, at);
             await db.Users.AddAsync(user, ct);
+            externalLogin = ExternalLogin.Create(user.Id, issuer, sub, email, name, at, claims);
+            await db.ExternalLogins.AddAsync(externalLogin, ct);
         }
         else
         {
-            user.RecordLogin(email, name, at);
+            externalLogin.RecordLogin(at, email, name, claims);
         }
 
         var emailMatchesBootstrap = bootstrap.Value.Admins.Any(b =>
             string.Equals(b, email, StringComparison.OrdinalIgnoreCase));
 
-        if (emailMatchesBootstrap && !user.HasPermission(Permissions.PermissionManage))
+        if (emailMatchesBootstrap && !externalLogin.User.HasPermission(Permissions.PermissionManage))
         {
             await db.UserPermissions.AddAsync(UserPermissionMap.Grant(
-                user.Id,
+                externalLogin.UserId,
                 Permissions.PermissionManage,
                 // I prefer to use UserId.System,
                 // but it will cause foreign key violation since there is no user with that id exists
@@ -46,6 +50,6 @@ internal sealed class UserLoginRecorder(
         }
 
         await db.SaveChangesAsync(ct);
-        return user;
+        return externalLogin.User;
     }
 }

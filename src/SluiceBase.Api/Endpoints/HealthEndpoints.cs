@@ -13,7 +13,7 @@ internal static class HealthEndpoints
 
         app.MapGet("/api/health/authed",
                 Ok<HealthResponse> (HttpContext ctx) =>
-                    TypedResults.Ok(new HealthResponse("ok", ctx.User.FindFirst(AppClaims.Name)?.Value)))
+                    TypedResults.Ok(new HealthResponse("ok", ctx.User.GetName())))
             .WithName("HealthAuthed")
             .RequireAuthorization();
     }
