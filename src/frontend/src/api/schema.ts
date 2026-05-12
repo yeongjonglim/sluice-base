@@ -567,8 +567,7 @@ export interface components {
         };
         MeResponse: {
             id: components["schemas"]["UserId"];
-            sub: string;
-            email: string;
+            email: null | string;
             name: null | string;
             permissions: string[];
         };
@@ -721,8 +720,7 @@ export interface components {
         UserId: string;
         UserSummaryResponse: {
             id: components["schemas"]["UserId"];
-            sub: string;
-            email: string;
+            email: null | string;
             name: null | string;
             /** Format: date-time */
             lastLoginAt: null | string;

@@ -45,7 +45,8 @@ builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 
 var app = builder.Build();
 
-if (builder.Configuration.GetValue("Migrations:AutoApply", true))
+if (builder.Configuration.GetValue("Migrations:AutoApply", true)
+    && builder.Configuration.GetConnectionString("Metadata") is not null)
 {
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();

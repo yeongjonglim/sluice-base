@@ -12,8 +12,6 @@ internal sealed class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasKey(u => u.Id);
         builder.Property(u => u.Id);
-        builder.Property(u => u.Sub).HasMaxLength(255).IsRequired();
-        builder.HasIndex(u => u.Sub).IsUnique();
         builder.Property(u => u.Email).HasMaxLength(320).IsRequired();
         builder.Property(u => u.Name).HasMaxLength(255);
         builder.HasMany(u => u.Permissions).WithOne()
