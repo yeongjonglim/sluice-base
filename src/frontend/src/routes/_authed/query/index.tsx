@@ -147,11 +147,9 @@ function QueryPage() {
       }}
     >
       <Box
-        w={240}
         style={{
           borderRight: "1px solid var(--mantine-color-default-border)",
           overflow: "auto",
-          flexShrink: 0,
         }}
       >
         <Stack gap={0} p="xs">
