@@ -1,0 +1,89 @@
+name: PR checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Trust ASP.NET Core HTTPS development certificate
+        run: |
+          dotnet dev-certs https --clean
+          dotnet dev-certs https --export-path /tmp/aspnetcore-dev-cert.crt --format PEM
+          sudo cp /tmp/aspnetcore-dev-cert.crt /usr/local/share/ca-certificates/aspnetcore-dev-cert.crt
+          sudo update-ca-certificates
+
+      - name: Restore
+        run: dotnet restore SluiceBase.slnx
+
+      - name: Build
+        run: dotnet build SluiceBase.slnx --configuration Release --no-restore
+
+      - name: Run integration tests
+        run: dotnet test tests/IntegrationTests --configuration Release --no-build
+
+      - name: Check OpenAPI document is current
+        run: |
+          dotnet build src/SluiceBase.Api/SluiceBase.Api.csproj --configuration Debug
+          git diff --exit-code -- src/SluiceBase.Api/openapi.json
+
+      - name: Install EF Core CLI
+        run: |
+          dotnet tool install --global dotnet-ef --version 10.0.7
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Check for pending migrations
+        run: |
+          dotnet ef migrations has-pending-model-changes \
+            --project src/SluiceBase.Api \
+            --startup-project src/SluiceBase.Api
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: src/frontend
+        run: npm ci
+
+      - name: Run lint
+        working-directory: src/frontend
+        run: npm run lint
+
+      - name: Run tests
+        working-directory: src/frontend
+        run: npm run test
+
+      - name: Build
+        working-directory: src/frontend
+        run: npm run build
+
+      - name: Check generated API schema is current
+        run: git diff --exit-code -- src/frontend/src/api/schema.ts

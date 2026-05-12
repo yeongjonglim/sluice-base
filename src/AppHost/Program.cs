@@ -39,6 +39,7 @@ var keycloak = builder.AddKeycloak("keycloak", 63330)
     .WithEndpoint("https", ep =>
     {
         ep.Port = 63331;
+        ep.TargetPort = 8080;
         ep.UriScheme = "https";
     });
 

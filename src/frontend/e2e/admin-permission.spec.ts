@@ -1,4 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
+import {  expect, test } from "@playwright/test";
+import type {Page} from "@playwright/test";
 
 test.describe("Permission admin", () => {
   async function extracted(page: Page, username: string, password: string) {

@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { buildCsv, exportToCsv } from "../query";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildCsv, exportToCsv } from "../query/-csv";
 
 describe("buildCsv", () => {
   it("produces a header row and data rows", () => {
