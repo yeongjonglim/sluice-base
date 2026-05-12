@@ -16,6 +16,7 @@ import {
   Tooltip,
   useComputedColorScheme,
 } from "@mantine/core";
+import { Group as PanelGroup, Panel, Separator as PanelResizeHandle } from "react-resizable-panels";
 import {
   IconChevronDown,
   IconChevronRight,
@@ -26,7 +27,7 @@ import {
   IconTable,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
@@ -78,6 +79,16 @@ export const Route = createFileRoute("/_authed/query/")({
   },
   component: QueryPage,
 });
+
+function resizeHandleStyle(orientation: "horizontal" | "vertical"): React.CSSProperties {
+  return {
+    position: "relative",
+    background: "transparent",
+    ...(orientation === "vertical"
+      ? { width: 4, cursor: "col-resize", borderLeft: "1px solid var(--mantine-color-default-border)" }
+      : { height: 4, cursor: "row-resize", borderTop: "1px solid var(--mantine-color-default-border)" }),
+  };
+}
 
 function QueryPage() {
   const servers = useServers();
@@ -139,19 +150,14 @@ function QueryPage() {
   }, [handleRun]);
 
   return (
-    <Flex
+    <PanelGroup
+      orientation="horizontal"
       style={{
         margin: "calc(-1 * var(--mantine-spacing-sm))",
         height: "calc(100vh - 44px)",
-        overflow: "hidden",
       }}
     >
-      <Box
-        style={{
-          borderRight: "1px solid var(--mantine-color-default-border)",
-          overflow: "auto",
-        }}
-      >
+      <Panel defaultSize="20%" minSize="12%" style={{ overflow: "auto" }}>
         <Stack gap={0} p="xs">
           <Select
             placeholder="Select a database"
@@ -163,62 +169,75 @@ function QueryPage() {
           />
           <SchemaSidebar schema={schema} onTableClick={handleTableClick} />
         </Stack>
-      </Box>
+      </Panel>
 
-      <Flex direction="column" flex={1} style={{ overflow: "hidden", minWidth: 0 }}>
-        <Box
-          p="xs"
-          style={{
-            borderBottom: "1px solid var(--mantine-color-default-border)",
-            flexShrink: 0,
-          }}
-        >
-          <Box
-            style={{
-              border: "1px solid var(--mantine-color-default-border)",
-              borderRadius: "var(--mantine-radius-sm)",
-              overflow: "hidden",
-            }}
-          >
-            <CodeMirror
-              ref={editorRef}
-              value={editorContent}
-              onChange={setEditorContent}
-              extensions={[sql(), runKeymap]}
-              theme={computedColorScheme === "dark" ? githubDark : githubLight}
-              height="200px"
-              basicSetup={{ lineNumbers: true, foldGutter: false }}
-            />
-          </Box>
+      <PanelResizeHandle style={resizeHandleStyle("vertical")} />
 
-          <Group mt="xs" gap="xs">
-            <Button
-              leftSection={<IconPlayerPlay size={14} />}
-              rightSection={<Kbd size="xs">F5</Kbd>}
-              size="sm"
-              onClick={handleRun}
-              loading={executeQuery.isPending}
-              disabled={!selectedDatabaseId || !editorContent.trim()}
+      <Panel minSize="30%" style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <PanelGroup orientation="vertical">
+          <Panel defaultSize="35%" minSize="15%" style={{ display: "flex", flexDirection: "column" }}>
+            <Box
+              p="xs"
+              style={{
+                borderBottom: "1px solid var(--mantine-color-default-border)",
+                display: "flex",
+                flexDirection: "column",
+                height: "100%",
+              }}
             >
-              Run
-            </Button>
-            {!selectedDatabaseId && (
-              <Text size="xs" c="dimmed">
-                Select a database to run queries
-              </Text>
-            )}
-          </Group>
-        </Box>
+              <Box
+                style={{
+                  border: "1px solid var(--mantine-color-default-border)",
+                  borderRadius: "var(--mantine-radius-sm)",
+                  overflow: "hidden",
+                  flex: 1,
+                  minHeight: 0,
+                }}
+              >
+                <CodeMirror
+                  ref={editorRef}
+                  value={editorContent}
+                  onChange={setEditorContent}
+                  extensions={[sql(), runKeymap]}
+                  theme={computedColorScheme === "dark" ? githubDark : githubLight}
+                  height="100%"
+                  style={{ height: "100%" }}
+                  basicSetup={{ lineNumbers: true, foldGutter: false }}
+                />
+              </Box>
 
-        <Box style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-          <QueryResults
-            result={executeQuery.data ?? null}
-            isPending={executeQuery.isPending}
-            isError={executeQuery.isError}
-          />
-        </Box>
-      </Flex>
-    </Flex>
+              <Group mt="xs" gap="xs" style={{ flexShrink: 0 }}>
+                <Button
+                  leftSection={<IconPlayerPlay size={14} />}
+                  rightSection={<Kbd size="xs">F5</Kbd>}
+                  size="sm"
+                  onClick={handleRun}
+                  loading={executeQuery.isPending}
+                  disabled={!selectedDatabaseId || !editorContent.trim()}
+                >
+                  Run
+                </Button>
+                {!selectedDatabaseId && (
+                  <Text size="xs" c="dimmed">
+                    Select a database to run queries
+                  </Text>
+                )}
+              </Group>
+            </Box>
+          </Panel>
+
+          <PanelResizeHandle style={resizeHandleStyle("horizontal")} />
+
+          <Panel minSize="15%" style={{ overflow: "hidden" }}>
+            <QueryResults
+              result={executeQuery.data ?? null}
+              isPending={executeQuery.isPending}
+              isError={executeQuery.isError}
+            />
+          </Panel>
+        </PanelGroup>
+      </Panel>
+    </PanelGroup>
   );
 }
 
