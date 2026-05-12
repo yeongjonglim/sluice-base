@@ -35,7 +35,6 @@ public class MeEndpointTests(SluiceBaseStackFactory factory)
         var body = await response.Content.ReadFromJsonAsync<MeBody>(
             TestContext.Current.CancellationToken);
         Assert.NotNull(body);
-        Assert.False(string.IsNullOrEmpty(body.Sub));
         Assert.Equal("alice@example.com", body.Email);
         Assert.Contains(Permissions.PermissionManage, body.Permissions);
     }
@@ -63,7 +62,6 @@ public class MeEndpointTests(SluiceBaseStackFactory factory)
 
     private sealed record MeBody(
         string Id,
-        string Sub,
         string Email,
         string? Name,
         string[] Permissions);

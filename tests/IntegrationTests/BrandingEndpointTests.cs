@@ -18,7 +18,7 @@ public sealed class BrandingEndpointTests(SluiceBaseStackFactory factory)
     }
 
     [Fact]
-    public async Task Branding_ReturnsDefaultValues()
+    public async Task Branding_ReturnsDevelopmentValues()
     {
         using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
 
@@ -27,8 +27,8 @@ public sealed class BrandingEndpointTests(SluiceBaseStackFactory factory)
             TestContext.Current.CancellationToken);
 
         Assert.NotNull(content);
-        Assert.Equal("SluiceBase", content.AppName);
-        Assert.Equal("teal", content.PrimaryColor);
+        Assert.Equal("TestCompany", content.AppName);
+        Assert.Equal("indigo", content.PrimaryColor);
         Assert.False(content.HasLogo);
         Assert.False(content.HasFavicon);
     }
