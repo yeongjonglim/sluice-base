@@ -16,6 +16,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
 {
     public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
     public DbSet<User> Users => Set<User>();
+    public DbSet<ExternalLogin> ExternalLogins => Set<ExternalLogin>();
     public DbSet<UserPermissionMap> UserPermissions => Set<UserPermissionMap>();
     public DbSet<Server> Servers => Set<Server>();
     public DbSet<Credential> Credentials => Set<Credential>();

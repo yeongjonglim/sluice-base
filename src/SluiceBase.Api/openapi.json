@@ -1538,7 +1538,6 @@
       "MeResponse": {
         "required": [
           "id",
-          "sub",
           "email",
           "name",
           "permissions"
@@ -1548,11 +1547,11 @@
           "id": {
             "$ref": "#/components/schemas/UserId"
           },
-          "sub": {
-            "type": "string"
-          },
           "email": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "name": {
             "type": [
@@ -2272,7 +2271,6 @@
       "UserSummaryResponse": {
         "required": [
           "id",
-          "sub",
           "email",
           "name",
           "lastLoginAt",
@@ -2283,11 +2281,11 @@
           "id": {
             "$ref": "#/components/schemas/UserId"
           },
-          "sub": {
-            "type": "string"
-          },
           "email": {
-            "type": "string"
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "name": {
             "type": [

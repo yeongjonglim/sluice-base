@@ -18,7 +18,6 @@ describe("useHasPermission", () => {
     mockUseMe.mockReturnValue({
       data: {
         id: "user-1",
-        sub: "alice-sub",
         email: "alice@example.com",
         name: "Alice",
         permissions: ["permission:manage", "query:execute"],
@@ -34,7 +33,6 @@ describe("useHasPermission", () => {
     mockUseMe.mockReturnValue({
       data: {
         id: "user-2",
-        sub: "bob-sub",
         email: "bob@example.com",
         name: "Bob",
         permissions: ["query:execute"],
