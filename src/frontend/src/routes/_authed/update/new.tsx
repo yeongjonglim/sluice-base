@@ -36,12 +36,11 @@ function NewUpdatePage() {
   const [sqlText, setSqlText] = useState("");
   const [reason, setReason] = useState("");
 
-  const databaseOptions = (servers.data?.servers ?? [])
-    .flatMap((s) =>
-      s.databases
-        .filter((d) => d.canWrite)
-        .map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
-    );
+  const databaseOptions = (servers.data?.servers ?? []).flatMap((s) =>
+    s.databases
+      .filter((d) => d.canWrite)
+      .map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
+  );
 
   const canSubmit = databaseId !== null && sqlText.trim() !== "" && reason.trim() !== "";
 
@@ -90,7 +89,11 @@ function NewUpdatePage() {
             extensions={[sql()]}
             theme={computedColorScheme === "dark" ? githubDark : githubLight}
             minHeight="300px"
-            basicSetup={{ lineNumbers: true, foldGutter: false }}
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: false,
+              defaultKeymap: false,
+            }}
           />
         </Box>
       </Box>
