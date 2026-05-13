@@ -126,7 +126,9 @@ public class UpdateEndpointTests
     public async Task PostUpdate_Returns403_ForUserWithoutPermission()
     {
         var ct = TestContext.Current.CancellationToken;
+        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
         using var session = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await PermissionTestHelper.RevokeAllPermissionsAsync(adminSession, "bob@example.com", await adminSession.FetchXsrfTokenAsync(ct), ct);
         var xsrf = await session.FetchXsrfTokenAsync(ct);
         using var req = MutationRequest(HttpMethod.Post,
             "/api/update",
@@ -140,7 +142,12 @@ public class UpdateEndpointTests
     public async Task GetUpdates_Returns403_ForUserWithoutAnyUpdatePermission()
     {
         var ct = TestContext.Current.CancellationToken;
+
+        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
         using var session = await LoginHelper.SignInAsync("bob", "dev", ct);
+
+        await PermissionTestHelper.RevokeAllPermissionsAsync(adminSession, "bob@example.com", await adminSession.FetchXsrfTokenAsync(ct), ct);
+
         var resp = await session.Client.GetAsync("/api/update", ct);
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }

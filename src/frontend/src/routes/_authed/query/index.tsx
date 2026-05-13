@@ -33,10 +33,26 @@ import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
 import { keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
-import { exportToCsv } from "./-csv";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
-import { meQueryOptions, useExecuteQuery, useSchema, useServers } from "@/api/hooks";
+import { exportToCsv } from "@/utils/csv.ts";
+import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema } from "@/api/hooks";
+
+const noIndentKeymap = keymap.of([
+  {
+    key: "Enter",
+    run: (view) => {
+      const { from, to } = view.state.selection.main;
+
+      view.dispatch({
+        changes: { from, to, insert: "\n" },
+        selection: { anchor: from + 1 },
+      });
+
+      return true;
+    },
+  },
+]);
 
 export const Route = createFileRoute("/_authed/query/")({
   beforeLoad: ({ context }) => {
@@ -53,13 +69,21 @@ function resizeHandleStyle(orientation: "horizontal" | "vertical"): React.CSSPro
     position: "relative",
     background: "transparent",
     ...(orientation === "vertical"
-      ? { width: 4, cursor: "col-resize", borderLeft: "1px solid var(--mantine-color-default-border)" }
-      : { height: 4, cursor: "row-resize", borderTop: "1px solid var(--mantine-color-default-border)" }),
+      ? {
+          width: 4,
+          cursor: "col-resize",
+          borderLeft: "1px solid var(--mantine-color-default-border)",
+        }
+      : {
+          height: 4,
+          cursor: "row-resize",
+          borderTop: "1px solid var(--mantine-color-default-border)",
+        }),
   };
 }
 
 function QueryPage() {
-  const servers = useServers();
+  const servers = useCatalogServer();
   const [selectedDatabaseId, setSelectedDatabaseId] = useState<string | null>(null);
   const schema = useSchema(selectedDatabaseId);
   const [editorContent, setEditorContent] = useState("");
@@ -67,13 +91,9 @@ function QueryPage() {
   const executeQuery = useExecuteQuery();
   const computedColorScheme = useComputedColorScheme();
 
-  const databaseOptions = (servers.data?.servers ?? [])
-    .filter((s) => !s.isDisabled)
-    .flatMap((s) =>
-      s.databases
-        .filter((d) => !d.isDisabled)
-        .map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
-    );
+  const databaseOptions = (servers.data?.servers ?? []).flatMap((s) =>
+    s.databases.map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
+  );
 
   const handleTableClick = useCallback(
     (schemaName: string, tableName: string, columns: Array<{ name: string }>) => {
@@ -97,11 +117,17 @@ function QueryPage() {
       {
         key: "Ctrl-Enter",
         mac: "Cmd-Enter",
-        run: () => { handleRun(); return true; },
+        run: () => {
+          handleRun();
+          return true;
+        },
       },
       {
         key: "F5",
-        run: () => { handleRun(); return true; },
+        run: () => {
+          handleRun();
+          return true;
+        },
       },
     ]),
   );
@@ -143,7 +169,11 @@ function QueryPage() {
 
       <Panel minSize="30%" style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
         <PanelGroup orientation="vertical">
-          <Panel defaultSize="35%" minSize="15%" style={{ display: "flex", flexDirection: "column" }}>
+          <Panel
+            defaultSize="35%"
+            minSize="15%"
+            style={{ display: "flex", flexDirection: "column" }}
+          >
             <Box
               p="xs"
               style={{
@@ -166,11 +196,15 @@ function QueryPage() {
                   ref={editorRef}
                   value={editorContent}
                   onChange={setEditorContent}
-                  extensions={[sql(), runKeymap]}
+                  extensions={[sql(), runKeymap, noIndentKeymap]}
                   theme={computedColorScheme === "dark" ? githubDark : githubLight}
                   height="100%"
                   style={{ height: "100%" }}
-                  basicSetup={{ lineNumbers: true, foldGutter: false }}
+                  basicSetup={{
+                    lineNumbers: true,
+                    foldGutter: false,
+                    defaultKeymap: false,
+                  }}
                 />
               </Box>
 
@@ -279,15 +313,20 @@ function QueryResults({
           size="xs"
           variant="subtle"
           leftSection={<IconDownload size={12} />}
-          onClick={() =>
-            exportToCsv(columns, rows, `query-results-${Date.now()}.csv`)
-          }
+          onClick={() => exportToCsv(columns, rows, `query-results-${Date.now()}.csv`)}
         >
           CSV
         </Button>
       </Group>
       <ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto">
-        <Table stickyHeader striped withTableBorder withColumnBorders fz="xs" style={{ whiteSpace: "nowrap" }}>
+        <Table
+          stickyHeader
+          striped
+          withTableBorder
+          withColumnBorders
+          fz="xs"
+          style={{ whiteSpace: "nowrap" }}
+        >
           <Table.Thead>
             <Table.Tr>
               {columns.map((col) => (
@@ -299,7 +338,11 @@ function QueryResults({
             {rows.map((row, i) => (
               <Table.Tr key={i}>
                 {row.map((cell, j) => (
-                  <Table.Td key={j}>{cell}</Table.Td>
+                  <Table.Td key={j}>
+                    {!cell ? (
+                      <Text size="xs" c="dimmed" fs="italic">NULL</Text>
+                    ) : cell}
+                  </Table.Td>
                 ))}
               </Table.Tr>
             ))}
@@ -326,7 +369,7 @@ function SchemaSidebar({
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
 
-  if (schema.isFetching) {
+  if (schema.isLoading) {
     return (
       <Stack gap="xs">
         {[1, 2, 3].map((i) => (
@@ -407,7 +450,11 @@ function SchemaSidebar({
                         active={false}
                       />
                       <Tooltip label="Append SELECT query" position="right" withArrow>
-                        <Button onClick={() => onTableClick(s.name, t.name, t.columns)} size="xs" variant="subtle">
+                        <Button
+                          onClick={() => onTableClick(s.name, t.name, t.columns)}
+                          size="xs"
+                          variant="subtle"
+                        >
                           <IconPlaylistAdd />
                         </Button>
                       </Tooltip>

@@ -133,6 +133,26 @@ function formatApiError(error: ApiError): string {
   return error.message;
 }
 
+// ── Catalog ───────────────────────────────────────────────────────────────
+
+export type CatalogServersResponse =
+  paths["/api/catalog/server"]["get"]["responses"][200]["content"]["application/json"];
+
+export function useCatalogServer() {
+  return useQuery({
+    queryKey: ["catalog", "server"] as const,
+    queryFn: () => apiRequest<void, CatalogServersResponse>("/api/catalog/server"),
+    select: (data) => ({
+      servers: [...data.servers]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((s) => ({
+          ...s,
+          databases: [...s.databases].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+        })),
+    }),
+  });
+}
+
 // ── Server registry ───────────────────────────────────────────────────────
 
 export type ServerListResponse =
@@ -149,6 +169,14 @@ export function useServers() {
   return useQuery({
     queryKey: ["server"] as const,
     queryFn: () => apiRequest<void, ServerListResponse>("/api/server"),
+    select: (data) => ({
+      servers: [...data.servers]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((s) => ({
+          ...s,
+          databases: [...s.databases].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+        })),
+    }),
   });
 }
 

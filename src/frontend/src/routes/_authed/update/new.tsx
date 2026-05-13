@@ -14,7 +14,7 @@ import { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
-import { meQueryOptions, useServers, useSubmitUpdate } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useSubmitUpdate } from "@/api/hooks";
 
 export const Route = createFileRoute("/_authed/update/new")({
   beforeLoad: ({ context }) => {
@@ -28,7 +28,7 @@ export const Route = createFileRoute("/_authed/update/new")({
 
 function NewUpdatePage() {
   const navigate = useNavigate();
-  const servers = useServers();
+  const servers = useCatalogServer();
   const submit = useSubmitUpdate();
   const computedColorScheme = useComputedColorScheme();
 
@@ -36,13 +36,11 @@ function NewUpdatePage() {
   const [sqlText, setSqlText] = useState("");
   const [reason, setReason] = useState("");
 
-  const databaseOptions = (servers.data?.servers ?? [])
-    .filter((s) => !s.isDisabled)
-    .flatMap((s) =>
-      s.databases
-        .filter((d) => d.canWrite && !d.isDisabled)
-        .map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
-    );
+  const databaseOptions = (servers.data?.servers ?? []).flatMap((s) =>
+    s.databases
+      .filter((d) => d.canWrite)
+      .map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
+  );
 
   const canSubmit = databaseId !== null && sqlText.trim() !== "" && reason.trim() !== "";
 
@@ -90,8 +88,12 @@ function NewUpdatePage() {
             onChange={setSqlText}
             extensions={[sql()]}
             theme={computedColorScheme === "dark" ? githubDark : githubLight}
-            height="300px"
-            basicSetup={{ lineNumbers: true, foldGutter: false }}
+            minHeight="300px"
+            basicSetup={{
+              lineNumbers: true,
+              foldGutter: false,
+              defaultKeymap: false,
+            }}
           />
         </Box>
       </Box>

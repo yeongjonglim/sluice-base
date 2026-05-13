@@ -3,7 +3,6 @@ using System.Globalization;
 using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
-using System.Xml;
 using Npgsql;
 using SluiceBase.Core.Queries;
 using SluiceBase.Core.Schemas;
@@ -122,7 +121,7 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         DateTimeOffset dto => dto.ToUniversalTime().ToString("O"),
         DateOnly d => d.ToString("O", DateTimeFormatInfo.InvariantInfo),
         TimeOnly t => t.ToString("O", DateTimeFormatInfo.InvariantInfo),
-        TimeSpan ts => XmlConvert.ToString(ts), // Format it to ISO8601
+        TimeSpan ts => ts.ToString("c"),
         JsonDocument doc => doc.RootElement.GetRawText(),
         JsonElement el => el.GetRawText(),
         BitArray bits => FormatBitArray(bits),
