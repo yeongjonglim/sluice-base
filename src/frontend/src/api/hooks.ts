@@ -142,6 +142,14 @@ export function useCatalogServer() {
   return useQuery({
     queryKey: ["catalog", "server"] as const,
     queryFn: () => apiRequest<void, CatalogServersResponse>("/api/catalog/server"),
+    select: (data) => ({
+      servers: [...data.servers]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((s) => ({
+          ...s,
+          databases: [...s.databases].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+        })),
+    }),
   });
 }
 
@@ -161,6 +169,14 @@ export function useServers() {
   return useQuery({
     queryKey: ["server"] as const,
     queryFn: () => apiRequest<void, ServerListResponse>("/api/server"),
+    select: (data) => ({
+      servers: [...data.servers]
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((s) => ({
+          ...s,
+          databases: [...s.databases].sort((a, b) => a.displayName.localeCompare(b.displayName)),
+        })),
+    }),
   });
 }
 

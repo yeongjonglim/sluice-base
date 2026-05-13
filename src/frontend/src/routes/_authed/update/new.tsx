@@ -89,7 +89,7 @@ function NewUpdatePage() {
             onChange={setSqlText}
             extensions={[sql()]}
             theme={computedColorScheme === "dark" ? githubDark : githubLight}
-            height="300px"
+            minHeight="300px"
             basicSetup={{ lineNumbers: true, foldGutter: false }}
           />
         </Box>
