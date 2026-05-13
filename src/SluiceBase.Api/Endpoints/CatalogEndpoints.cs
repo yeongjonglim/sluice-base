@@ -27,11 +27,18 @@ internal static class CatalogEndpoints
             .ToListAsync(ct);
 
         return TypedResults.Ok(new CatalogServersResponse(
-            [.. servers.Select(s => new CatalogServerItem(
-                s.Id,
-                s.Name,
-                [.. s.Databases.Select(d => new CatalogDatabaseItem(d.Id, d.DisplayName, d.CanWrite))]))
-            ]));
+        [
+            .. servers.Select(s => new CatalogServerItem(
+                    s.Id,
+                    s.Name,
+                    [
+                        .. s.Databases
+                            .Select(d => new CatalogDatabaseItem(d.Id, d.DisplayName, d.CanWrite))
+                            .OrderBy(d => d.DisplayName)
+                    ]
+                )
+            )
+        ]));
     }
 
     public sealed record CatalogServersResponse(IReadOnlyList<CatalogServerItem> Servers);
