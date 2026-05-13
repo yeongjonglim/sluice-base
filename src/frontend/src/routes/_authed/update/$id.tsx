@@ -174,7 +174,11 @@ function UpdateDetailPage() {
           value={r.sqlText}
           extensions={[sql()]}
           theme={computedColorScheme === "dark" ? githubDark : githubLight}
-          basicSetup={{ lineNumbers: true, foldGutter: false }}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: false,
+            defaultKeymap: false,
+          }}
           editable={false}
         />
       </Box>
@@ -191,11 +195,7 @@ function UpdateDetailPage() {
                       key="review"
                       title={r.status === "Rejected" ? "Rejected" : "Approved"}
                       bullet={
-                        r.status === "Rejected" ? (
-                          <IconX size={14} />
-                        ) : (
-                          <IconCheck size={14} />
-                        )
+                        r.status === "Rejected" ? <IconX size={14} /> : <IconCheck size={14} />
                       }
                       color={r.status === "Rejected" ? "red" : "green"}
                     >
@@ -222,8 +222,7 @@ function UpdateDetailPage() {
                     >
                       <Stack gap={4} mt={4}>
                         <Text size="sm" c="dimmed">
-                          {r.cancelledByName} &middot;{" "}
-                          {new Date(r.cancelledAt).toLocaleString()}
+                          {r.cancelledByName} &middot; {new Date(r.cancelledAt).toLocaleString()}
                         </Text>
                         {r.cancelNote && <Text size="sm">{r.cancelNote}</Text>}
                       </Stack>
@@ -244,16 +243,14 @@ function UpdateDetailPage() {
                       <Stack gap={4} mt={4}>
                         <Group gap="xs">
                           <Text size="sm" c="dimmed">
-                            {r.executorName} &middot;{" "}
-                            {new Date(r.executedAt).toLocaleString()}
+                            {r.executorName} &middot; {new Date(r.executedAt).toLocaleString()}
                           </Text>
                           {execBadge}
                         </Group>
                         {r.execDurationMs != null && (
                           <Text size="sm" c="dimmed">
                             {r.execDurationMs} ms
-                            {r.execAffectedRows != null &&
-                              ` · ${r.execAffectedRows} rows affected`}
+                            {r.execAffectedRows != null && ` · ${r.execAffectedRows} rows affected`}
                           </Text>
                         )}
                         {r.execError && (
@@ -273,11 +270,7 @@ function UpdateDetailPage() {
 
         return (
           <Timeline active={eventItems.length} bulletSize={26} mt="xs">
-            <Timeline.Item
-              title="Submitted"
-              bullet={<IconSend size={14} />}
-              color="blue"
-            >
+            <Timeline.Item title="Submitted" bullet={<IconSend size={14} />} color="blue">
               <Stack gap={4} mt={4}>
                 <Text size="sm" c="dimmed">
                   {r.submitterName} &middot; {new Date(r.submittedAt).toLocaleString()}

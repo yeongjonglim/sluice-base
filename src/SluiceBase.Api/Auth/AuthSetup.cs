@@ -127,6 +127,15 @@ internal static class AuthSetup
                     Permissions.UpdateApprove,
                     Permissions.UpdateExecute,
                 ])));
+
+            options.AddPolicy(Permissions.CatalogRead, policy =>
+                policy.Requirements.Add(new AnyPermissionRequirement([
+                    Permissions.QueryExecute,
+                    Permissions.UpdateSubmit,
+                    Permissions.UpdateApprove,
+                    Permissions.UpdateExecute,
+                    Permissions.ServerManage,
+                ])));
         });
 
         services.AddScoped<IUserLoginRecorder, UserLoginRecorder>();

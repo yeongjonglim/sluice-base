@@ -115,7 +115,18 @@ internal static class ServerEndpoints
     private static ServerResponse ToResponse(Server s) =>
         new(s.Id, s.Name, s.Kind, s.Host, s.Port, s.IsDisabled,
             s.Credentials.Select(c => new CredentialResponse(c.Id, c.Label, c.Username, c.CreatedAt, c.UpdatedAt)).ToList(),
-            s.Databases.Select(d => new DatabaseResponse(d.Id, d.DisplayName, d.DatabaseName, d.ReadCredentialId, d.WriteCredentialId, d.CanWrite, d.IsDisabled, d.CreatedAt, d.UpdatedAt)).ToList(),
+            [
+                .. s.Databases.Select(d => new DatabaseResponse(d.Id,
+                    d.DisplayName,
+                    d.DatabaseName,
+                    d.ReadCredentialId,
+                    d.WriteCredentialId,
+                    d.CanWrite,
+                    d.IsDisabled,
+                    d.CreatedAt,
+                    d.UpdatedAt)
+                ).OrderBy(x => x.DisplayName)
+            ],
             s.CreatedAt, s.UpdatedAt);
 
     // ── request / response records ────────────────────────────────────────────

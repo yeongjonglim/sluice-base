@@ -212,6 +212,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CatalogListServers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/server": {
         parameters: {
             query?: never;
@@ -495,6 +511,19 @@ export interface components {
         };
         CancelUpdateRequest: {
             note: string;
+        };
+        CatalogDatabaseItem: {
+            id: components["schemas"]["DatabaseId"];
+            displayName: string;
+            canWrite: boolean;
+        };
+        CatalogServerItem: {
+            id: components["schemas"]["ServerId"];
+            name: string;
+            databases: components["schemas"]["CatalogDatabaseItem"][];
+        };
+        CatalogServersResponse: {
+            servers: components["schemas"]["CatalogServerItem"][];
         };
         ColumnInfo: {
             name: string;
@@ -1068,6 +1097,26 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    CatalogListServers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogServersResponse"];
+                };
             };
         };
     };

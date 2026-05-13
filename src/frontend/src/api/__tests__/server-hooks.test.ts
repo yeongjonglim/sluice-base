@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import {
+  useCatalogServer,
   useCreateCredential,
   useCreateDatabase,
   useCreateServer,
@@ -42,6 +43,37 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe("useCatalogServer", () => {
+  it("fetches /api/catalog/server and returns trimmed list without sensitive fields", async () => {
+    const mockData = {
+      servers: [
+        {
+          id: "abc",
+          name: "Blue",
+          databases: [
+            { id: "db-1", displayName: "Blue App DB", canWrite: false },
+            { id: "db-2", displayName: "Blue Write DB", canWrite: true },
+          ],
+        },
+      ],
+    };
+    vi.mocked(apiRequest).mockResolvedValue(mockData);
+
+    const { result } = renderHook(() => useCatalogServer(), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(apiRequest).toHaveBeenCalledWith("/api/catalog/server");
+    const server = result.current.data?.servers[0];
+    expect(server).toBeDefined();
+    expect(server!.id).toBe("abc");
+    expect(server!.name).toBe("Blue");
+    expect(server!.databases).toHaveLength(2);
+    expect(server!.databases[1].canWrite).toBe(true);
+    expect("host" in server!).toBe(false);
+    expect("credentials" in server!).toBe(false);
+  });
 });
 
 describe("useServers", () => {

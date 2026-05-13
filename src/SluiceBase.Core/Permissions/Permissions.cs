@@ -13,6 +13,9 @@ public static class Permissions
     // Virtual policy — never assigned to users; combines update:submit|approve|execute for read access
     public const string UpdateAny = "update:any";
 
+    // Virtual policy — never assigned to users; any operational permission grants catalog read access
+    public const string CatalogRead = "catalog:read";
+
     public static readonly IReadOnlySet<string> All = new HashSet<string>
     {
         PermissionManage,
