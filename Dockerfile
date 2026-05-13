@@ -36,6 +36,8 @@ RUN dotnet publish src/SluiceBase.Api/SluiceBase.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
 WORKDIR /app
 
+RUN apk add --no-cache krb5-libs
+
 COPY --from=api-build /publish .
 COPY --from=frontend-build /app/src/frontend/dist ./wwwroot
 
