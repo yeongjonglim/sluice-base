@@ -381,6 +381,26 @@
         }
       }
     },
+    "/api/catalog/server": {
+      "get": {
+        "tags": [
+          "CatalogEndpoints"
+        ],
+        "operationId": "CatalogListServers",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogServersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/server": {
       "get": {
         "tags": [
@@ -1260,6 +1280,61 @@
         "properties": {
           "note": {
             "type": "string"
+          }
+        }
+      },
+      "CatalogDatabaseItem": {
+        "required": [
+          "id",
+          "displayName",
+          "canWrite"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DatabaseId"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "canWrite": {
+            "type": "boolean"
+          }
+        }
+      },
+      "CatalogServerItem": {
+        "required": [
+          "id",
+          "name",
+          "databases"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "databases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogDatabaseItem"
+            }
+          }
+        }
+      },
+      "CatalogServersResponse": {
+        "required": [
+          "servers"
+        ],
+        "type": "object",
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CatalogServerItem"
+            }
           }
         }
       },
@@ -2322,6 +2397,9 @@
     },
     {
       "name": "PermissionEndpoints"
+    },
+    {
+      "name": "CatalogEndpoints"
     },
     {
       "name": "ServerEndpoints"

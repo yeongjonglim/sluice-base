@@ -20,7 +20,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
 import type { QueryHistoryFilters, QueryHistoryItem } from "@/api/hooks";
-import { meQueryOptions, useQueryHistory, useServers } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useQueryHistory } from "@/api/hooks";
 import { useHasPermission } from "@/auth/permission";
 
 type HistorySearch = {
@@ -66,7 +66,7 @@ function QueryHistoryPage() {
   const canAudit = useHasPermission("query:audit");
   const [userSearch, setUserSearch] = useState("");
 
-  const servers = useServers();
+  const servers = useCatalogServer();
   const filters: QueryHistoryFilters = {
     from: search.from,
     to: search.to,

@@ -14,7 +14,7 @@ import { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
-import { meQueryOptions, useServers, useSubmitUpdate } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useSubmitUpdate } from "@/api/hooks";
 
 export const Route = createFileRoute("/_authed/update/new")({
   beforeLoad: ({ context }) => {
@@ -28,7 +28,7 @@ export const Route = createFileRoute("/_authed/update/new")({
 
 function NewUpdatePage() {
   const navigate = useNavigate();
-  const servers = useServers();
+  const servers = useCatalogServer();
   const submit = useSubmitUpdate();
   const computedColorScheme = useComputedColorScheme();
 
@@ -37,10 +37,9 @@ function NewUpdatePage() {
   const [reason, setReason] = useState("");
 
   const databaseOptions = (servers.data?.servers ?? [])
-    .filter((s) => !s.isDisabled)
     .flatMap((s) =>
       s.databases
-        .filter((d) => d.canWrite && !d.isDisabled)
+        .filter((d) => d.canWrite)
         .map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
     );
 

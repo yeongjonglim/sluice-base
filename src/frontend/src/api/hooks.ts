@@ -133,6 +133,18 @@ function formatApiError(error: ApiError): string {
   return error.message;
 }
 
+// ── Catalog ───────────────────────────────────────────────────────────────
+
+export type CatalogServersResponse =
+  paths["/api/catalog/server"]["get"]["responses"][200]["content"]["application/json"];
+
+export function useCatalogServer() {
+  return useQuery({
+    queryKey: ["catalog", "server"] as const,
+    queryFn: () => apiRequest<void, CatalogServersResponse>("/api/catalog/server"),
+  });
+}
+
 // ── Server registry ───────────────────────────────────────────────────────
 
 export type ServerListResponse =
