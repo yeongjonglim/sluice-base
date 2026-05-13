@@ -36,7 +36,7 @@ import { Prec } from "@codemirror/state";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
 import { exportToCsv } from "@/utils/csv.ts";
-import { meQueryOptions, useExecuteQuery, useSchema, useServers } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema } from "@/api/hooks";
 
 export const Route = createFileRoute("/_authed/query/")({
   beforeLoad: ({ context }) => {
@@ -59,7 +59,7 @@ function resizeHandleStyle(orientation: "horizontal" | "vertical"): React.CSSPro
 }
 
 function QueryPage() {
-  const servers = useServers();
+  const servers = useCatalogServer();
   const [selectedDatabaseId, setSelectedDatabaseId] = useState<string | null>(null);
   const schema = useSchema(selectedDatabaseId);
   const [editorContent, setEditorContent] = useState("");
@@ -68,11 +68,8 @@ function QueryPage() {
   const computedColorScheme = useComputedColorScheme();
 
   const databaseOptions = (servers.data?.servers ?? [])
-    .filter((s) => !s.isDisabled)
     .flatMap((s) =>
-      s.databases
-        .filter((d) => !d.isDisabled)
-        .map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
+      s.databases.map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
     );
 
   const handleTableClick = useCallback(
