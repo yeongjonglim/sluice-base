@@ -33,9 +33,9 @@ import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
 import { keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
-import { exportToCsv } from "./-csv";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
+import { exportToCsv } from "@/utils/csv.ts";
 import { meQueryOptions, useExecuteQuery, useSchema, useServers } from "@/api/hooks";
 
 export const Route = createFileRoute("/_authed/query/")({
@@ -326,7 +326,7 @@ function SchemaSidebar({
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
 
-  if (schema.isFetching) {
+  if (schema.isLoading) {
     return (
       <Stack gap="xs">
         {[1, 2, 3].map((i) => (
