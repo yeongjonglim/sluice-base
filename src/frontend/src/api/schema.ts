@@ -1469,7 +1469,12 @@ export interface operations {
     };
     ListUpdates: {
         parameters: {
-            query?: never;
+            query?: {
+                from?: string;
+                to?: string;
+                databaseId?: string;
+                status?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;
