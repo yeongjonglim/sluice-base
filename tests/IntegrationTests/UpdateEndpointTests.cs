@@ -434,6 +434,112 @@ public class UpdateEndpointTests
         Assert.Equal(HttpStatusCode.BadRequest, (await session.Client.SendAsync(submitReq, ct)).StatusCode);
     }
 
+    // ── filter tests ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetUpdates_FiltersByStatus()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AliceWithBlueServerAsync(
+            [Permissions.UpdateSubmit, Permissions.UpdateApprove],
+            ct);
+        using var _ = session;
+
+        var reason1 = $"status-filter-{Guid.NewGuid():N}";
+        var reason2 = $"status-filter-{Guid.NewGuid():N}";
+
+        using var r1 = MutationRequest(HttpMethod.Post, "/api/update", xsrf,
+            new { databaseId, sqlText = "UPDATE t SET a=1 WHERE 1=0", reason = reason1 });
+        var detail1 = await (await session.Client.SendAsync(r1, ct)).Content
+            .ReadFromJsonAsync<UpdateEndpoints.UpdateRequestDetailResponse>(_jsonSerializerOptions, ct);
+
+        using var r2 = MutationRequest(HttpMethod.Post, "/api/update", xsrf,
+            new { databaseId, sqlText = "UPDATE t SET b=2 WHERE 1=0", reason = reason2 });
+        var detail2 = await (await session.Client.SendAsync(r2, ct)).Content
+            .ReadFromJsonAsync<UpdateEndpoints.UpdateRequestDetailResponse>(_jsonSerializerOptions, ct);
+
+        // Approve the second request only
+        using var approveReq = MutationRequest(HttpMethod.Post,
+            $"/api/update/{detail2!.Id.Value}/approve", xsrf, new { note = "ok" });
+        (await session.Client.SendAsync(approveReq, ct)).EnsureSuccessStatusCode();
+
+        // Filter by Pending — includes first, excludes second
+        var pendingList = await session.Client
+            .GetFromJsonAsync<UpdateEndpoints.ListUpdateRequestsResponse>(
+                "/api/update?status=Pending", _jsonSerializerOptions, ct);
+        Assert.NotNull(pendingList);
+        Assert.Contains(pendingList.Requests, r => r.Id == detail1!.Id);
+        Assert.DoesNotContain(pendingList.Requests, r => r.Id == detail2.Id);
+
+        // Filter by Approved — includes second, excludes first
+        var approvedList = await session.Client
+            .GetFromJsonAsync<UpdateEndpoints.ListUpdateRequestsResponse>(
+                "/api/update?status=Approved", _jsonSerializerOptions, ct);
+        Assert.NotNull(approvedList);
+        Assert.Contains(approvedList.Requests, r => r.Id == detail2.Id);
+        Assert.DoesNotContain(approvedList.Requests, r => r.Id == detail1!.Id);
+    }
+
+    [Fact]
+    public async Task GetUpdates_FiltersByDatabaseId()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AliceWithBlueServerAsync(
+            [Permissions.UpdateSubmit],
+            ct);
+        using var _ = session;
+
+        var reason = $"db-filter-{Guid.NewGuid():N}";
+        using var submitReq = MutationRequest(HttpMethod.Post, "/api/update", xsrf,
+            new { databaseId, sqlText = "UPDATE t SET a=1 WHERE 1=0", reason });
+        var detail = await (await session.Client.SendAsync(submitReq, ct)).Content
+            .ReadFromJsonAsync<UpdateEndpoints.UpdateRequestDetailResponse>(_jsonSerializerOptions, ct);
+
+        // Filter by known database — finds the request
+        var found = await session.Client
+            .GetFromJsonAsync<UpdateEndpoints.ListUpdateRequestsResponse>(
+                $"/api/update?databaseId={databaseId}", _jsonSerializerOptions, ct);
+        Assert.NotNull(found);
+        Assert.Contains(found.Requests, r => r.Id == detail!.Id);
+
+        // Filter by random database ID — does not include this request
+        var filtered = await session.Client
+            .GetFromJsonAsync<UpdateEndpoints.ListUpdateRequestsResponse>(
+                $"/api/update?databaseId={Guid.NewGuid()}", _jsonSerializerOptions, ct);
+        Assert.NotNull(filtered);
+        Assert.DoesNotContain(filtered.Requests, r => r.Id == detail!.Id);
+    }
+
+    [Fact]
+    public async Task GetUpdates_FiltersByDateRange()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AliceWithBlueServerAsync(
+            [Permissions.UpdateSubmit],
+            ct);
+        using var _ = session;
+
+        var reason = $"date-filter-{Guid.NewGuid():N}";
+        using var submitReq = MutationRequest(HttpMethod.Post, "/api/update", xsrf,
+            new { databaseId, sqlText = "UPDATE t SET a=1 WHERE 1=0", reason });
+        var detail = await (await session.Client.SendAsync(submitReq, ct)).Content
+            .ReadFromJsonAsync<UpdateEndpoints.UpdateRequestDetailResponse>(_jsonSerializerOptions, ct);
+
+        // Far-future `to` — excludes the request
+        var noResults = await session.Client
+            .GetFromJsonAsync<UpdateEndpoints.ListUpdateRequestsResponse>(
+                "/api/update?to=2000-01-01", _jsonSerializerOptions, ct);
+        Assert.NotNull(noResults);
+        Assert.DoesNotContain(noResults.Requests, r => r.Id == detail!.Id);
+
+        // Far-past `from` — includes the request
+        var withResults = await session.Client
+            .GetFromJsonAsync<UpdateEndpoints.ListUpdateRequestsResponse>(
+                "/api/update?from=2020-01-01", _jsonSerializerOptions, ct);
+        Assert.NotNull(withResults);
+        Assert.Contains(withResults.Requests, r => r.Id == detail!.Id);
+    }
+
     private sealed record ListUserBody(UserRow[] Users);
 
     private sealed record UserRow(string Id, string Email);
