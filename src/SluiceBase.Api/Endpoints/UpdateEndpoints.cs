@@ -97,13 +97,30 @@ internal static class UpdateEndpoints
     // ── list ─────────────────────────────────────────────────────────────────
 
     private static async Task<Ok<ListUpdateRequestsResponse>> List(
+        DateTimeOffset? @from,
+        DateTimeOffset? to,
+        string? databaseId,
+        string? status,
         AppDbContext db,
         CancellationToken ct)
     {
+        DatabaseId? filterDb = databaseId is not null && Guid.TryParse(databaseId, out var dbGuid)
+            ? DatabaseId.From(dbGuid)
+            : null;
+
+        UpdateRequestStatus? filterStatus = status is not null
+            && Enum.TryParse<UpdateRequestStatus>(status, ignoreCase: true, out var parsedStatus)
+            ? parsedStatus
+            : null;
+
         var requests = await db.UpdateRequests
             .Include(r => r.Database)
             .Include(r => r.Submitter)
             .AsNoTracking()
+            .Where(r => @from == null || r.SubmittedAt >= @from)
+            .Where(r => to == null || r.SubmittedAt <= to)
+            .Where(r => filterDb == null || r.DatabaseId == filterDb)
+            .Where(r => filterStatus == null || r.Status == filterStatus)
             .OrderByDescending(r => r.SubmittedAt)
             .ToListAsync(ct);
 
