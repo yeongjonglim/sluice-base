@@ -95,7 +95,7 @@ describe("useUpdateRequests", () => {
       { wrapper },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    const calledUrl = vi.mocked(apiRequest).mock.calls[0][0] as string;
+    const calledUrl = vi.mocked(apiRequest).mock.calls[0][0];
     expect(calledUrl).toContain("status=Pending");
     expect(calledUrl).toContain("databaseId=db-123");
   });
@@ -107,7 +107,7 @@ describe("useUpdateRequests", () => {
       { wrapper },
     );
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    const calledUrl = vi.mocked(apiRequest).mock.calls[0][0] as string;
+    const calledUrl = vi.mocked(apiRequest).mock.calls[0][0];
     expect(calledUrl).toContain("from=2026-01-01");
     expect(calledUrl).not.toContain("status=");
   });
