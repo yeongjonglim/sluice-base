@@ -525,7 +525,7 @@ public class UpdateEndpointTests
         var detail = await (await session.Client.SendAsync(submitReq, ct)).Content
             .ReadFromJsonAsync<UpdateEndpoints.UpdateRequestDetailResponse>(_jsonSerializerOptions, ct);
 
-        // Far-future `to` — excludes the request
+        // Far-past `to` — request created in 2026 is after this cutoff, so it is excluded
         var noResults = await session.Client
             .GetFromJsonAsync<UpdateEndpoints.ListUpdateRequestsResponse>(
                 "/api/update?to=2000-01-01", _jsonSerializerOptions, ct);
