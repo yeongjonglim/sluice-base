@@ -51,7 +51,8 @@ const STATUS_OPTIONS = [
 ];
 
 function dateToParam(d: string | null): string | undefined {
-  return d || undefined;
+  if (!d) return undefined;
+  return d;
 }
 
 function paramToDate(s: string | undefined): string | null {
