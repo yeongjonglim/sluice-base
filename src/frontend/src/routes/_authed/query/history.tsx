@@ -12,6 +12,7 @@ import {
   Title,
   useComputedColorScheme,
 } from "@mantine/core";
+import { DateInput } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
 import { IconCopy } from "@tabler/icons-react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
@@ -60,6 +61,15 @@ const STATUS_OPTIONS = [
   { value: "Timeout", label: "Timeout" },
 ];
 
+function dateToParam(d: string | null): string | undefined {
+  if (!d) return undefined;
+  return d;
+}
+
+function paramToDate(s: string | undefined): string | null {
+  return s ?? null;
+}
+
 function QueryHistoryPage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
@@ -101,20 +111,22 @@ function QueryHistoryPage() {
       <Title order={2}>Query History</Title>
 
       <Group gap="sm" wrap="wrap">
-        <TextInput
-          type="date"
+        <DateInput
           label="From"
           size="sm"
-          value={search.from ?? ""}
-          onChange={(e) => setFilter("from", e.currentTarget.value)}
+          clearable
+          valueFormat="YYYY-MM-DD"
+          value={paramToDate(search.from)}
+          onChange={(d) => setFilter("from", dateToParam(d))}
           style={{ width: 160 }}
         />
-        <TextInput
-          type="date"
+        <DateInput
           label="To"
           size="sm"
-          value={search.to ?? ""}
-          onChange={(e) => setFilter("to", e.currentTarget.value)}
+          clearable
+          valueFormat="YYYY-MM-DD"
+          value={paramToDate(search.to)}
+          onChange={(d) => setFilter("to", dateToParam(d))}
           style={{ width: 160 }}
         />
         <Select
