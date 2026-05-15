@@ -207,7 +207,7 @@ public static class Permissions
     public const string UpdateExecute = "update:execute";
 
     // Global permissions managed in user_permission — grantable from the Permissions admin page.
-    public static readonly IReadOnlySet<string> All = new HashSet<string>
+    public static readonly IReadOnlySet<string> Global = new HashSet<string>
     {
         PermissionManage,
         ServerManage,
@@ -250,7 +250,7 @@ git commit -m "feat: update Permissions — reduce All to global perms, add Scop
 Remove:
 - The `UpdateAny` policy registration (lines 124-129)
 - The `CatalogRead` policy registration (lines 131-138)
-- The `foreach (var permission in Permissions.All)` loop now only registers 2 policies (this is correct as-is after Task 4)
+- The `foreach (var permission in Permissions.Global)` loop now only registers 2 policies (this is correct as-is after Task 4)
 
 - [ ] **Step 1: Edit AuthSetup.cs**
 
@@ -259,7 +259,7 @@ Replace lines 116-139 (the full `services.AddAuthorization(...)` block) with:
 ```csharp
         services.AddAuthorization(options =>
         {
-            foreach (var permission in Permissions.All)
+            foreach (var permission in Permissions.Global)
             {
                 options.AddPolicy(permission,
                     policy => policy.Requirements.Add(new PermissionRequirement(permission)));
@@ -358,7 +358,225 @@ git commit -m "feat: add AddUserDatabaseRole migration with compatibility seedin
 
 ---
 
-### Task 7: Create `DatabaseRoleEndpoints` — write failing tests first
+### Task 7: Test migration seeding SQL with TestContainers
+
+The custom SQL in the `Up` method is outside EF's type safety. This task verifies it produces the correct seeding and cleanup on a real Postgres instance.
+
+**Files:**
+- Modify: `tests/IntegrationTests/IntegrationTests.csproj` — add `Testcontainers.PostgreSql`
+- Create: `tests/IntegrationTests/MigrationSeedingTests.cs`
+
+- [ ] **Step 1: Add Testcontainers.PostgreSql to the test project**
+
+In `tests/IntegrationTests/IntegrationTests.csproj`, add inside `<ItemGroup>`:
+
+```xml
+<PackageReference Include="Testcontainers.PostgreSql" Version="4.4.0" />
+```
+
+- [ ] **Step 2: Write the migration seeding test**
+
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using SluiceBase.Api.Data;
+using Testcontainers.PostgreSql;
+
+namespace IntegrationTests;
+
+public class MigrationSeedingTests : IAsyncLifetime
+{
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
+        .WithDatabase("sluice_test")
+        .WithUsername("postgres")
+        .WithPassword("postgres")
+        .Build();
+
+    public async ValueTask InitializeAsync() => await _postgres.StartAsync();
+    public async ValueTask DisposeAsync() => await _postgres.DisposeAsync();
+
+    private AppDbContext CreateContext() =>
+        new(new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(_postgres.GetConnectionString())
+            .UseSnakeCaseNamingConvention()
+            .Options);
+
+    [Fact]
+    public async Task AddUserDatabaseRole_Migration_SeedsRolesFromExistingPermissions()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var ctx = CreateContext();
+        var migrator = ctx.Database.GetService<IMigrator>();
+
+        // Apply all migrations up to (not including) the new one.
+        // This sets up the full pre-migration schema.
+        await migrator.MigrateAsync("20260512003313_Initial", ct);
+
+        // Insert a user, a server + credential + database, and two scopeable user_permissions.
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            INSERT INTO ""user"" (id, email, name, created_at)
+            VALUES ('11111111-1111-1111-1111-111111111111'::uuid, 'user@example.com', 'Test User', NOW());
+
+            INSERT INTO server (id, name, kind, host, port, is_disabled, created_at, updated_at)
+            VALUES ('22222222-2222-2222-2222-222222222222'::uuid, 'test-srv', 'postgres', 'localhost', 5432, false, NOW(), NOW());
+
+            INSERT INTO server_credential (id, server_id, label, username, encrypted_password, created_at, updated_at)
+            VALUES ('33333333-3333-3333-3333-333333333333'::uuid,
+                    '22222222-2222-2222-2222-222222222222'::uuid,
+                    'read', 'pg', 'enc', NOW(), NOW());
+
+            INSERT INTO server_database (id, server_id, display_name, database_name, read_credential_id, is_disabled, created_at, updated_at)
+            VALUES ('44444444-4444-4444-4444-444444444444'::uuid,
+                    '22222222-2222-2222-2222-222222222222'::uuid,
+                    'Test DB', 'testdb',
+                    '33333333-3333-3333-3333-333333333333'::uuid,
+                    false, NOW(), NOW());
+
+            INSERT INTO user_permission (id, user_id, permission, granted_at)
+            VALUES
+                ('55555555-5555-5555-5555-555555555555'::uuid,
+                 '11111111-1111-1111-1111-111111111111'::uuid, 'query:execute', NOW()),
+                ('66666666-6666-6666-6666-666666666666'::uuid,
+                 '11111111-1111-1111-1111-111111111111'::uuid, 'update:submit', NOW()),
+                ('77777777-7777-7777-7777-777777777777'::uuid,
+                 '11111111-1111-1111-1111-111111111111'::uuid, 'permission:manage', NOW());
+        ", cancellationToken: ct);
+
+        // Apply the new migration.
+        await migrator.MigrateAsync(cancellationToken: ct);
+
+        // Verify: one user_database_role row per (scopeable permission × non-deleted database)
+        var roles = await ctx.UserDatabaseRoles.ToListAsync(ct);
+        Assert.Equal(2, roles.Count); // query:execute + update:submit, each on the 1 database
+
+        Assert.Contains(roles, r =>
+            r.UserId.Value == Guid.Parse("11111111-1111-1111-1111-111111111111") &&
+            r.Permission == "query:execute" &&
+            r.DatabaseId.Value == Guid.Parse("44444444-4444-4444-4444-444444444444"));
+
+        Assert.Contains(roles, r =>
+            r.UserId.Value == Guid.Parse("11111111-1111-1111-1111-111111111111") &&
+            r.Permission == "update:submit" &&
+            r.DatabaseId.Value == Guid.Parse("44444444-4444-4444-4444-444444444444"));
+
+        // Verify: scopeable permissions removed from user_permission
+        var remainingScopeable = await ctx.UserPermissions
+            .CountAsync(p => p.Permission == "query:execute" || p.Permission == "update:submit", ct);
+        Assert.Equal(0, remainingScopeable);
+
+        // Verify: non-scopeable permission (permission:manage) is preserved
+        var globalPerms = await ctx.UserPermissions
+            .CountAsync(p => p.Permission == "permission:manage", ct);
+        Assert.Equal(1, globalPerms);
+    }
+
+    [Fact]
+    public async Task AddUserDatabaseRole_Migration_SeedIsIdempotent_NoConflictOnDuplicate()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var ctx = CreateContext();
+        var migrator = ctx.Database.GetService<IMigrator>();
+
+        await migrator.MigrateAsync("20260512003313_Initial", ct);
+
+        // Insert same user with same permission and two databases — expect 2 role rows (one per db)
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            INSERT INTO ""user"" (id, email, name, created_at)
+            VALUES ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'u2@example.com', 'U2', NOW());
+
+            INSERT INTO server (id, name, kind, host, port, is_disabled, created_at, updated_at)
+            VALUES ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid, 'srv2', 'postgres', 'localhost', 5432, false, NOW(), NOW());
+
+            INSERT INTO server_credential (id, server_id, label, username, encrypted_password, created_at, updated_at)
+            VALUES ('cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid,
+                    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid,
+                    'read', 'pg', 'enc', NOW(), NOW());
+
+            INSERT INTO server_database (id, server_id, display_name, database_name, read_credential_id, is_disabled, created_at, updated_at)
+            VALUES
+                ('dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid,
+                 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid,
+                 'DB1', 'db1', 'cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid, false, NOW(), NOW()),
+                ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid,
+                 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid,
+                 'DB2', 'db2', 'cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid, false, NOW(), NOW());
+
+            INSERT INTO user_permission (id, user_id, permission, granted_at)
+            VALUES ('ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid,
+                    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 'query:execute', NOW());
+        ", cancellationToken: ct);
+
+        // Migration should produce 2 rows (1 user × 1 permission × 2 databases) with no error
+        await migrator.MigrateAsync(cancellationToken: ct);
+
+        var roles = await ctx.UserDatabaseRoles.ToListAsync(ct);
+        Assert.Equal(2, roles.Count);
+    }
+
+    [Fact]
+    public async Task AddUserDatabaseRole_Migration_SoftDeletedDatabasesExcludedFromSeed()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var ctx = CreateContext();
+        var migrator = ctx.Database.GetService<IMigrator>();
+
+        await migrator.MigrateAsync("20260512003313_Initial", ct);
+
+        await ctx.Database.ExecuteSqlRawAsync(@"
+            INSERT INTO ""user"" (id, email, name, created_at)
+            VALUES ('12121212-1212-1212-1212-121212121212'::uuid, 'u3@example.com', 'U3', NOW());
+
+            INSERT INTO server (id, name, kind, host, port, is_disabled, created_at, updated_at)
+            VALUES ('23232323-2323-2323-2323-232323232323'::uuid, 'srv3', 'postgres', 'localhost', 5432, false, NOW(), NOW());
+
+            INSERT INTO server_credential (id, server_id, label, username, encrypted_password, created_at, updated_at)
+            VALUES ('34343434-3434-3434-3434-343434343434'::uuid,
+                    '23232323-2323-2323-2323-232323232323'::uuid,
+                    'read', 'pg', 'enc', NOW(), NOW());
+
+            INSERT INTO server_database (id, server_id, display_name, database_name, read_credential_id, is_disabled, deleted_at, created_at, updated_at)
+            VALUES ('45454545-4545-4545-4545-454545454545'::uuid,
+                    '23232323-2323-2323-2323-232323232323'::uuid,
+                    'Deleted DB', 'deldb',
+                    '34343434-3434-3434-3434-343434343434'::uuid,
+                    false, NOW(), NOW(), NOW());
+
+            INSERT INTO user_permission (id, user_id, permission, granted_at)
+            VALUES ('56565656-5656-5656-5656-565656565656'::uuid,
+                    '12121212-1212-1212-1212-121212121212'::uuid, 'query:execute', NOW());
+        ", cancellationToken: ct);
+
+        await migrator.MigrateAsync(cancellationToken: ct);
+
+        // Soft-deleted database should not appear in seeded roles
+        var roles = await ctx.UserDatabaseRoles.ToListAsync(ct);
+        Assert.Empty(roles);
+    }
+}
+```
+
+- [ ] **Step 3: Run the migration tests**
+
+```bash
+dotnet test tests/IntegrationTests/ --filter "MigrationSeedingTests" 2>&1 | tail -20
+```
+
+Expected: All 3 tests pass. If a test fails, check:
+- The migration name `"20260512003313_Initial"` matches the actual initial migration filename in `src/SluiceBase.Api/Data/Migrations/`
+- `UseSnakeCaseNamingConvention()` is applied — requires `EFCore.NamingConventions` package which is already in `SluiceBase.Api.csproj`
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add tests/IntegrationTests/IntegrationTests.csproj
+git add tests/IntegrationTests/MigrationSeedingTests.cs
+git commit -m "test: add migration seeding tests using TestContainers"
+```
+
+---
+
+### Task 8: Create `DatabaseRoleEndpoints` — write failing tests first
 
 **Files:**
 - Create: `tests/IntegrationTests/DatabaseRoleEndpointTests.cs`
@@ -768,6 +986,8 @@ git commit -m "test: add failing DatabaseRoleEndpoint integration tests"
 **Files:**
 - Create: `src/SluiceBase.Api/Endpoints/DatabaseRoleEndpoints.cs`
 - Modify: `src/SluiceBase.Api/Endpoints/EndpointMapper.cs`
+
+> **Note on `/api/admin` group:** `PermissionEndpoints.cs` already calls `app.MapGroup("/api/admin")`. Calling it again in `DatabaseRoleEndpoints` is valid — ASP.NET Minimal APIs creates a new independent `RouteGroupBuilder` per call. The routes in each group use distinct paths (`/user`, `/user/{userId}/permission` in `PermissionEndpoints`; `/server`, `/database/{id}/role`, `/user/{userId}/role` in `DatabaseRoleEndpoints`) and distinct `WithName(...)` values, so there are no conflicts.
 
 - [ ] **Step 1: Create the endpoint file**
 
@@ -1636,7 +1856,7 @@ Find the test that asserts 7 permissions and update it to expect only `permissio
 
 - [ ] **Step 2: Update PermissionTestHelper.cs**
 
-The `RevokeAllPermissionsAsync` helper iterates over `Permissions.All`. After the change it only covers the 2 global permissions, which is correct. No change needed.
+The `RevokeAllPermissionsAsync` helper iterates over `Permissions.Global`. After the change it only covers the 2 global permissions, which is correct. No change needed.
 
 However, add a helper to revoke all database roles for a user (useful for cleanup in tests):
 
