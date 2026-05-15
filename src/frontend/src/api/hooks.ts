@@ -362,10 +362,27 @@ export type UpdateRequestListResponse =
 export type UpdateRequestDetail =
   paths["/api/update/{id}"]["get"]["responses"][200]["content"]["application/json"];
 
-export function useUpdateRequests() {
+export interface UpdateRequestFilters {
+  from?: string;
+  to?: string;
+  databaseId?: string;
+  status?: string;
+}
+
+export function useUpdateRequests(filters: UpdateRequestFilters) {
   return useQuery({
-    queryKey: ["update"] as const,
-    queryFn: () => apiRequest<void, UpdateRequestListResponse>("/api/update"),
+    queryKey: ["update", "list", filters] as const,
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (filters.from) params.set("from", filters.from);
+      if (filters.to) params.set("to", filters.to);
+      if (filters.databaseId) params.set("databaseId", filters.databaseId);
+      if (filters.status) params.set("status", filters.status);
+      const qs = params.toString();
+      return apiRequest<void, UpdateRequestListResponse>(
+        qs ? `/api/update?${qs}` : "/api/update",
+      );
+    },
   });
 }
 

@@ -73,12 +73,43 @@ const fakeDetail = {
 };
 
 describe("useUpdateRequests", () => {
-  it("fetches GET /api/update", async () => {
+  it("fetches GET /api/update with no filters", async () => {
     vi.mocked(apiRequest).mockResolvedValue(fakeList);
-    const { result } = renderHook(() => useUpdateRequests(), { wrapper });
+    const { result } = renderHook(() => useUpdateRequests({}), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(apiRequest).toHaveBeenCalledWith("/api/update");
     expect(result.current.data?.requests).toHaveLength(1);
+  });
+
+  it("appends status filter to the URL", async () => {
+    vi.mocked(apiRequest).mockResolvedValue(fakeList);
+    const { result } = renderHook(() => useUpdateRequests({ status: "Pending" }), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiRequest).toHaveBeenCalledWith("/api/update?status=Pending");
+  });
+
+  it("appends multiple filters to the URL", async () => {
+    vi.mocked(apiRequest).mockResolvedValue(fakeList);
+    const { result } = renderHook(
+      () => useUpdateRequests({ status: "Pending", databaseId: "db-123" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const calledUrl = vi.mocked(apiRequest).mock.calls[0][0];
+    expect(calledUrl).toContain("status=Pending");
+    expect(calledUrl).toContain("databaseId=db-123");
+  });
+
+  it("omits undefined filter values from the URL", async () => {
+    vi.mocked(apiRequest).mockResolvedValue(fakeList);
+    const { result } = renderHook(
+      () => useUpdateRequests({ status: undefined, from: "2026-01-01" }),
+      { wrapper },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const calledUrl = vi.mocked(apiRequest).mock.calls[0][0];
+    expect(calledUrl).toContain("from=2026-01-01");
+    expect(calledUrl).not.toContain("status=");
   });
 });
 
