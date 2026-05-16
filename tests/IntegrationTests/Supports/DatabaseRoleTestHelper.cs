@@ -4,7 +4,7 @@ namespace IntegrationTests.Supports;
 
 internal static class DatabaseRoleTestHelper
 {
-    public static async Task<string> AssignByDatabaseAsync(
+    public static async Task AssignByDatabaseAsync(
         AuthenticatedSession adminSession,
         string userId,
         string permission,
@@ -18,8 +18,6 @@ internal static class DatabaseRoleTestHelper
         req.Content = JsonContent.Create(new { userId, permission });
         var resp = await adminSession.Client.SendAsync(req, ct);
         resp.EnsureSuccessStatusCode();
-        var body = await resp.Content.ReadFromJsonAsync<RoleResponse>(ct);
-        return body!.Id;
     }
 
     public static async Task RemoveRoleAsync(
@@ -37,5 +35,4 @@ internal static class DatabaseRoleTestHelper
         resp.EnsureSuccessStatusCode();
     }
 
-    private sealed record RoleResponse(string Id);
 }

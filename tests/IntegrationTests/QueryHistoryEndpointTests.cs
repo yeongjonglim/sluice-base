@@ -84,6 +84,10 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
         using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
         await bobSession.Client.GetAsync("/api/me", ct);
 
+        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var adminXsrf = await adminSession.FetchXsrfTokenAsync(ct);
+        await PermissionTestHelper.RevokeAllDatabaseRolesAsync(adminSession, "bob@example.com", adminXsrf, ct);
+
         var resp = await bobSession.Client.GetAsync("/api/query/history", ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
 
