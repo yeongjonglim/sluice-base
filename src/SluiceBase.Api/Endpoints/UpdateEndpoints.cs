@@ -23,11 +23,11 @@ internal static class UpdateEndpoints
             .WithName("SubmitUpdate");
 
         group.MapGet("/", List)
-            .RequireAuthorization(Permissions.UpdateAny)
+            .RequireAuthorization()
             .WithName("ListUpdates");
 
         group.MapGet("/{id}", Get)
-            .RequireAuthorization(Permissions.UpdateAny)
+            .RequireAuthorization()
             .WithName("GetUpdate");
 
         group.MapPost("/{id}/approve", Approve)

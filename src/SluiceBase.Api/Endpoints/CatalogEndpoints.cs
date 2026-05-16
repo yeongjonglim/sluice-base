@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Data;
-using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Servers;
 
 namespace SluiceBase.Api.Endpoints;
@@ -11,7 +10,7 @@ internal static class CatalogEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         var catalog = app.MapGroup("/api/catalog")
-            .RequireAuthorization(Permissions.CatalogRead);
+            .RequireAuthorization();
 
         catalog.MapGet("/server", ListServers).WithName("CatalogListServers");
     }
