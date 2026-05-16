@@ -41,12 +41,6 @@ public class QueryEndpointTests(SluiceBaseStackFactory factory)
             new { permission = Permissions.ServerManage });
         (await session.Client.SendAsync(grantServer, ct)).EnsureSuccessStatusCode();
 
-        using var grantQuery = MutationRequest(HttpMethod.Post,
-            $"/api/admin/user/{alice.Id}/permission",
-            xsrf,
-            new { permission = Permissions.QueryExecute });
-        (await session.Client.SendAsync(grantQuery, ct)).EnsureSuccessStatusCode();
-
         var blueConnStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
         var blueBuilder = new NpgsqlConnectionStringBuilder(blueConnStr!);
 
@@ -70,6 +64,10 @@ public class QueryEndpointTests(SluiceBaseStackFactory factory)
         var dbResp = await session.Client.SendAsync(dbReq, ct);
         dbResp.EnsureSuccessStatusCode();
         var database = (await dbResp.Content.ReadFromJsonAsync<DatabaseEndpoints.DatabaseResponse>(ct))!;
+
+        // Assign query:execute database role for alice on this database
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(
+            session, alice.Id, Permissions.QueryExecute, database.Id.ToString(), xsrf, ct);
 
         return (session, xsrf, database.Id);
     }
@@ -131,14 +129,6 @@ public class QueryEndpointTests(SluiceBaseStackFactory factory)
         using var _ = session;
         var xsrf = await session.FetchXsrfTokenAsync(ct);
 
-        var users = await session.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
-        var alice = users!.Users.Single(u => u.Email == "alice@example.com");
-        using var grant = MutationRequest(HttpMethod.Post,
-            $"/api/admin/user/{alice.Id}/permission",
-            xsrf,
-            new { permission = Permissions.QueryExecute });
-        (await session.Client.SendAsync(grant, ct)).EnsureSuccessStatusCode();
-
         using var req = MutationRequest(HttpMethod.Post,
             "/api/query",
             xsrf,
@@ -158,28 +148,21 @@ public class QueryEndpointTests(SluiceBaseStackFactory factory)
     }
 
     [Fact]
-    public async Task PostQuery_Returns403_ForBob()
+    public async Task PostQuery_Returns403_ForBobWithoutDatabaseRole()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var initialBobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
-        await initialBobSession.Client.GetAsync("/api/me", ct);
+        var (aliceSession, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _a = aliceSession;
 
-        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
-        var adminXsrf = await adminSession.FetchXsrfTokenAsync(ct);
-        await PermissionTestHelper.RevokePermissionAsync(
-            adminSession,
-            "bob@example.com",
-            Permissions.QueryExecute,
-            adminXsrf,
-            ct);
+        // Bob has no database role on the test database
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        var bobXsrf = await bobSession.FetchXsrfTokenAsync(ct);
 
-        using var session = await LoginHelper.SignInAsync("bob", "dev", ct);
-        var xsrf = await session.FetchXsrfTokenAsync(ct);
         using var req = MutationRequest(HttpMethod.Post,
             "/api/query",
-            xsrf,
-            new { databaseId = Guid.NewGuid().ToString(), sql = "SELECT 1" });
-        var resp = await session.Client.SendAsync(req, ct);
+            bobXsrf,
+            new { databaseId, sql = "SELECT 1" });
+        var resp = await bobSession.Client.SendAsync(req, ct);
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
