@@ -15,6 +15,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { IconDatabase, IconPlus, IconTrash, IconUser } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
+import type { AdminDatabaseItem } from "@/api/hooks";
 import {
   meQueryOptions,
   useAdminServers,
@@ -24,7 +25,6 @@ import {
   useRemoveDatabaseRole,
   useUserRoles,
   useUsers,
-  type AdminDatabaseItem,
 } from "@/api/hooks";
 
 const SCOPEABLE_PERMISSIONS = [
@@ -305,7 +305,7 @@ function UserRolePanel({
   databaseOptions,
 }: {
   user: { id: string; email?: string | null; name?: string | null };
-  databaseOptions: { value: string; label: string }[];
+  databaseOptions: Array<{ value: string; label: string }>;
 }) {
   const roles = useUserRoles(user.id);
   const remove = useRemoveDatabaseRole();
