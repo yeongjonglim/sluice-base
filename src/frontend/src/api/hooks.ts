@@ -496,6 +496,140 @@ export function useExecuteUpdate() {
   });
 }
 
+// ── Database role management ──────────────────────────────────────────────
+
+export type AdminServerListResponse =
+  paths["/api/admin/server"]["get"]["responses"][200]["content"]["application/json"];
+export type AdminServerItem = AdminServerListResponse["servers"][0];
+export type AdminDatabaseItem = AdminServerItem["databases"][0];
+export type DatabaseRoleListResponse =
+  paths["/api/admin/database/{databaseId}/role"]["get"]["responses"][200]["content"]["application/json"];
+export type UserRoleListResponse =
+  paths["/api/admin/user/{userId}/role"]["get"]["responses"][200]["content"]["application/json"];
+
+export function useAdminServers() {
+  return useQuery({
+    queryKey: ["admin", "server"] as const,
+    queryFn: () => apiRequest<void, AdminServerListResponse>("/api/admin/server"),
+  });
+}
+
+export function useDatabaseRoles(databaseId: string | null) {
+  return useQuery({
+    queryKey: ["admin", "database", databaseId, "role"] as const,
+    enabled: databaseId !== null,
+    queryFn: () =>
+      apiRequest<void, DatabaseRoleListResponse>(`/api/admin/database/${databaseId}/role`),
+  });
+}
+
+export function useUserRoles(userId: string | null) {
+  return useQuery({
+    queryKey: ["admin", "user", userId, "role"] as const,
+    enabled: userId !== null,
+    queryFn: () =>
+      apiRequest<void, UserRoleListResponse>(`/api/admin/user/${userId}/role`),
+  });
+}
+
+export function useAssignDatabaseRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      databaseId,
+      userId,
+      permission,
+    }: {
+      databaseId: string;
+      userId: string;
+      permission: string;
+    }) =>
+      apiRequest<
+        paths["/api/admin/database/{databaseId}/role"]["post"]["requestBody"]["content"]["application/json"],
+        void
+      >(`/api/admin/database/${databaseId}/role`, {
+        method: "POST",
+        body: { userId, permission },
+      }),
+    onSuccess: (_data, { databaseId, userId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "database", databaseId, "role"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "user", userId, "role"] });
+      notifications.show({ title: "Role assigned", message: "", color: "teal" });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Assign failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useAssignUserRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      userId,
+      databaseId,
+      permission,
+    }: {
+      userId: string;
+      databaseId: string;
+      permission: string;
+    }) =>
+      apiRequest<
+        paths["/api/admin/user/{userId}/role"]["post"]["requestBody"]["content"]["application/json"],
+        void
+      >(`/api/admin/user/${userId}/role`, {
+        method: "POST",
+        body: { databaseId, permission },
+      }),
+    onSuccess: (_data, { databaseId, userId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "database", databaseId, "role"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "user", userId, "role"] });
+      notifications.show({ title: "Role assigned", message: "", color: "teal" });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Assign failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useRemoveDatabaseRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      databaseId,
+      userId,
+      permission,
+    }: {
+      databaseId: string;
+      userId: string;
+      permission: string;
+    }) =>
+      apiRequest(`/api/admin/database/${databaseId}/role/${userId}/${permission}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, { databaseId, userId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "database", databaseId, "role"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "user", userId, "role"] });
+      notifications.show({ title: "Role removed", message: "", color: "teal" });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Remove failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
 // ── Query history ─────────────────────────────────────────────────────────
 
 export interface QueryHistoryItem {
