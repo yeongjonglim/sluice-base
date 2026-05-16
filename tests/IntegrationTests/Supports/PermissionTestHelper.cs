@@ -14,7 +14,7 @@ internal static class PermissionTestHelper
         var users = await adminSession.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
         var user = users!.Users.Single(u => u.Email == userEmail);
 
-        foreach (var permission in Permissions.All)
+        foreach (var permission in Permissions.Global)
         {
             using var req = MutationRequest(
                 HttpMethod.Delete,
