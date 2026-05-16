@@ -18,38 +18,18 @@ internal static class UpdateEndpoints
     {
         var group = app.MapGroup("/api/update").RequireAuthorization();
 
-        group.MapPost("/", Submit)
-            .RequireAuthorization(Permissions.UpdateSubmit)
-            .WithName("SubmitUpdate");
-
-        group.MapGet("/", List)
-            .RequireAuthorization()
-            .WithName("ListUpdates");
-
-        group.MapGet("/{id}", Get)
-            .RequireAuthorization()
-            .WithName("GetUpdate");
-
-        group.MapPost("/{id}/approve", Approve)
-            .RequireAuthorization(Permissions.UpdateApprove)
-            .WithName("ApproveUpdate");
-
-        group.MapPost("/{id}/reject", Reject)
-            .RequireAuthorization(Permissions.UpdateApprove)
-            .WithName("RejectUpdate");
-
-        group.MapPost("/{id}/cancel", Cancel)
-            .RequireAuthorization(Permissions.UpdateSubmit)
-            .WithName("CancelUpdate");
-
-        group.MapPost("/{id}/execute", Execute)
-            .RequireAuthorization(Permissions.UpdateExecute)
-            .WithName("ExecuteUpdate");
+        group.MapPost("/", Submit).WithName("SubmitUpdate");
+        group.MapGet("/", List).WithName("ListUpdates");
+        group.MapGet("/{id}", Get).WithName("GetUpdate");
+        group.MapPost("/{id}/approve", Approve).WithName("ApproveUpdate");
+        group.MapPost("/{id}/reject", Reject).WithName("RejectUpdate");
+        group.MapPost("/{id}/cancel", Cancel).WithName("CancelUpdate");
+        group.MapPost("/{id}/execute", Execute).WithName("ExecuteUpdate");
     }
 
     // ── submit ───────────────────────────────────────────────────────────────
 
-    private static async Task<Results<Created<UpdateRequestDetailResponse>, BadRequest<string>, NotFound, UnauthorizedHttpResult>> Submit(
+    private static async Task<Results<Created<UpdateRequestDetailResponse>, BadRequest<string>, NotFound, UnauthorizedHttpResult, ForbidHttpResult>> Submit(
         SubmitUpdateRequest req,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
@@ -69,6 +49,13 @@ internal static class UpdateEndpoints
         if (database is null)
         {
             return TypedResults.NotFound();
+        }
+
+        var hasSubmitRole = await db.UserDatabaseRoles.AnyAsync(
+            r => r.UserId == user.Id && r.Permission == Permissions.UpdateSubmit && r.DatabaseId == database.Id, ct);
+        if (!hasSubmitRole)
+        {
+            return TypedResults.Forbid();
         }
 
         if (database.IsDisabled)
@@ -102,8 +89,20 @@ internal static class UpdateEndpoints
         string? databaseId,
         string? status,
         AppDbContext db,
+        ICurrentUserAccessor currentUser,
         CancellationToken ct)
     {
+        var user = await currentUser.GetAsync(ct);
+
+        var allowedDatabaseIds = await db.UserDatabaseRoles
+            .Where(r => r.UserId == user!.Id &&
+                        (r.Permission == Permissions.UpdateSubmit ||
+                         r.Permission == Permissions.UpdateApprove ||
+                         r.Permission == Permissions.UpdateExecute))
+            .Select(r => r.DatabaseId)
+            .Distinct()
+            .ToListAsync(ct);
+
         DatabaseId? filterDb = databaseId is not null && Guid.TryParse(databaseId, out var dbGuid)
             ? DatabaseId.From(dbGuid)
             : null;
@@ -117,6 +116,7 @@ internal static class UpdateEndpoints
             .Include(r => r.Database)
             .Include(r => r.Submitter)
             .AsNoTracking()
+            .Where(r => r.DatabaseId != null && allowedDatabaseIds.Contains(r.DatabaseId.Value))
             .Where(r => @from == null || r.SubmittedAt >= @from)
             .Where(r => to == null || r.SubmittedAt <= to)
             .Where(r => filterDb == null || r.DatabaseId == filterDb)
@@ -143,12 +143,28 @@ internal static class UpdateEndpoints
     private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound>> Get(
         UpdateRequestId id,
         AppDbContext db,
+        ICurrentUserAccessor currentUser,
         CancellationToken ct)
     {
+        var user = await currentUser.GetAsync(ct);
+
         var request = await LoadDetail(db, id, ct);
         if (request is null)
         {
             return TypedResults.NotFound();
+        }
+
+        if (request.DatabaseId is not null)
+        {
+            var hasRole = await db.UserDatabaseRoles.AnyAsync(
+                r => r.UserId == user!.Id && r.DatabaseId == request.DatabaseId &&
+                     (r.Permission == Permissions.UpdateSubmit ||
+                      r.Permission == Permissions.UpdateApprove ||
+                      r.Permission == Permissions.UpdateExecute), ct);
+            if (!hasRole)
+            {
+                return TypedResults.NotFound();
+            }
         }
 
         return TypedResults.Ok(ToDetail(request));
@@ -156,7 +172,7 @@ internal static class UpdateEndpoints
 
     // ── approve ──────────────────────────────────────────────────────────────
 
-    private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound, Conflict<string>, UnauthorizedHttpResult>> Approve(
+    private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound, Conflict<string>, UnauthorizedHttpResult, ForbidHttpResult>> Approve(
         UpdateRequestId id,
         ReviewUpdateRequest req,
         AppDbContext db,
@@ -176,6 +192,13 @@ internal static class UpdateEndpoints
         {
             // Should not be possible
             return TypedResults.Unauthorized();
+        }
+
+        var hasApproveRole = await db.UserDatabaseRoles.AnyAsync(
+            r => r.UserId == user.Id && r.Permission == Permissions.UpdateApprove && r.DatabaseId == request.DatabaseId, ct);
+        if (!hasApproveRole)
+        {
+            return TypedResults.Forbid();
         }
 
         try
@@ -194,7 +217,7 @@ internal static class UpdateEndpoints
 
     // ── reject ───────────────────────────────────────────────────────────────
 
-    private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound, Conflict<string>, UnauthorizedHttpResult>> Reject(
+    private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound, Conflict<string>, UnauthorizedHttpResult, ForbidHttpResult>> Reject(
         UpdateRequestId id,
         ReviewUpdateRequest req,
         AppDbContext db,
@@ -216,6 +239,13 @@ internal static class UpdateEndpoints
             return TypedResults.Unauthorized();
         }
 
+        var hasApproveRole = await db.UserDatabaseRoles.AnyAsync(
+            r => r.UserId == user.Id && r.Permission == Permissions.UpdateApprove && r.DatabaseId == request.DatabaseId, ct);
+        if (!hasApproveRole)
+        {
+            return TypedResults.Forbid();
+        }
+
         try
         {
             request.Reject(new Actioned(user.Id, timeProvider.GetUtcNow()), req.Note);
@@ -232,7 +262,7 @@ internal static class UpdateEndpoints
 
     // ── cancel ───────────────────────────────────────────────────────────────
 
-    private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound, Conflict<string>, UnauthorizedHttpResult>> Cancel(
+    private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound, Conflict<string>, UnauthorizedHttpResult, ForbidHttpResult>> Cancel(
         UpdateRequestId id,
         CancelUpdateRequest req,
         AppDbContext db,
@@ -254,6 +284,13 @@ internal static class UpdateEndpoints
             return TypedResults.Unauthorized();
         }
 
+        var hasSubmitRole = await db.UserDatabaseRoles.AnyAsync(
+            r => r.UserId == user.Id && r.Permission == Permissions.UpdateSubmit && r.DatabaseId == request.DatabaseId, ct);
+        if (!hasSubmitRole)
+        {
+            return TypedResults.Forbid();
+        }
+
         try
         {
             request.Cancel(new Actioned(user.Id, timeProvider.GetUtcNow()), req.Note);
@@ -270,7 +307,7 @@ internal static class UpdateEndpoints
 
     // ── execute ──────────────────────────────────────────────────────────────
 
-    private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound, Conflict<string>, BadRequest<string>, UnauthorizedHttpResult>> Execute(
+    private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound, Conflict<string>, BadRequest<string>, UnauthorizedHttpResult, ForbidHttpResult>> Execute(
         UpdateRequestId id,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
@@ -313,6 +350,13 @@ internal static class UpdateEndpoints
         {
             // Should not be possible
             return TypedResults.Unauthorized();
+        }
+
+        var hasExecuteRole = await db.UserDatabaseRoles.AnyAsync(
+            r => r.UserId == user.Id && r.Permission == Permissions.UpdateExecute && r.DatabaseId == request.DatabaseId, ct);
+        if (!hasExecuteRole)
+        {
+            return TypedResults.Forbid();
         }
 
         var startedAt = timeProvider.GetUtcNow();
