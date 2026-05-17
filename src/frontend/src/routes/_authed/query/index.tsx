@@ -22,6 +22,7 @@ import {
   IconChevronRight,
   IconDatabase,
   IconDownload,
+  IconEraser,
   IconPlayerPlay,
   IconPlaylistAdd,
   IconTable,
@@ -83,7 +84,7 @@ function resizeHandleStyle(orientation: "horizontal" | "vertical"): React.CSSPro
   };
 }
 
-function QueryPage() {
+export function QueryPage() {
   const servers = useCatalogServer();
   const [selectedDatabaseId, setSelectedDatabaseId] = useState<string | null>(null);
   const schema = useSchema(selectedDatabaseId);
@@ -220,6 +221,15 @@ function QueryPage() {
                   disabled={!selectedDatabaseId || !editorContent.trim()}
                 >
                   Run
+                </Button>
+                <Button
+                  leftSection={<IconEraser size={14} />}
+                  size="sm"
+                  variant="default"
+                  onClick={() => setEditorContent("")}
+                  disabled={!editorContent.trim()}
+                >
+                  Clear
                 </Button>
                 {!selectedDatabaseId && (
                   <Text size="xs" c="dimmed">

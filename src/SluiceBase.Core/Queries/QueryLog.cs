@@ -32,7 +32,7 @@ public sealed class QueryLog
         Id = QueryLogId.FromNewVersion7Guid(),
         UserId = userId,
         DatabaseId = databaseId,
-        QueryText = queryText,
+        QueryText = queryText.Trim(),
         Status = status,
         ExecutedAt = executedAt,
         DurationMs = durationMs,
