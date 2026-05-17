@@ -80,7 +80,7 @@ describe("NewUpdateForm — pre-fill via props", () => {
     expect(screen.getByTestId("sql-editor")).toHaveValue(
       "UPDATE public.users SET active = false WHERE id = 42",
     );
-    expect(screen.getByPlaceholderText(/https:\/\/linear\.app/i)).toHaveValue("");
+    expect(screen.getByPlaceholderText(/https:\/\/example\.com/i)).toHaveValue("");
   });
 
   it("leaves all fields empty when no source", () => {
@@ -93,6 +93,6 @@ describe("NewUpdateForm — pre-fill via props", () => {
       { wrapper: Wrapper },
     );
     expect(screen.getByTestId("sql-editor")).toHaveValue("");
-    expect(screen.getByPlaceholderText(/https:\/\/linear\.app/i)).toHaveValue("");
+    expect(screen.getByPlaceholderText(/https:\/\/example\.com/i)).toHaveValue("");
   });
 });
