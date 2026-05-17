@@ -10,13 +10,16 @@ import {
   useComputedColorScheme,
 } from "@mantine/core";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
-import { meQueryOptions, useCatalogServer, useSubmitUpdate } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useSubmitUpdate, useUpdateRequest } from "@/api/hooks";
 
 export const Route = createFileRoute("/_authed/update/new")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    from: typeof search.from === "string" ? search.from : undefined,
+  }),
   beforeLoad: ({ context }) => {
     const me = context.queryClient.getQueryData(meQueryOptions.queryKey);
     if (!me?.permissions.includes("update:submit")) {
@@ -26,7 +29,15 @@ export const Route = createFileRoute("/_authed/update/new")({
   component: NewUpdatePage,
 });
 
-function NewUpdatePage() {
+export function NewUpdatePage({ searchFrom }: { searchFrom?: string } = {}) {
+  const from: string | undefined = (() => {
+    try {
+      return Route.useSearch().from;
+    } catch {
+      return searchFrom;
+    }
+  })();
+
   const navigate = useNavigate();
   const servers = useCatalogServer();
   const submit = useSubmitUpdate();
@@ -35,6 +46,17 @@ function NewUpdatePage() {
   const [databaseId, setDatabaseId] = useState<string | null>(null);
   const [sqlText, setSqlText] = useState("");
   const [reason, setReason] = useState("");
+
+  const source = useUpdateRequest(from ?? "");
+  const seeded = useRef(false);
+
+  useEffect(() => {
+    if (seeded.current || !source.data) return;
+    seeded.current = true;
+    setDatabaseId(source.data.databaseId ?? null);
+    setSqlText(source.data.sqlText);
+    setReason(source.data.reason);
+  }, [source.data]);
 
   const databaseOptions = (servers.data?.servers ?? []).flatMap((s) =>
     s.databases
