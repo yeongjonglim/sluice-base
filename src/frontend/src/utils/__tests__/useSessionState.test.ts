@@ -1,4 +1,4 @@
-import { renderHook, act } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useSessionState } from "@/utils/useSessionState";
 
@@ -34,7 +34,7 @@ describe("useSessionState", () => {
   });
 
   it("works with array values", () => {
-    const { result } = renderHook(() => useSessionState<string[]>("k", []));
+    const { result } = renderHook(() => useSessionState<Array<string>>("k", []));
     act(() => result.current[1](["a", "b"]));
     expect(JSON.parse(sessionStorage.getItem("k")!)).toEqual(["a", "b"]);
   });

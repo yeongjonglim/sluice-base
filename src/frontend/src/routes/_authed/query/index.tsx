@@ -28,7 +28,6 @@ import {
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import React, { useCallback, useEffect, useRef } from "react";
-import { useSessionState } from "@/utils/useSessionState";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
@@ -37,6 +36,7 @@ import { Prec } from "@codemirror/state";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
 import { exportToCsv } from "@/utils/csv.ts";
+import { useSessionState } from "@/utils/useSessionState";
 import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema } from "@/api/hooks";
 
 const noIndentKeymap = keymap.of([
@@ -107,7 +107,7 @@ function QueryPage() {
         prev.trimEnd() === "" ? snippet : `${prev.trimEnd()}\n\n${snippet}`,
       );
     },
-    [],
+    [setEditorContent],
   );
 
   const handleRun = useCallback(() => {
@@ -370,11 +370,11 @@ function SchemaSidebar({
   schema: ReturnType<typeof useSchema>;
   onTableClick: TableClickHandler;
 }) {
-  const [expandedSchemas, setExpandedSchemas] = useSessionState<string[]>(
+  const [expandedSchemas, setExpandedSchemas] = useSessionState<Array<string>>(
     "sluice:query:expandedSchemas",
     [],
   );
-  const [expandedTables, setExpandedTables] = useSessionState<string[]>(
+  const [expandedTables, setExpandedTables] = useSessionState<Array<string>>(
     "sluice:query:expandedTables",
     [],
   );

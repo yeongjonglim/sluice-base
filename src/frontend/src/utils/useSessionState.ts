@@ -1,4 +1,5 @@
-import { useState, useEffect, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useState } from "react";
+import type { Dispatch, SetStateAction } from "react";
 
 export function useSessionState<T>(
   key: string,
