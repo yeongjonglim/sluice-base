@@ -390,6 +390,7 @@ export function useUpdateRequest(id: string) {
   return useQuery({
     queryKey: ["update", id] as const,
     queryFn: () => apiRequest<void, UpdateRequestDetail>(`/api/update/${id}`),
+    enabled: !!id,
   });
 }
 
@@ -397,11 +398,11 @@ export function useUpdateRequest(id: string) {
 export function useSubmitUpdate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ databaseId, sqlText, reason }: { databaseId: string; sqlText: string; reason: string }) =>
+    mutationFn: ({ databaseId, sqlText, reason, sourceRequestId }: { databaseId: string; sqlText: string; reason: string; sourceRequestId?: string }) =>
       apiRequest<
         paths["/api/update"]["post"]["requestBody"]["content"]["application/json"],
         paths["/api/update"]["post"]["responses"][201]["content"]["application/json"]
-      >("/api/update", { method: "POST", body: { databaseId, sqlText, reason } }),
+      >("/api/update", { method: "POST", body: { databaseId, sqlText, reason, sourceRequestId } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["update"] }),
   });
 }

@@ -16,7 +16,7 @@ import {
 import { IconBan, IconCheck, IconPlayerPlay, IconSend, IconX } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import React, { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
@@ -52,9 +52,10 @@ const STATUS_COLOR: Record<string, string> = {
   Executed: "teal",
 };
 
-function UpdateDetailPage() {
+export function UpdateDetailPage() {
   const { id } = Route.useParams();
   const meData = Route.useRouteContext().queryClient.getQueryData(meQueryOptions.queryKey);
+  const navigate = useNavigate();
   const request = useUpdateRequest(id);
   const approve = useApproveUpdate();
   const reject = useRejectUpdate();
@@ -161,6 +162,21 @@ function UpdateDetailPage() {
           {r.status}
         </Badge>
       </Group>
+
+      {/* Recreated from */}
+      {r.sourceRequestId && (
+        <Text size="sm" c="dimmed">
+          Recreated from{" "}
+          <Text
+            component="a"
+            href={`/update/${r.sourceRequestId}`}
+            size="sm"
+            c="blue"
+          >
+            {`/update/${r.sourceRequestId}`}
+          </Text>
+        </Text>
+      )}
 
       {/* SQL */}
       <Box
@@ -306,6 +322,14 @@ function UpdateDetailPage() {
         {r.status === "Approved" && canExecute && (
           <Button color="teal" onClick={handleExecute} loading={execute.isPending}>
             Execute
+          </Button>
+        )}
+        {canSubmit && (
+          <Button
+            variant="light"
+            onClick={() => navigate({ to: "/update/new", search: { from: id } })}
+          >
+            Recreate
           </Button>
         )}
       </Group>

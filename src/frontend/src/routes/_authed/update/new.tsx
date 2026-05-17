@@ -3,6 +3,7 @@ import {
   Button,
   Group,
   Select,
+  Skeleton,
   Stack,
   Text,
   Textarea,
@@ -14,9 +15,12 @@ import { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
-import { meQueryOptions, useCatalogServer, useSubmitUpdate } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useSubmitUpdate, useUpdateRequest } from "@/api/hooks";
 
 export const Route = createFileRoute("/_authed/update/new")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    from: typeof search.from === "string" ? search.from : undefined,
+  }),
   beforeLoad: ({ context }) => {
     const me = context.queryClient.getQueryData(meQueryOptions.queryKey);
     if (!me?.permissions.includes("update:submit")) {
@@ -26,14 +30,43 @@ export const Route = createFileRoute("/_authed/update/new")({
   component: NewUpdatePage,
 });
 
-function NewUpdatePage() {
+export function NewUpdatePage() {
+  const { from } = Route.useSearch();
+  const source = useUpdateRequest(from ?? "");
+
+  if (from && source.isPending) {
+    return (
+      <Stack gap="md">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} h={60} radius="sm" />
+        ))}
+      </Stack>
+    );
+  }
+
+  return (
+    <NewUpdateForm
+      initialDatabaseId={source.data?.databaseId ?? null}
+      initialSqlText={source.data?.sqlText ?? ""}
+      sourceRequestId={from}
+    />
+  );
+}
+
+interface NewUpdateFormProps {
+  initialDatabaseId: string | null;
+  initialSqlText: string;
+  sourceRequestId?: string;
+}
+
+export function NewUpdateForm({ initialDatabaseId, initialSqlText, sourceRequestId }: NewUpdateFormProps) {
   const navigate = useNavigate();
   const servers = useCatalogServer();
   const submit = useSubmitUpdate();
   const computedColorScheme = useComputedColorScheme();
 
-  const [databaseId, setDatabaseId] = useState<string | null>(null);
-  const [sqlText, setSqlText] = useState("");
+  const [databaseId, setDatabaseId] = useState<string | null>(initialDatabaseId);
+  const [sqlText, setSqlText] = useState(initialSqlText);
   const [reason, setReason] = useState("");
 
   const databaseOptions = (servers.data?.servers ?? []).flatMap((s) =>
@@ -47,7 +80,7 @@ function NewUpdatePage() {
   function handleSubmit() {
     if (!canSubmit) return;
     submit.mutate(
-      { databaseId, sqlText, reason },
+      { databaseId, sqlText, reason, sourceRequestId },
       {
         onSuccess: (data) => {
           void navigate({ to: "/update/$id", params: { id: data.id } });
@@ -101,7 +134,7 @@ function NewUpdatePage() {
       <Textarea
         label="Reason"
         description="Describe why this change is needed. A ticket link is fine."
-        placeholder="e.g. https://example.com/ticket/... — fixing bad email for user X"
+        placeholder="e.g. https://example.com/ticket/123 — fixing bad email for user X"
         required
         minRows={3}
         value={reason}

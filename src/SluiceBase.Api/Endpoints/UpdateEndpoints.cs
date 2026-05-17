@@ -72,7 +72,8 @@ internal static class UpdateEndpoints
             database.Id,
             req.SqlText,
             req.Reason,
-            new Actioned(user.Id, timeProvider.GetUtcNow()));
+            new Actioned(user.Id, timeProvider.GetUtcNow()),
+            req.SourceRequestId);
 
         db.UpdateRequests.Add(request);
         await db.SaveChangesAsync(ct);
@@ -448,11 +449,12 @@ internal static class UpdateEndpoints
             r.ExecSuccess,
             r.ExecDurationMs,
             r.ExecAffectedRows,
-            r.ExecError);
+            r.ExecError,
+            r.SourceRequestId);
 
     // ── request / response records ────────────────────────────────────────────
 
-    public sealed record SubmitUpdateRequest(DatabaseId DatabaseId, string SqlText, string Reason);
+    public sealed record SubmitUpdateRequest(DatabaseId DatabaseId, string SqlText, string Reason, UpdateRequestId? SourceRequestId = null);
 
     public sealed record ReviewUpdateRequest(string Note);
 
@@ -493,5 +495,6 @@ internal static class UpdateEndpoints
         bool? ExecSuccess,
         int? ExecDurationMs,
         int? ExecAffectedRows,
-        string? ExecError);
+        string? ExecError,
+        UpdateRequestId? SourceRequestId);
 }
