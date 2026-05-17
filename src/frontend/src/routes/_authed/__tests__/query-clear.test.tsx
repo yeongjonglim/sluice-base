@@ -1,7 +1,8 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, fireEvent } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import React from "react";
+import { QueryPage } from "@/routes/_authed/query/index.tsx";
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (opts: unknown) => opts,
@@ -39,8 +40,6 @@ vi.mock("@/api/hooks", () => ({
   useExecuteQuery: () => ({ mutate: vi.fn(), isPending: false, isError: false, data: null }),
 }));
 
-import { QueryPage } from "@/routes/_authed/query/index.tsx";
-
 afterEach(cleanup);
 
 beforeAll(() => {
@@ -70,6 +69,6 @@ describe("QueryPage — Clear button", () => {
     render(React.createElement(QueryPage), { wrapper: Wrapper });
     fireEvent.change(screen.getByTestId("editor"), { target: { value: "SELECT 1" } });
     fireEvent.click(screen.getByRole("button", { name: /clear/i }));
-    expect((screen.getByTestId("editor") as HTMLTextAreaElement).value).toBe("");
+    expect(screen.getByTestId<HTMLTextAreaElement>("editor").value).toBe("");
   });
 });
