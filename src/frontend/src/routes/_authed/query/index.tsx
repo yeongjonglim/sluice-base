@@ -27,7 +27,7 @@ import {
   IconTable,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
@@ -36,6 +36,7 @@ import { Prec } from "@codemirror/state";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
 import { exportToCsv } from "@/utils/csv.ts";
+import { useSessionState } from "@/utils/useSessionState";
 import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema } from "@/api/hooks";
 
 const noIndentKeymap = keymap.of([
@@ -84,9 +85,12 @@ function resizeHandleStyle(orientation: "horizontal" | "vertical"): React.CSSPro
 
 function QueryPage() {
   const servers = useCatalogServer();
-  const [selectedDatabaseId, setSelectedDatabaseId] = useState<string | null>(null);
+  const [selectedDatabaseId, setSelectedDatabaseId] = useSessionState<string | null>(
+    "sluice:query:db",
+    null,
+  );
   const schema = useSchema(selectedDatabaseId);
-  const [editorContent, setEditorContent] = useState("");
+  const [editorContent, setEditorContent] = useSessionState("sluice:query:editor", "");
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const executeQuery = useExecuteQuery();
   const computedColorScheme = useComputedColorScheme();
@@ -103,7 +107,7 @@ function QueryPage() {
         prev.trimEnd() === "" ? snippet : `${prev.trimEnd()}\n\n${snippet}`,
       );
     },
-    [],
+    [setEditorContent],
   );
 
   const handleRun = useCallback(() => {
@@ -366,8 +370,14 @@ function SchemaSidebar({
   schema: ReturnType<typeof useSchema>;
   onTableClick: TableClickHandler;
 }) {
-  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set());
-  const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
+  const [expandedSchemas, setExpandedSchemas] = useSessionState<Array<string>>(
+    "sluice:query:expandedSchemas",
+    [],
+  );
+  const [expandedTables, setExpandedTables] = useSessionState<Array<string>>(
+    "sluice:query:expandedTables",
+    [],
+  );
 
   if (schema.isLoading) {
     return (
@@ -396,27 +406,21 @@ function SchemaSidebar({
   }
 
   function toggleSchema(name: string) {
-    setExpandedSchemas((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name);
-      else next.add(name);
-      return next;
-    });
+    setExpandedSchemas((prev) =>
+      prev.includes(name) ? prev.filter((s) => s !== name) : [...prev, name],
+    );
   }
 
   function toggleTable(key: string) {
-    setExpandedTables((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    setExpandedTables((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    );
   }
 
   return (
     <Stack gap={0}>
       {schema.data.schemas.map((s) => {
-        const schemaExpanded = expandedSchemas.has(s.name);
+        const schemaExpanded = expandedSchemas.includes(s.name);
         return (
           <div key={s.name}>
             <NavLink
@@ -431,7 +435,7 @@ function SchemaSidebar({
             {schemaExpanded &&
               s.tables.map((t) => {
                 const tableKey = `${s.name}.${t.name}`;
-                const tableExpanded = expandedTables.has(tableKey);
+                const tableExpanded = expandedTables.includes(tableKey);
                 return (
                   <div key={tableKey}>
                     <Group gap="xs" justify="space-between" wrap="nowrap">
