@@ -25,7 +25,7 @@ public class CatalogEndpointTests(SluiceBaseStackFactory factory)
         return req;
     }
 
-    private async Task<(AuthenticatedSession session, string xsrf)> AdminSessionWithServerAsync(CancellationToken ct)
+    private async Task<(AuthenticatedSession Session, string Xsrf, string DatabaseId)> AdminSessionWithDatabaseAsync(CancellationToken ct)
     {
         var session = await LoginHelper.SignInAsync("alice", "dev", ct);
         var xsrf = await session.FetchXsrfTokenAsync(ct);
@@ -44,31 +44,39 @@ public class CatalogEndpointTests(SluiceBaseStackFactory factory)
         var serverName = $"cat-{Guid.NewGuid():N}"[..24];
         using var sReq = MutationRequest(HttpMethod.Post, "/api/server", xsrf,
             new ServerEndpoints.CreateServerRequest(serverName, "postgres", blueBuilder.Host!, blueBuilder.Port));
-        (await session.Client.SendAsync(sReq, ct)).EnsureSuccessStatusCode();
+        var sResp = await session.Client.SendAsync(sReq, ct);
+        sResp.EnsureSuccessStatusCode();
+        var server = (await sResp.Content.ReadFromJsonAsync<ServerBody>(ct))!;
 
-        return (session, xsrf);
-    }
+        using var cReq = MutationRequest(HttpMethod.Post, $"/api/server/{server.Id}/credential", xsrf,
+            new { label = "read", username = blueBuilder.Username, password = blueBuilder.Password });
+        var cResp = await session.Client.SendAsync(cReq, ct);
+        cResp.EnsureSuccessStatusCode();
+        var cred = (await cResp.Content.ReadFromJsonAsync<CredentialBody>(ct))!;
 
-    private async Task GrantAsync(AuthenticatedSession session, string xsrf, string email, string permission, CancellationToken ct)
-    {
-        var users = await session.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
-        var user = users!.Users.Single(u => u.Email == email);
-        using var req = MutationRequest(HttpMethod.Post,
-            $"/api/admin/user/{user.Id}/permission", xsrf,
-            new { permission });
-        (await session.Client.SendAsync(req, ct)).EnsureSuccessStatusCode();
+        using var dbReq = MutationRequest(HttpMethod.Post, $"/api/server/{server.Id}/database", xsrf,
+            new { displayName = "cat-db", databaseName = blueBuilder.Database ?? "postgres", readCredentialId = cred.Id });
+        var dbResp = await session.Client.SendAsync(dbReq, ct);
+        dbResp.EnsureSuccessStatusCode();
+        var db = (await dbResp.Content.ReadFromJsonAsync<DatabaseBody>(ct))!;
+
+        return (session, xsrf, db.Id);
     }
 
     [Fact]
     public async Task GetCatalog_Returns200_ForQueryExecuteOnly()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (adminSession, adminXsrf) = await AdminSessionWithServerAsync(ct);
+        var (adminSession, adminXsrf, databaseId) = await AdminSessionWithDatabaseAsync(ct);
         using var admin = adminSession;
 
         using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await bobSession.Client.GetAsync("/api/me", ct); // ensure bob's user row exists
 
-        await GrantAsync(admin, adminXsrf, "bob@example.com", Permissions.QueryExecute, ct);
+        var users = await admin.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var bob = users!.Users.Single(u => u.Email == "bob@example.com");
+
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(admin, bob.Id, Permissions.QueryExecute, databaseId, adminXsrf, ct);
 
         var resp = await bobSession.Client.GetAsync("/api/catalog/server", ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
@@ -82,11 +90,16 @@ public class CatalogEndpointTests(SluiceBaseStackFactory factory)
     public async Task GetCatalog_Returns200_ForUpdateSubmitOnly()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (adminSession2, adminXsrf) = await AdminSessionWithServerAsync(ct);
-        using var admin2 = adminSession2;
+        var (adminSession, adminXsrf, databaseId) = await AdminSessionWithDatabaseAsync(ct);
+        using var admin = adminSession;
 
         using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
-        await GrantAsync(admin2, adminXsrf, "bob@example.com", Permissions.UpdateSubmit, ct);
+        await bobSession.Client.GetAsync("/api/me", ct);
+
+        var users = await admin.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var bob = users!.Users.Single(u => u.Email == "bob@example.com");
+
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(admin, bob.Id, Permissions.UpdateSubmit, databaseId, adminXsrf, ct);
 
         var resp = await bobSession.Client.GetAsync("/api/catalog/server", ct);
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
@@ -96,7 +109,7 @@ public class CatalogEndpointTests(SluiceBaseStackFactory factory)
     public async Task GetCatalog_Returns200_ForServerManage()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, _) = await AdminSessionWithServerAsync(ct);
+        var (session, _, _) = await AdminSessionWithDatabaseAsync(ct);
         using var _ = session;
 
         var resp = await session.Client.GetAsync("/api/catalog/server", ct);
@@ -112,27 +125,29 @@ public class CatalogEndpointTests(SluiceBaseStackFactory factory)
     }
 
     [Fact]
-    public async Task GetCatalog_Returns403_ForNoRelevantPermission()
+    public async Task GetCatalog_ReturnsEmptyList_ForNoRoles()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
-        var adminXsrf = await adminSession.FetchXsrfTokenAsync(ct);
-
         using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
-        await PermissionTestHelper.RevokePermissionAsync(adminSession, "bob@example.com", Permissions.QueryExecute, adminXsrf, ct);
-        await PermissionTestHelper.RevokePermissionAsync(adminSession, "bob@example.com", Permissions.UpdateSubmit, adminXsrf, ct);
-
         await bobSession.Client.GetAsync("/api/me", ct);
 
+        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var adminXsrf = await adminSession.FetchXsrfTokenAsync(ct);
+        await PermissionTestHelper.RevokeAllDatabaseRolesAsync(adminSession, "bob@example.com", adminXsrf, ct);
+
         var resp = await bobSession.Client.GetAsync("/api/catalog/server", ct);
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var body = await resp.Content.ReadFromJsonAsync<CatalogEndpoints.CatalogServersResponse>(ct);
+        Assert.NotNull(body);
+        Assert.Empty(body.Servers);
     }
 
     [Fact]
     public async Task GetCatalog_ExcludesDisabledServers()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, xsrf) = await AdminSessionWithServerAsync(ct);
+        var (session, xsrf, _) = await AdminSessionWithDatabaseAsync(ct);
         using var _ = session;
 
         var list = await session.Client.GetFromJsonAsync<ServerEndpoints.ListServersResponse>("/api/server", ct);
@@ -149,10 +164,10 @@ public class CatalogEndpointTests(SluiceBaseStackFactory factory)
     public async Task GetCatalog_ResponseDoesNotContainSensitiveFields()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session2, _) = await AdminSessionWithServerAsync(ct);
-        using var _s = session2;
+        var (session, _, _) = await AdminSessionWithDatabaseAsync(ct);
+        using var _ = session;
 
-        var raw = await session2.Client.GetStringAsync("/api/catalog/server", ct);
+        var raw = await session.Client.GetStringAsync("/api/catalog/server", ct);
         Assert.DoesNotContain("\"host\"", raw);
         Assert.DoesNotContain("\"port\"", raw);
         Assert.DoesNotContain("\"credentials\"", raw);
@@ -161,4 +176,7 @@ public class CatalogEndpointTests(SluiceBaseStackFactory factory)
 
     private sealed record ListUserBody(UserRow[] Users);
     private sealed record UserRow(string Id, string Email);
+    private sealed record ServerBody(string Id, string Name);
+    private sealed record CredentialBody(string Id, string Label);
+    private sealed record DatabaseBody(string Id, string DisplayName);
 }

@@ -510,3 +510,5 @@ coverage
 playwright-report/
 blob-report/
 playwright/.cache/
+.playwright-mcp/
+screenshots/

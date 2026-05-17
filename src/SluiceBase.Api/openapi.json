@@ -133,6 +133,26 @@
         }
       }
     },
+    "/api/catalog/server": {
+      "get": {
+        "tags": [
+          "CatalogEndpoints"
+        ],
+        "operationId": "CatalogListServers",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogServersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/schema/{databaseId}": {
       "get": {
         "tags": [
@@ -381,22 +401,215 @@
         }
       }
     },
-    "/api/catalog/server": {
+    "/api/admin/server": {
       "get": {
         "tags": [
-          "CatalogEndpoints"
+          "DatabaseRoleEndpoints"
         ],
-        "operationId": "CatalogListServers",
+        "operationId": "AdminListServers",
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CatalogServersResponse"
+                  "$ref": "#/components/schemas/AdminServerListResponse"
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/api/admin/database/{databaseId}/role": {
+      "get": {
+        "tags": [
+          "DatabaseRoleEndpoints"
+        ],
+        "operationId": "ListDatabaseRoles",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseRoleListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DatabaseRoleEndpoints"
+        ],
+        "operationId": "AssignDatabaseRole",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignDatabaseRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK"
+          },
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/api/admin/database/{databaseId}/role/{userId}/{permission}": {
+      "delete": {
+        "tags": [
+          "DatabaseRoleEndpoints"
+        ],
+        "operationId": "RemoveDatabaseRole",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "permission",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/admin/user/{userId}/role": {
+      "get": {
+        "tags": [
+          "DatabaseRoleEndpoints"
+        ],
+        "operationId": "ListUserRoles",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserRoleListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "DatabaseRoleEndpoints"
+        ],
+        "operationId": "AssignUserRole",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignUserRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK"
+          },
+          "201": {
+            "description": "Created"
           }
         }
       }
@@ -1261,6 +1474,65 @@
           }
         }
       },
+      "AdminDatabaseItem": {
+        "required": [
+          "id",
+          "displayName",
+          "isDisabled"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DatabaseId"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "isDisabled": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AdminServerItem": {
+        "required": [
+          "id",
+          "name",
+          "isDisabled",
+          "databases"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ServerId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "isDisabled": {
+            "type": "boolean"
+          },
+          "databases": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminDatabaseItem"
+            }
+          }
+        }
+      },
+      "AdminServerListResponse": {
+        "required": [
+          "servers"
+        ],
+        "type": "object",
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminServerItem"
+            }
+          }
+        }
+      },
       "AntiforgeryTokenResponse": {
         "required": [
           "headerName"
@@ -1272,6 +1544,36 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "AssignDatabaseRoleRequest": {
+        "required": [
+          "userId",
+          "permission"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "permission": {
+            "type": "string"
+          }
+        }
+      },
+      "AssignUserRoleRequest": {
+        "required": [
+          "databaseId",
+          "permission"
+        ],
+        "type": "object",
+        "properties": {
+          "databaseId": {
+            "$ref": "#/components/schemas/DatabaseId"
+          },
+          "permission": {
+            "type": "string"
           }
         }
       },
@@ -1521,6 +1823,69 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DatabaseRoleItem": {
+        "required": [
+          "id",
+          "userId",
+          "userEmail",
+          "userName",
+          "permission",
+          "grantedAt",
+          "grantedById"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/UserDatabaseRoleId"
+          },
+          "userId": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "userEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "userName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permission": {
+            "type": "string"
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "grantedById": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          }
+        }
+      },
+      "DatabaseRoleListResponse": {
+        "required": [
+          "roles"
+        ],
+        "type": "object",
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatabaseRoleItem"
+            }
           }
         }
       },
@@ -2371,9 +2736,59 @@
           }
         }
       },
+      "UserDatabaseRoleId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "UserId": {
         "type": "string",
         "format": "uuid"
+      },
+      "UserRoleItem": {
+        "required": [
+          "id",
+          "databaseId",
+          "databaseDisplayName",
+          "serverName",
+          "permission",
+          "grantedAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/UserDatabaseRoleId"
+          },
+          "databaseId": {
+            "$ref": "#/components/schemas/DatabaseId"
+          },
+          "databaseDisplayName": {
+            "type": "string"
+          },
+          "serverName": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "UserRoleListResponse": {
+        "required": [
+          "roles"
+        ],
+        "type": "object",
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserRoleItem"
+            }
+          }
+        }
       },
       "UserSummaryResponse": {
         "required": [
@@ -2422,6 +2837,9 @@
       "name": "SluiceBase.Api"
     },
     {
+      "name": "CatalogEndpoints"
+    },
+    {
       "name": "SchemaEndpoints"
     },
     {
@@ -2431,7 +2849,7 @@
       "name": "PermissionEndpoints"
     },
     {
-      "name": "CatalogEndpoints"
+      "name": "DatabaseRoleEndpoints"
     },
     {
       "name": "ServerEndpoints"

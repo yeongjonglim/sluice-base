@@ -116,6 +116,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/catalog/server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["CatalogListServers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/schema/{databaseId}": {
         parameters: {
             query?: never;
@@ -212,16 +228,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/catalog/server": {
+    "/api/admin/server": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get: operations["CatalogListServers"];
+        get: operations["AdminListServers"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/database/{databaseId}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListDatabaseRoles"];
+        put?: never;
+        post: operations["AssignDatabaseRole"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/database/{databaseId}/role/{userId}/{permission}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["RemoveDatabaseRole"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/user/{userId}/role": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListUserRoles"];
+        put?: never;
+        post: operations["AssignUserRole"];
         delete?: never;
         options?: never;
         head?: never;
@@ -500,8 +564,30 @@ export interface components {
             /** Format: uuid */
             writeCredentialId?: null | string;
         };
+        AdminDatabaseItem: {
+            id: components["schemas"]["DatabaseId"];
+            displayName: string;
+            isDisabled: boolean;
+        };
+        AdminServerItem: {
+            id: components["schemas"]["ServerId"];
+            name: string;
+            isDisabled: boolean;
+            databases: components["schemas"]["AdminDatabaseItem"][];
+        };
+        AdminServerListResponse: {
+            servers: components["schemas"]["AdminServerItem"][];
+        };
         AntiforgeryTokenResponse: {
             headerName: null | string;
+        };
+        AssignDatabaseRoleRequest: {
+            userId: components["schemas"]["UserId"];
+            permission: string;
+        };
+        AssignUserRoleRequest: {
+            databaseId: components["schemas"]["DatabaseId"];
+            permission: string;
         };
         BrandingResponse: {
             appName: string;
@@ -566,6 +652,19 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        DatabaseRoleItem: {
+            id: components["schemas"]["UserDatabaseRoleId"];
+            userId: components["schemas"]["UserId"];
+            userEmail: null | string;
+            userName: null | string;
+            permission: string;
+            /** Format: date-time */
+            grantedAt: string;
+            grantedById: null | components["schemas"]["UserId"];
+        };
+        DatabaseRoleListResponse: {
+            roles: components["schemas"]["DatabaseRoleItem"][];
         };
         GrantPermissionRequest: {
             permission: string;
@@ -746,7 +845,21 @@ export interface components {
             execSuccess: null | boolean;
         };
         /** Format: uuid */
+        UserDatabaseRoleId: string;
+        /** Format: uuid */
         UserId: string;
+        UserRoleItem: {
+            id: components["schemas"]["UserDatabaseRoleId"];
+            databaseId: components["schemas"]["DatabaseId"];
+            databaseDisplayName: string;
+            serverName: string;
+            permission: string;
+            /** Format: date-time */
+            grantedAt: string;
+        };
+        UserRoleListResponse: {
+            roles: components["schemas"]["UserRoleItem"][];
+        };
         UserSummaryResponse: {
             id: components["schemas"]["UserId"];
             email: null | string;
@@ -896,6 +1009,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PermissionCatalogResponse"];
+                };
+            };
+        };
+    };
+    CatalogListServers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogServersResponse"];
                 };
             };
         };
@@ -1100,7 +1233,7 @@ export interface operations {
             };
         };
     };
-    CatalogListServers: {
+    AdminListServers: {
         parameters: {
             query?: never;
             header?: never;
@@ -1115,8 +1248,168 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CatalogServersResponse"];
+                    "application/json": components["schemas"]["AdminServerListResponse"];
                 };
+            };
+        };
+    };
+    ListDatabaseRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                databaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseRoleListResponse"];
+                };
+            };
+        };
+    };
+    AssignDatabaseRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                databaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignDatabaseRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RemoveDatabaseRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                databaseId: string;
+                userId: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListUserRoles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRoleListResponse"];
+                };
+            };
+        };
+    };
+    AssignUserRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignUserRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

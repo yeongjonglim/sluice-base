@@ -3,7 +3,9 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
+using SluiceBase.Api.Data;
 using SluiceBase.Core.Users;
 
 namespace SluiceBase.Api.Endpoints;
@@ -36,7 +38,10 @@ internal static class AuthEndpoints
             .AllowAnonymous();
 
         app.MapGet("/api/me",
-                async Task<Results<UnauthorizedHttpResult, Ok<MeResponse>>> (ICurrentUserAccessor currentUser, CancellationToken ct) =>
+                async Task<Results<UnauthorizedHttpResult, Ok<MeResponse>>> (
+                    ICurrentUserAccessor currentUser,
+                    AppDbContext db,
+                    CancellationToken ct) =>
                 {
                     var user = await currentUser.GetAsync(ct);
                     if (user is null)
@@ -44,11 +49,23 @@ internal static class AuthEndpoints
                         return TypedResults.Unauthorized();
                     }
 
+                    var databaseRolePermissions = await db.UserDatabaseRoles
+                        .AsNoTracking()
+                        .Where(r => r.UserId == user.Id)
+                        .Select(r => r.Permission)
+                        .Distinct()
+                        .ToListAsync(ct);
+
+                    var allPermissions = user.Permissions.Select(p => p.Permission)
+                        .Concat(databaseRolePermissions)
+                        .Distinct()
+                        .ToArray();
+
                     return TypedResults.Ok(new MeResponse(
                         Id: user.Id,
                         Email: user.Email,
                         Name: user.Name,
-                        Permissions: [.. user.Permissions.Select(p => p.Permission)]));
+                        Permissions: allPermissions));
                 })
             .WithName("Me")
             .RequireAuthorization();

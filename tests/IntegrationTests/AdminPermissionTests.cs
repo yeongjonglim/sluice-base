@@ -83,13 +83,13 @@ public class AdminPermissionTests(SluiceBaseStackFactory factory)
         using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
         await bobSession.Client.GetAsync("/api/me", ct);
 
-        // Alice grants bob query:execute
+        // Alice grants bob server:manage
         using var aliceSession = await LoginHelper.SignInAsync("alice", "dev", ct);
         var xsrf = await GetXsrfAsync(aliceSession, ct);
         await PermissionTestHelper.RevokePermissionAsync(
             aliceSession,
             "bob@example.com",
-            Permissions.QueryExecute,
+            Permissions.ServerManage,
             xsrf,
             ct);
 
@@ -101,7 +101,7 @@ public class AdminPermissionTests(SluiceBaseStackFactory factory)
             HttpMethod.Post,
             $"/api/admin/user/{bob.Id}/permission",
             xsrf,
-            new { permission = Permissions.QueryExecute });
+            new { permission = Permissions.ServerManage });
         var grantResp = await aliceSession.Client.SendAsync(grantReq, ct);
 
         Assert.Equal(HttpStatusCode.Created, grantResp.StatusCode);
@@ -110,12 +110,12 @@ public class AdminPermissionTests(SluiceBaseStackFactory factory)
         using var bobSession2 = await LoginHelper.SignInAsync("bob", "dev", ct);
         var meResp = await bobSession2.Client.GetFromJsonAsync<MeBody>(
             "/api/me", ct);
-        Assert.Contains(Permissions.QueryExecute, meResp!.Permissions);
+        Assert.Contains(Permissions.ServerManage, meResp!.Permissions);
 
         // Revoke permission to clean up
         using var revokeReq = MutationRequest(
             HttpMethod.Delete,
-            $"/api/admin/user/{bob.Id}/permission/{Permissions.QueryExecute}",
+            $"/api/admin/user/{bob.Id}/permission/{Permissions.ServerManage}",
             xsrf);
         var revokeResp = await aliceSession.Client.SendAsync(revokeReq, ct);
         Assert.Equal(HttpStatusCode.NoContent, revokeResp.StatusCode);
@@ -184,18 +184,18 @@ public class AdminPermissionTests(SluiceBaseStackFactory factory)
             "/api/admin/user", ct);
         var alice = Assert.Single(users!.Users, u => u.Email == "alice@example.com");
 
-        // First grant update:submit
+        // First grant server:manage (a global permission)
         using var grantReq = MutationRequest(
             HttpMethod.Post,
             $"/api/admin/user/{alice.Id}/permission",
             xsrf,
-            new { permission = Permissions.UpdateSubmit });
+            new { permission = Permissions.ServerManage });
         await aliceSession.Client.SendAsync(grantReq, ct);
 
         // Now revoke it
         using var revokeReq = MutationRequest(
             HttpMethod.Delete,
-            $"/api/admin/user/{alice.Id}/permission/{Permissions.UpdateSubmit}",
+            $"/api/admin/user/{alice.Id}/permission/{Permissions.ServerManage}",
             xsrf);
         var revokeResp = await aliceSession.Client.SendAsync(revokeReq, ct);
         Assert.Equal(HttpStatusCode.NoContent, revokeResp.StatusCode);
@@ -204,7 +204,7 @@ public class AdminPermissionTests(SluiceBaseStackFactory factory)
         using var aliceSession2 = await LoginHelper.SignInAsync("alice", "dev", ct);
         var me = await aliceSession2.Client.GetFromJsonAsync<MeBody>(
             "/api/me", ct);
-        Assert.DoesNotContain(Permissions.UpdateSubmit, me!.Permissions);
+        Assert.DoesNotContain(Permissions.ServerManage, me!.Permissions);
     }
 
     [Fact]

@@ -115,27 +115,11 @@ internal static class AuthSetup
 
         services.AddAuthorization(options =>
         {
-            foreach (var permission in Permissions.All)
+            foreach (var permission in Permissions.Global)
             {
                 options.AddPolicy(permission,
                     policy => policy.Requirements.Add(new PermissionRequirement(permission)));
             }
-
-            options.AddPolicy(Permissions.UpdateAny, policy =>
-                policy.Requirements.Add(new AnyPermissionRequirement([
-                    Permissions.UpdateSubmit,
-                    Permissions.UpdateApprove,
-                    Permissions.UpdateExecute,
-                ])));
-
-            options.AddPolicy(Permissions.CatalogRead, policy =>
-                policy.Requirements.Add(new AnyPermissionRequirement([
-                    Permissions.QueryExecute,
-                    Permissions.UpdateSubmit,
-                    Permissions.UpdateApprove,
-                    Permissions.UpdateExecute,
-                    Permissions.ServerManage,
-                ])));
         });
 
         services.AddScoped<IUserLoginRecorder, UserLoginRecorder>();

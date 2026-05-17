@@ -25,11 +25,6 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
         return req;
     }
 
-    /// <summary>
-    /// Signs in as Alice, grants her server:manage + query:execute, and creates a
-    /// server/database against the blue Postgres instance. Returns Alice's session,
-    /// her XSRF token, Alice's user-id, and the new database id.
-    /// </summary>
     private async Task<(AuthenticatedSession session, string xsrf, string aliceId, DatabaseId databaseId)>
         AliceWithBlueServerAsync(CancellationToken ct)
     {
@@ -39,18 +34,9 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
         var users = await session.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
         var alice = users!.Users.Single(u => u.Email == "alice@example.com");
 
-        foreach (var perm in new[] { Permissions.ServerManage, Permissions.QueryExecute })
-        {
-            using var grant = MutationRequest(HttpMethod.Post,
-                $"/api/admin/user/{alice.Id}/permission", xsrf, new { permission = perm });
-            (await session.Client.SendAsync(grant, ct)).EnsureSuccessStatusCode();
-        }
-        await PermissionTestHelper.RevokePermissionAsync(
-            session,
-            "alice@example.com",
-            Permissions.QueryAudit,
-            xsrf,
-            ct);
+        using var grantServer = MutationRequest(HttpMethod.Post,
+            $"/api/admin/user/{alice.Id}/permission", xsrf, new { permission = Permissions.ServerManage });
+        (await session.Client.SendAsync(grantServer, ct)).EnsureSuccessStatusCode();
 
         var blueConnStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
         var blueBuilder = new NpgsqlConnectionStringBuilder(blueConnStr!);
@@ -76,6 +62,10 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
         dbResp.EnsureSuccessStatusCode();
         var database = (await dbResp.Content.ReadFromJsonAsync<DatabaseEndpoints.DatabaseResponse>(ct))!;
 
+        // Assign query:execute database role for alice on this database
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(
+            session, alice.Id, Permissions.QueryExecute, database.Id.ToString(), xsrf, ct);
+
         return (session, xsrf, alice.Id, database.Id);
     }
 
@@ -88,24 +78,22 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
     }
 
     [Fact]
-    public async Task GetHistory_Returns403_WithoutQueryExecute()
+    public async Task GetHistory_ReturnsEmpty_WithoutAnyDatabaseRoles()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var initialBobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
-        await initialBobSession.Client.GetAsync("/api/me", ct);
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await bobSession.Client.GetAsync("/api/me", ct);
 
         using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
-        var xsrf = await adminSession.FetchXsrfTokenAsync(ct);
-        await PermissionTestHelper.RevokePermissionAsync(
-            adminSession,
-            "bob@example.com",
-            Permissions.QueryExecute,
-            xsrf,
-            ct);
+        var adminXsrf = await adminSession.FetchXsrfTokenAsync(ct);
+        await PermissionTestHelper.RevokeAllDatabaseRolesAsync(adminSession, "bob@example.com", adminXsrf, ct);
 
-        using var session = await LoginHelper.SignInAsync("bob", "dev", ct);
-        var resp = await session.Client.GetAsync("/api/query/history", ct);
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        var resp = await bobSession.Client.GetAsync("/api/query/history", ct);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var body = await resp.Content.ReadFromJsonAsync<HistoryBody>(ct);
+        Assert.NotNull(body);
+        Assert.Empty(body.Items);
     }
 
     [Fact]
@@ -127,15 +115,13 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
         var (aliceSession, xsrf, aliceId, databaseId) = await AliceWithBlueServerAsync(ct);
         using var _a = aliceSession;
 
-        // Ensure bob is registered and has query:execute
+        // Ensure bob is registered and has query:execute role on the test database
         using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
         var bobXsrf = await bobSession.FetchXsrfTokenAsync(ct);
         var users = await aliceSession.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
         var bob = users!.Users.Single(u => u.Email == "bob@example.com");
-        using var grantBob = MutationRequest(HttpMethod.Post,
-            $"/api/admin/user/{bob.Id}/permission", xsrf,
-            new { permission = Permissions.QueryExecute });
-        (await aliceSession.Client.SendAsync(grantBob, ct)).EnsureSuccessStatusCode();
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(
+            aliceSession, bob.Id, Permissions.QueryExecute, databaseId.ToString(), xsrf, ct);
 
         // Alice and bob each run a uniquely-tagged query
         var aliceSql = $"SELECT 1 -- alice-{Guid.NewGuid():N}";
@@ -149,7 +135,7 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
             new { databaseId, sql = bobSql });
         (await bobSession.Client.SendAsync(bobReq, ct)).EnsureSuccessStatusCode();
 
-        // Alice fetches history — she has no query:audit
+        // Alice fetches history — she has query:execute but not query:audit, sees only her own
         var resp = await aliceSession.Client.GetFromJsonAsync<HistoryBody>("/api/query/history", ct);
         Assert.NotNull(resp);
         Assert.Contains(resp.Items, i => i.QueryText == aliceSql);
@@ -163,21 +149,17 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
         var (aliceSession, xsrf, aliceId, databaseId) = await AliceWithBlueServerAsync(ct);
         using var _a = aliceSession;
 
-        // Ensure bob is registered and has query:execute
+        // Ensure bob is registered and has query:execute role on the test database
         using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
         var bobXsrf = await bobSession.FetchXsrfTokenAsync(ct);
         var users = await aliceSession.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
         var bob = users!.Users.Single(u => u.Email == "bob@example.com");
-        using var grantBob = MutationRequest(HttpMethod.Post,
-            $"/api/admin/user/{bob.Id}/permission", xsrf,
-            new { permission = Permissions.QueryExecute });
-        (await aliceSession.Client.SendAsync(grantBob, ct)).EnsureSuccessStatusCode();
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(
+            aliceSession, bob.Id, Permissions.QueryExecute, databaseId.ToString(), xsrf, ct);
 
-        // Grant alice query:audit
-        using var grantAudit = MutationRequest(HttpMethod.Post,
-            $"/api/admin/user/{aliceId}/permission", xsrf,
-            new { permission = Permissions.QueryAudit });
-        (await aliceSession.Client.SendAsync(grantAudit, ct)).EnsureSuccessStatusCode();
+        // Grant alice query:audit database role on this database
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(
+            aliceSession, aliceId, Permissions.QueryAudit, databaseId.ToString(), xsrf, ct);
 
         var aliceSql = $"SELECT 1 -- audit-alice-{Guid.NewGuid():N}";
         var bobSql   = $"SELECT 1 -- audit-bob-{Guid.NewGuid():N}";

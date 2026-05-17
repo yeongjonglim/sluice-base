@@ -27,7 +27,7 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         return req;
     }
 
-    private async Task<(AuthenticatedSession session, DatabaseId databaseId)> AuthorizedSessionWithBlueServerAsync(
+    private async Task<(AuthenticatedSession session, string xsrf, DatabaseId databaseId)> AuthorizedSessionWithBlueServerAsync(
         CancellationToken ct)
     {
         var session = await LoginHelper.SignInAsync("alice", "dev", ct);
@@ -40,11 +40,6 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
             $"/api/admin/user/{alice.Id}/permission", xsrf,
             new { permission = Permissions.ServerManage });
         (await session.Client.SendAsync(grantServer, ct)).EnsureSuccessStatusCode();
-
-        using var grantQuery = MutationRequest(HttpMethod.Post,
-            $"/api/admin/user/{alice.Id}/permission", xsrf,
-            new { permission = Permissions.QueryExecute });
-        (await session.Client.SendAsync(grantQuery, ct)).EnsureSuccessStatusCode();
 
         var blueConnStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
         var blueBuilder = new NpgsqlConnectionStringBuilder(blueConnStr!);
@@ -70,14 +65,18 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         dbResp.EnsureSuccessStatusCode();
         var database = (await dbResp.Content.ReadFromJsonAsync<DatabaseEndpoints.DatabaseResponse>(ct))!;
 
-        return (session, database.Id);
+        // Assign query:execute database role for alice on this database
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(
+            session, alice.Id, Permissions.QueryExecute, database.Id.ToString(), xsrf, ct);
+
+        return (session, xsrf, database.Id);
     }
 
     [Fact]
     public async Task GetSchema_ReturnsTree_ForBlueDatabase()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (session, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        var (session, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
         using var _ = session;
 
         var resp = await session.Client.GetAsync($"/api/schema/{databaseId}", ct);
@@ -107,23 +106,12 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
     public async Task GetSchema_Returns403_ForBob()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var initialBobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
-        await initialBobSession.Client.GetAsync("/api/me", ct);
+        // alice creates a database; bob has no role on it → 403
+        var (aliceSession, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _a = aliceSession;
 
-        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
-        var xsrf = await adminSession.FetchXsrfTokenAsync(ct);
-        await PermissionTestHelper.RevokePermissionAsync(
-            adminSession,
-            "bob@example.com",
-            Permissions.QueryExecute,
-            xsrf,
-            ct);
-
-        using var session = await LoginHelper.SignInAsync(
-            "bob", "dev", TestContext.Current.CancellationToken);
-        var resp = await session.Client.GetAsync(
-            $"/api/schema/{Guid.NewGuid()}",
-            ct);
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        var resp = await bobSession.Client.GetAsync($"/api/schema/{databaseId}", ct);
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
@@ -131,17 +119,10 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
     public async Task GetSchema_Returns404_ForUnknownDatabase()
     {
         var ct = TestContext.Current.CancellationToken;
-        var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var (session, _, _) = await AuthorizedSessionWithBlueServerAsync(ct);
         using var _ = session;
-        var xsrf = await session.FetchXsrfTokenAsync(ct);
 
-        var users = await session.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
-        var alice = users!.Users.Single(u => u.Email == "alice@example.com");
-        using var grant = MutationRequest(HttpMethod.Post,
-            $"/api/admin/user/{alice.Id}/permission", xsrf,
-            new { permission = Permissions.QueryExecute });
-        (await session.Client.SendAsync(grant, ct)).EnsureSuccessStatusCode();
-
+        // alice has a role on the real DB, but this is a completely unknown ID → 404
         var resp = await session.Client.GetAsync($"/api/schema/{Guid.NewGuid()}", ct);
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
