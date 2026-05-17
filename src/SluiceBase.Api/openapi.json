@@ -2357,6 +2357,17 @@
           },
           "reason": {
             "type": "string"
+          },
+          "sourceRequestId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "format": "uuid"
           }
         }
       },
@@ -2480,7 +2491,8 @@
           "execSuccess",
           "execDurationMs",
           "execAffectedRows",
-          "execError"
+          "execError",
+          "sourceRequestId"
         ],
         "type": "object",
         "properties": {
@@ -2641,6 +2653,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "sourceRequestId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UpdateRequestId"
+              }
             ]
           }
         }

@@ -48,7 +48,7 @@ export function NewUpdatePage() {
     <NewUpdateForm
       initialDatabaseId={source.data?.databaseId ?? null}
       initialSqlText={source.data?.sqlText ?? ""}
-      initialReason={source.data?.reason ?? ""}
+      sourceRequestId={from}
     />
   );
 }
@@ -56,10 +56,10 @@ export function NewUpdatePage() {
 interface NewUpdateFormProps {
   initialDatabaseId: string | null;
   initialSqlText: string;
-  initialReason: string;
+  sourceRequestId?: string;
 }
 
-export function NewUpdateForm({ initialDatabaseId, initialSqlText, initialReason }: NewUpdateFormProps) {
+export function NewUpdateForm({ initialDatabaseId, initialSqlText, sourceRequestId }: NewUpdateFormProps) {
   const navigate = useNavigate();
   const servers = useCatalogServer();
   const submit = useSubmitUpdate();
@@ -67,7 +67,7 @@ export function NewUpdateForm({ initialDatabaseId, initialSqlText, initialReason
 
   const [databaseId, setDatabaseId] = useState<string | null>(initialDatabaseId);
   const [sqlText, setSqlText] = useState(initialSqlText);
-  const [reason, setReason] = useState(initialReason);
+  const [reason, setReason] = useState("");
 
   const databaseOptions = (servers.data?.servers ?? []).flatMap((s) =>
     s.databases
@@ -80,7 +80,7 @@ export function NewUpdateForm({ initialDatabaseId, initialSqlText, initialReason
   function handleSubmit() {
     if (!canSubmit) return;
     submit.mutate(
-      { databaseId, sqlText, reason },
+      { databaseId, sqlText, reason, sourceRequestId },
       {
         onSuccess: (data) => {
           void navigate({ to: "/update/$id", params: { id: data.id } });
