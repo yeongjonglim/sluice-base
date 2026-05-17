@@ -31,32 +31,33 @@ var greenDbInstance = builder.AddPostgres("target-green-pg")
 // Add the default database to the application model so that it can be referenced by other resources.
 var greenDb = greenDbInstance.AddDatabase("green-appdb", appDbName);
 
-var keycloak = builder.AddKeycloak("keycloak", 63330)
+var keycloak = builder.AddKeycloak("keycloak")
     .WithRealmImport("seed/keycloak")
     .WithOtlpExporter()
     .WaitFor(keycloakDb)
     .WithPostgres(keycloakDb)
-    .WithEndpoint("https", ep =>
-    {
-        ep.Port = 63331;
-        ep.TargetPort = 8080;
-        ep.UriScheme = "https";
-    });
+    // Keycloak's default Quarkus header limit (~20KB) causes HTTP 431 as ASP.NET Core OIDC
+    // correlation/nonce cookies accumulate across abandoned auth flows and are never cleaned up.
+    // Long-term fix: implement ITicketStore to store the auth ticket server-side (EF Core),
+    // replacing the ever-growing cookie with a single small session ID reference.
+    .WithEnvironment("QUARKUS_HTTP_LIMITS_MAX_HEADER_SIZE", "128K");
 
 var api = builder.AddProject<Projects.SluiceBase_Api>("api")
     .WithReference(metadataDb, "Metadata").WaitFor(metadataDb)
-    .WaitFor(keycloak)
     .WithEnvironment("Oidc__Authority",
-        ReferenceExpression.Create($"{keycloak.GetEndpoint("https")}/realms/sluicebase"))
+        ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/sluicebase"))
     .WithEnvironment("Oidc__ClientId", "sluicebase-app")
     .WithEnvironment("Oidc__ClientSecret", "dev-secret");
 
+#pragma warning disable ASPIRECERTIFICATES001
 var web = builder.AddViteApp("web", "../frontend")
     .WithNpm(install: true)
     .WithReference(api)
     .WithEnvironment("VITE_API_URL",
         ReferenceExpression.Create($"{api.GetEndpoint("https")}"))
-    .WithEndpoint("http", e => { e.Port = 5173; });
+    .WithEndpoint("http", e => { e.Port = 5173; e.UriScheme = "https"; })
+    .WithHttpsDeveloperCertificate();
+#pragma warning restore ASPIRECERTIFICATES001
 
 api.WithEnvironment("Frontend__BaseUrl",
     ReferenceExpression.Create($"{web.GetEndpoint("http")}"));
