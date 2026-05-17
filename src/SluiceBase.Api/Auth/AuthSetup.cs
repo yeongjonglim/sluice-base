@@ -94,6 +94,18 @@ internal static class AuthSetup
                     return Task.CompletedTask;
                 };
 
+                options.Events.OnRedirectToIdentityProviderForSignOut = ctx =>
+                {
+                    var frontendBaseUrl = config["Frontend:BaseUrl"];
+                    if (!string.IsNullOrEmpty(frontendBaseUrl))
+                    {
+                        ctx.ProtocolMessage.PostLogoutRedirectUri =
+                            new Uri(new Uri(frontendBaseUrl), options.SignedOutCallbackPath).ToString();
+                    }
+
+                    return Task.CompletedTask;
+                };
+
                 options.Events.OnTokenValidated = async ctx =>
                 {
                     var requestServices = ctx.HttpContext.RequestServices;
