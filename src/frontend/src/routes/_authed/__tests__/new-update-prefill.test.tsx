@@ -89,7 +89,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  (Route as Record<string, unknown>).useSearch = vi.fn().mockReturnValue({ from: undefined });
+  (Route as unknown as Record<string, unknown>).useSearch = vi.fn().mockReturnValue({ from: undefined });
 });
 
 function Wrapper({ children }: { children: React.ReactNode }) {
@@ -98,7 +98,7 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 
 describe("NewUpdatePage — ?from pre-fill", () => {
   it("seeds SQL and reason from the source request when ?from is provided", async () => {
-    (Route as Record<string, unknown>).useSearch = vi.fn().mockReturnValue({ from: "req-1" });
+    (Route as unknown as Record<string, unknown>).useSearch = vi.fn().mockReturnValue({ from: "req-1" });
     render(React.createElement(NewUpdatePage), { wrapper: Wrapper });
     await waitFor(() => {
       expect(screen.getByTestId("sql-editor")).toHaveValue(

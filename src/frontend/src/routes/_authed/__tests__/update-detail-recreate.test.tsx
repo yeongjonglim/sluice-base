@@ -85,8 +85,8 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  (Route as Record<string, unknown>).useParams = vi.fn().mockReturnValue({ id: "req-1" });
-  (Route as Record<string, unknown>).useRouteContext = vi
+  (Route as unknown as Record<string, unknown>).useParams = vi.fn().mockReturnValue({ id: "req-1" });
+  (Route as unknown as Record<string, unknown>).useRouteContext = vi
     .fn()
     .mockReturnValue(makeRouteContext([]));
 });
@@ -97,7 +97,7 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 
 describe("UpdateDetailPage — Recreate button", () => {
   it("shows Recreate button when user has update:submit", () => {
-    (Route as Record<string, unknown>).useRouteContext = vi
+    (Route as unknown as Record<string, unknown>).useRouteContext = vi
       .fn()
       .mockReturnValue(makeRouteContext(["update:submit"]));
     render(React.createElement(UpdateDetailPage), { wrapper: Wrapper });
@@ -110,7 +110,7 @@ describe("UpdateDetailPage — Recreate button", () => {
   });
 
   it("navigates to /update/new?from=<id> when Recreate is clicked", () => {
-    (Route as Record<string, unknown>).useRouteContext = vi
+    (Route as unknown as Record<string, unknown>).useRouteContext = vi
       .fn()
       .mockReturnValue(makeRouteContext(["update:submit"]));
     render(React.createElement(UpdateDetailPage), { wrapper: Wrapper });
