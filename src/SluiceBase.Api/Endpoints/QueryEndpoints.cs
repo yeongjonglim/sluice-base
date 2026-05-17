@@ -16,15 +16,15 @@ internal static class QueryEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapPost("/api/query", ExecuteQuery)
-            .RequireAuthorization(Permissions.QueryExecute)
+            .RequireAuthorization()
             .WithName("ExecuteQuery");
 
         app.MapGet("/api/query/history", GetHistory)
-            .RequireAuthorization(Permissions.QueryExecute)
+            .RequireAuthorization()
             .WithName("GetQueryHistory");
     }
 
-    private static async Task<Results<Ok<QueryResponse>, NotFound, BadRequest<string>>> ExecuteQuery(
+    private static async Task<Results<Ok<QueryResponse>, NotFound, BadRequest<string>, ForbidHttpResult>> ExecuteQuery(
         QueryRequest request,
         AppDbContext db,
         IServerConnectionFactory connectionFactory,
@@ -42,6 +42,14 @@ internal static class QueryEndpoints
         if (database is null)
         {
             return TypedResults.NotFound();
+        }
+
+        // Enforce database role: user must have query:execute on this specific database
+        var hasRole = await db.UserDatabaseRoles.AnyAsync(
+            r => r.UserId == user!.Id && r.Permission == Permissions.QueryExecute && r.DatabaseId == database.Id, ct);
+        if (!hasRole)
+        {
+            return TypedResults.Forbid();
         }
 
         var timeoutSeconds = configuration.GetValue("Query:TimeoutSeconds", 30);
@@ -109,7 +117,19 @@ internal static class QueryEndpoints
         }
 
         var user = await currentUser.GetAsync(ct);
-        var hasAudit = user?.HasPermission(Permissions.QueryAudit) ?? false;
+
+        // databases where user has query:audit (can see all queries)
+        var auditDatabaseIds = await db.UserDatabaseRoles
+            .Where(r => r.UserId == user!.Id && r.Permission == Permissions.QueryAudit)
+            .Select(r => r.DatabaseId)
+            .ToListAsync(ct);
+
+        // databases where user has any role (can see own queries)
+        var anyRoleDatabaseIds = await db.UserDatabaseRoles
+            .Where(r => r.UserId == user!.Id)
+            .Select(r => r.DatabaseId)
+            .Distinct()
+            .ToListAsync(ct);
 
         DatabaseId? filterDb = databaseId is not null && Guid.TryParse(databaseId, out var dbGuid)
             ? DatabaseId.From(dbGuid)
@@ -122,7 +142,9 @@ internal static class QueryEndpoints
 
         var items = await db.QueryLogs
             .AsNoTracking()
-            .Where(q => hasAudit || q.UserId == user!.Id)
+            .Where(q => q.DatabaseId != null &&
+                        (auditDatabaseIds.Contains(q.DatabaseId.Value) ||
+                         (anyRoleDatabaseIds.Contains(q.DatabaseId.Value) && q.UserId == user!.Id)))
             .Where(q => @from == null || q.ExecutedAt >= @from)
             .Where(q => to == null || q.ExecutedAt <= to)
             .Where(q => filterDb == null || q.DatabaseId == filterDb)

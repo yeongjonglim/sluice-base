@@ -13,6 +13,7 @@ import { useDisclosure } from "@mantine/hooks";
 import {
   IconArrowsExchange,
   IconHistory,
+  IconKey,
   IconLayoutSidebarLeftCollapse,
   IconLayoutSidebarLeftExpand,
   IconLogout,
@@ -189,6 +190,16 @@ function AuthedLayout() {
               component={Link}
               to="/permission"
               active={location.pathname === "/permission"}
+              onClick={closeMobileNav}
+            />
+          )}
+          {isAdmin && (
+            <NavLink
+              label="Access"
+              leftSection={<IconKey size={16} />}
+              component={Link}
+              to="/access"
+              active={location.pathname === "/access"}
               onClick={closeMobileNav}
             />
           )}

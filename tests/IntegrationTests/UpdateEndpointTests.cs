@@ -44,7 +44,7 @@ public class UpdateEndpointTests
         return req;
     }
 
-    // Sets up Alice with all update permissions and returns the blue database's ID
+    // Sets up Alice with a write-capable database and the given database roles
     private async Task<(AuthenticatedSession session, string xsrf, DatabaseId databaseId)> AliceWithBlueServerAsync(
         string[] permissions,
         CancellationToken ct)
@@ -61,15 +61,6 @@ public class UpdateEndpointTests
             xsrf,
             new { permission = Permissions.ServerManage });
         (await session.Client.SendAsync(grantServer, ct)).EnsureSuccessStatusCode();
-
-        foreach (var perm in permissions)
-        {
-            using var grant = MutationRequest(HttpMethod.Post,
-                $"/api/admin/user/{alice.Id}/permission",
-                xsrf,
-                new { permission = perm });
-            (await session.Client.SendAsync(grant, ct)).EnsureSuccessStatusCode();
-        }
 
         var blueConnStr = await _factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
         var blueBuilder = new NpgsqlConnectionStringBuilder(blueConnStr!);
@@ -107,6 +98,13 @@ public class UpdateEndpointTests
         dbResp.EnsureSuccessStatusCode();
         var database = (await dbResp.Content.ReadFromJsonAsync<DatabaseEndpoints.DatabaseResponse>(ct))!;
 
+        // Assign database roles instead of global permissions
+        foreach (var perm in permissions)
+        {
+            await DatabaseRoleTestHelper.AssignByDatabaseAsync(
+                session, alice.Id, perm, database.Id.ToString(), xsrf, ct);
+        }
+
         return (session, xsrf, database.Id);
     }
 
@@ -123,33 +121,37 @@ public class UpdateEndpointTests
     }
 
     [Fact]
-    public async Task PostUpdate_Returns403_ForUserWithoutPermission()
+    public async Task PostUpdate_Returns403_ForUserWithoutDatabaseRole()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
-        using var session = await LoginHelper.SignInAsync("bob", "dev", ct);
-        await PermissionTestHelper.RevokeAllPermissionsAsync(adminSession, "bob@example.com", await adminSession.FetchXsrfTokenAsync(ct), ct);
-        var xsrf = await session.FetchXsrfTokenAsync(ct);
+        var (aliceSession, _, databaseId) = await AliceWithBlueServerAsync([], ct);
+        using var _a = aliceSession;
+
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        var bobXsrf = await bobSession.FetchXsrfTokenAsync(ct);
+
         using var req = MutationRequest(HttpMethod.Post,
             "/api/update",
-            xsrf,
-            new { databaseId = Guid.NewGuid(), sqlText = "UPDATE x", reason = "r" });
-        var resp = await session.Client.SendAsync(req, ct);
+            bobXsrf,
+            new { databaseId, sqlText = "UPDATE x", reason = "r" });
+        var resp = await bobSession.Client.SendAsync(req, ct);
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
     [Fact]
-    public async Task GetUpdates_Returns403_ForUserWithoutAnyUpdatePermission()
+    public async Task GetUpdates_ReturnsEmptyList_ForUserWithNoRoles()
     {
         var ct = TestContext.Current.CancellationToken;
 
-        using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
         using var session = await LoginHelper.SignInAsync("bob", "dev", ct);
-
-        await PermissionTestHelper.RevokeAllPermissionsAsync(adminSession, "bob@example.com", await adminSession.FetchXsrfTokenAsync(ct), ct);
+        await session.Client.GetAsync("/api/me", ct); // ensure bob's user row exists
 
         var resp = await session.Client.GetAsync("/api/update", ct);
-        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        var list = await resp.Content.ReadFromJsonAsync<UpdateEndpoints.ListUpdateRequestsResponse>(_jsonSerializerOptions, ct);
+        Assert.NotNull(list);
+        Assert.Empty(list.Requests);
     }
 
     // ── submit ───────────────────────────────────────────────────────────────

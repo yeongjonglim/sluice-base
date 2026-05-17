@@ -51,11 +51,8 @@ public class MeEndpointTests(SluiceBaseStackFactory factory)
 
         using var adminSession = await LoginHelper.SignInAsync("alice", "dev", ct);
         var xsrf = await adminSession.FetchXsrfTokenAsync(ct);
-        await PermissionTestHelper.RevokeAllPermissionsAsync(
-            adminSession,
-            "bob@example.com",
-            xsrf,
-            ct);
+        await PermissionTestHelper.RevokeAllPermissionsAsync(adminSession, "bob@example.com", xsrf, ct);
+        await PermissionTestHelper.RevokeAllDatabaseRolesAsync(adminSession, "bob@example.com", xsrf, ct);
 
         using var session = await LoginHelper.SignInAsync(
             "bob",

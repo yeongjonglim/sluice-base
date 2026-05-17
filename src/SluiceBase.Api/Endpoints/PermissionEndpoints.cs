@@ -12,7 +12,7 @@ internal static class PermissionEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/api/permission/catalog",
-                Ok<PermissionCatalogResponse> () => TypedResults.Ok(new PermissionCatalogResponse([.. Permissions.All])))
+                Ok<PermissionCatalogResponse> () => TypedResults.Ok(new PermissionCatalogResponse([.. Permissions.Global])))
             .WithName("PermissionCatalog")
             .RequireAuthorization();
 
@@ -51,7 +51,7 @@ internal static class PermissionEndpoints
         TimeProvider clock,
         CancellationToken ct)
     {
-        if (!Permissions.All.Contains(req.Permission))
+        if (!Permissions.Global.Contains(req.Permission))
         {
             return TypedResults.ValidationProblem(new Dictionary<string, string[]>
             {
