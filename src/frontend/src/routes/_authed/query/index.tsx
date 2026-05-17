@@ -36,6 +36,7 @@ import { Prec } from "@codemirror/state";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
 import { exportToCsv } from "@/utils/csv.ts";
+import { quoteIdentifier } from "@/utils/sql.ts";
 import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema } from "@/api/hooks";
 
 const noIndentKeymap = keymap.of([
@@ -97,8 +98,9 @@ function QueryPage() {
 
   const handleTableClick = useCallback(
     (schemaName: string, tableName: string, columns: Array<{ name: string }>) => {
-      const colList = columns.map((c) => c.name).join(", ");
-      const snippet = `SELECT ${colList}\nFROM ${schemaName}.${tableName}\nLIMIT 1000;\n`;
+      const colList = columns.map((c) => quoteIdentifier(c.name)).join(", ");
+      const from = `${quoteIdentifier(schemaName)}.${quoteIdentifier(tableName)}`;
+      const snippet = `SELECT ${colList}\nFROM ${from}\nLIMIT 1000;\n`;
       setEditorContent((prev) =>
         prev.trimEnd() === "" ? snippet : `${prev.trimEnd()}\n\n${snippet}`,
       );
