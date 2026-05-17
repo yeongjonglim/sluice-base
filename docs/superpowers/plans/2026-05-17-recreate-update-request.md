@@ -306,7 +306,7 @@ export function NewUpdatePage({ searchFrom }: { searchFrom?: string } = {}) {
       <Textarea
         label="Reason"
         description="Describe why this change is needed. A ticket link is fine."
-        placeholder="e.g. https://example.com/ticket/... — fixing bad email for user X"
+        placeholder="e.g. https://example.com/ticket/123 — fixing bad email for user X"
         required
         minRows={3}
         value={reason}
