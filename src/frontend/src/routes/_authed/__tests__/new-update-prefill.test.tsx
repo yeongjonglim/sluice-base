@@ -1,8 +1,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import React from "react";
-import { NewUpdatePage, Route } from "@/routes/_authed/update/new.tsx";
+import { NewUpdateForm, Route } from "@/routes/_authed/update/new.tsx";
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (opts: unknown) => opts,
@@ -25,33 +25,6 @@ vi.mock("@uiw/react-codemirror", () => ({
 vi.mock("@codemirror/lang-sql", () => ({ sql: () => [] }));
 vi.mock("@uiw/codemirror-themes-all", () => ({ githubDark: {}, githubLight: {} }));
 
-const fakeDetail = {
-  id: "req-1",
-  databaseId: "db-abc",
-  databaseDisplayName: "Prod — users",
-  submitterId: "user-1",
-  submitterName: "Alice",
-  sqlText: "UPDATE public.users SET active = false WHERE id = 42",
-  reason: "Deactivating stale account per JIRA-999",
-  status: "Executed",
-  reviewerId: null,
-  reviewerName: null,
-  reviewNote: null,
-  cancelledById: null,
-  cancelledByName: null,
-  cancelNote: null,
-  executorId: "user-2",
-  executorName: "Bob",
-  submittedAt: "2026-05-17T00:00:00Z",
-  reviewedAt: null,
-  executedAt: "2026-05-17T01:00:00Z",
-  cancelledAt: null,
-  execSuccess: false,
-  execDurationMs: 120,
-  execAffectedRows: null,
-  execError: 'column "active" does not exist',
-};
-
 vi.mock("@/api/hooks", () => ({
   meQueryOptions: { queryKey: ["me"] },
   useCatalogServer: () => ({
@@ -65,11 +38,7 @@ vi.mock("@/api/hooks", () => ({
     },
   }),
   useSubmitUpdate: () => ({ mutate: vi.fn(), isPending: false }),
-  useUpdateRequest: (id: string) => ({
-    data: id === "req-1" ? fakeDetail : undefined,
-    isPending: false,
-    isError: false,
-  }),
+  useUpdateRequest: () => ({ data: undefined, isPending: false, isError: false }),
 }));
 
 afterEach(cleanup);
@@ -89,29 +58,42 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  (Route as unknown as Record<string, unknown>).useSearch = vi.fn().mockReturnValue({ from: undefined });
+  (Route as unknown as Record<string, unknown>).useSearch = vi
+    .fn()
+    .mockReturnValue({ from: undefined });
 });
 
 function Wrapper({ children }: { children: React.ReactNode }) {
   return React.createElement(MantineProvider, null, children);
 }
 
-describe("NewUpdatePage — ?from pre-fill", () => {
-  it("seeds SQL and reason from the source request when ?from is provided", async () => {
-    (Route as unknown as Record<string, unknown>).useSearch = vi.fn().mockReturnValue({ from: "req-1" });
-    render(React.createElement(NewUpdatePage), { wrapper: Wrapper });
-    await waitFor(() => {
-      expect(screen.getByTestId("sql-editor")).toHaveValue(
-        "UPDATE public.users SET active = false WHERE id = 42",
-      );
-    });
+describe("NewUpdateForm — pre-fill via props", () => {
+  it("seeds SQL and reason when initial values are provided", () => {
+    render(
+      React.createElement(NewUpdateForm, {
+        initialDatabaseId: "db-abc",
+        initialSqlText: "UPDATE public.users SET active = false WHERE id = 42",
+        initialReason: "Deactivating stale account per JIRA-999",
+      }),
+      { wrapper: Wrapper },
+    );
+    expect(screen.getByTestId("sql-editor")).toHaveValue(
+      "UPDATE public.users SET active = false WHERE id = 42",
+    );
     expect(screen.getByPlaceholderText(/https:\/\/linear\.app/i)).toHaveValue(
       "Deactivating stale account per JIRA-999",
     );
   });
 
-  it("leaves fields empty when no ?from param", () => {
-    render(React.createElement(NewUpdatePage), { wrapper: Wrapper });
+  it("leaves fields empty when initial values are empty", () => {
+    render(
+      React.createElement(NewUpdateForm, {
+        initialDatabaseId: null,
+        initialSqlText: "",
+        initialReason: "",
+      }),
+      { wrapper: Wrapper },
+    );
     expect(screen.getByTestId("sql-editor")).toHaveValue("");
     expect(screen.getByPlaceholderText(/https:\/\/linear\.app/i)).toHaveValue("");
   });

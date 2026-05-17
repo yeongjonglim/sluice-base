@@ -390,7 +390,7 @@ export function useUpdateRequest(id: string) {
   return useQuery({
     queryKey: ["update", id] as const,
     queryFn: () => apiRequest<void, UpdateRequestDetail>(`/api/update/${id}`),
-    enabled: id !== "",
+    enabled: !!id,
   });
 }
 

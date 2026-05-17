@@ -3,6 +3,7 @@ import {
   Button,
   Group,
   Select,
+  Skeleton,
   Stack,
   Text,
   Textarea,
@@ -10,7 +11,7 @@ import {
   useComputedColorScheme,
 } from "@mantine/core";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
@@ -31,26 +32,42 @@ export const Route = createFileRoute("/_authed/update/new")({
 
 export function NewUpdatePage() {
   const { from } = Route.useSearch();
+  const source = useUpdateRequest(from ?? "");
 
+  if (from && source.isPending) {
+    return (
+      <Stack gap="md">
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} h={60} radius="sm" />
+        ))}
+      </Stack>
+    );
+  }
+
+  return (
+    <NewUpdateForm
+      initialDatabaseId={source.data?.databaseId ?? null}
+      initialSqlText={source.data?.sqlText ?? ""}
+      initialReason={source.data?.reason ?? ""}
+    />
+  );
+}
+
+interface NewUpdateFormProps {
+  initialDatabaseId: string | null;
+  initialSqlText: string;
+  initialReason: string;
+}
+
+export function NewUpdateForm({ initialDatabaseId, initialSqlText, initialReason }: NewUpdateFormProps) {
   const navigate = useNavigate();
   const servers = useCatalogServer();
   const submit = useSubmitUpdate();
   const computedColorScheme = useComputedColorScheme();
 
-  const [databaseId, setDatabaseId] = useState<string | null>(null);
-  const [sqlText, setSqlText] = useState("");
-  const [reason, setReason] = useState("");
-
-  const source = useUpdateRequest(from ?? "");
-  const seeded = useRef(false);
-
-  useEffect(() => {
-    if (seeded.current || !source.data) return;
-    seeded.current = true;
-    setDatabaseId(source.data.databaseId ?? null);
-    setSqlText(source.data.sqlText);
-    setReason(source.data.reason);
-  }, [source.data]);
+  const [databaseId, setDatabaseId] = useState<string | null>(initialDatabaseId);
+  const [sqlText, setSqlText] = useState(initialSqlText);
+  const [reason, setReason] = useState(initialReason);
 
   const databaseOptions = (servers.data?.servers ?? []).flatMap((s) =>
     s.databases
