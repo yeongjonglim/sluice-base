@@ -31,6 +31,7 @@ public sealed class SluiceBaseStackFactory : IAsyncLifetime
         App = await appHost.BuildAsync();
         await App.StartAsync();
 
+        await App.ResourceNotifications.WaitForResourceHealthyAsync("keycloak");
         await App.ResourceNotifications.WaitForResourceHealthyAsync("api");
     }
 
