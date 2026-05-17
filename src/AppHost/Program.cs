@@ -40,11 +40,10 @@ var keycloak = builder.AddKeycloak("keycloak")
     // correlation/nonce cookies accumulate across abandoned auth flows and are never cleaned up.
     // Long-term fix: implement ITicketStore to store the auth ticket server-side (EF Core),
     // replacing the ever-growing cookie with a single small session ID reference.
-    .WithEnvironment("QUARKUS_HTTP_LIMITS_MAX_HEADER_SIZE", "64K");
+    .WithEnvironment("QUARKUS_HTTP_LIMITS_MAX_HEADER_SIZE", "128K");
 
 var api = builder.AddProject<Projects.SluiceBase_Api>("api")
     .WithReference(metadataDb, "Metadata").WaitFor(metadataDb)
-    .WaitFor(keycloak)
     .WithEnvironment("Oidc__Authority",
         ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/sluicebase"))
     .WithEnvironment("Oidc__ClientId", "sluicebase-app")
