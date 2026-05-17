@@ -81,6 +81,14 @@ internal static class AuthSetup
                     {
                         ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                         ctx.HandleResponse();
+                        return Task.CompletedTask;
+                    }
+
+                    var frontendBaseUrl = config["Frontend:BaseUrl"];
+                    if (!string.IsNullOrEmpty(frontendBaseUrl))
+                    {
+                        ctx.ProtocolMessage.RedirectUri =
+                            new Uri(new Uri(frontendBaseUrl), options.CallbackPath).ToString();
                     }
 
                     return Task.CompletedTask;

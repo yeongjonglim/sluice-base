@@ -56,12 +56,12 @@ var web = builder.AddViteApp("web", "../frontend")
     .WithReference(api)
     .WithEnvironment("VITE_API_URL",
         ReferenceExpression.Create($"{api.GetEndpoint("https")}"))
-    .WithHttpsEndpoint(port: 5173, env: "PORT")
+    .WithEndpoint("http", e => { e.Port = 5173; e.UriScheme = "https"; })
     .WithHttpsDeveloperCertificate();
 #pragma warning restore ASPIRECERTIFICATES001
 
 api.WithEnvironment("Frontend__BaseUrl",
-    ReferenceExpression.Create($"{web.GetEndpoint("https")}"));
+    ReferenceExpression.Create($"{web.GetEndpoint("http")}"));
 
 metadataDb.WithCommand(
     name: "seed-servers",
