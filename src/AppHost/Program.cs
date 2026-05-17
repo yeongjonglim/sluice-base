@@ -50,15 +50,18 @@ var api = builder.AddProject<Projects.SluiceBase_Api>("api")
     .WithEnvironment("Oidc__ClientId", "sluicebase-app")
     .WithEnvironment("Oidc__ClientSecret", "dev-secret");
 
+#pragma warning disable ASPIRECERTIFICATES001
 var web = builder.AddViteApp("web", "../frontend")
     .WithNpm(install: true)
     .WithReference(api)
     .WithEnvironment("VITE_API_URL",
         ReferenceExpression.Create($"{api.GetEndpoint("https")}"))
-    .WithEndpoint("http", e => { e.Port = 5173; });
+    .WithHttpsEndpoint(port: 5173, env: "PORT")
+    .WithHttpsDeveloperCertificate();
+#pragma warning restore ASPIRECERTIFICATES001
 
 api.WithEnvironment("Frontend__BaseUrl",
-    ReferenceExpression.Create($"{web.GetEndpoint("http")}"));
+    ReferenceExpression.Create($"{web.GetEndpoint("https")}"));
 
 metadataDb.WithCommand(
     name: "seed-servers",

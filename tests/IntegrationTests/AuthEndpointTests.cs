@@ -26,7 +26,7 @@ public class AuthEndpointTests(SluiceBaseStackFactory factory)
         Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
         Assert.NotNull(response.Headers.Location);
         Assert.StartsWith(
-            factory.InitialisedApp.GetEndpoint("keycloak", "https") + "realms/sluicebase/protocol/openid-connect/auth",
+            factory.InitialisedApp.GetEndpoint("keycloak", "http") + "realms/sluicebase/protocol/openid-connect/auth",
             response.Headers.Location!.ToString());
     }
 }
