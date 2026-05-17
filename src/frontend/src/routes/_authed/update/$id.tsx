@@ -52,30 +52,9 @@ const STATUS_COLOR: Record<string, string> = {
   Executed: "teal",
 };
 
-export function UpdateDetailPage({
-  requestId,
-  permissions,
-}: {
-  requestId?: string;
-  permissions?: string[];
-} = {}) {
-  const id: string = (() => {
-    try {
-      return Route.useParams().id;
-    } catch {
-      return requestId ?? "";
-    }
-  })();
-  const resolvedPermissions: string[] = (() => {
-    try {
-      return (
-        Route.useRouteContext().queryClient.getQueryData(meQueryOptions.queryKey)?.permissions ?? []
-      );
-    } catch {
-      return permissions ?? [];
-    }
-  })();
-  const meData = { permissions: resolvedPermissions };
+export function UpdateDetailPage() {
+  const { id } = Route.useParams();
+  const meData = Route.useRouteContext().queryClient.getQueryData(meQueryOptions.queryKey);
   const navigate = useNavigate();
   const request = useUpdateRequest(id);
   const approve = useApproveUpdate();

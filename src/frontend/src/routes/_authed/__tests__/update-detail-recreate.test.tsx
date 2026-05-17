@@ -1,8 +1,8 @@
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import React from "react";
-import { UpdateDetailPage } from "../update/$id.tsx";
+import { Route, UpdateDetailPage } from "../update/$id.tsx";
 
 const mockNavigate = vi.fn();
 
@@ -57,6 +57,14 @@ vi.mock("@/api/hooks", () => ({
   useExecuteUpdate: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+function makeRouteContext(permissions: Array<string>) {
+  return {
+    queryClient: {
+      getQueryData: () => ({ permissions }),
+    },
+  };
+}
+
 afterEach(() => {
   cleanup();
   mockNavigate.mockReset();
@@ -76,41 +84,36 @@ beforeAll(() => {
   });
 });
 
+beforeEach(() => {
+  (Route as Record<string, unknown>).useParams = vi.fn().mockReturnValue({ id: "req-1" });
+  (Route as Record<string, unknown>).useRouteContext = vi
+    .fn()
+    .mockReturnValue(makeRouteContext([]));
+});
+
 function Wrapper({ children }: { children: React.ReactNode }) {
   return React.createElement(MantineProvider, null, children);
 }
 
 describe("UpdateDetailPage — Recreate button", () => {
   it("shows Recreate button when user has update:submit", () => {
-    render(
-      React.createElement(UpdateDetailPage, {
-        requestId: "req-1",
-        permissions: ["update:submit"],
-      }),
-      { wrapper: Wrapper },
-    );
+    (Route as Record<string, unknown>).useRouteContext = vi
+      .fn()
+      .mockReturnValue(makeRouteContext(["update:submit"]));
+    render(React.createElement(UpdateDetailPage), { wrapper: Wrapper });
     expect(screen.getByRole("button", { name: /recreate/i })).toBeInTheDocument();
   });
 
   it("hides Recreate button when user lacks update:submit", () => {
-    render(
-      React.createElement(UpdateDetailPage, {
-        requestId: "req-1",
-        permissions: ["update:approve"],
-      }),
-      { wrapper: Wrapper },
-    );
+    render(React.createElement(UpdateDetailPage), { wrapper: Wrapper });
     expect(screen.queryByRole("button", { name: /recreate/i })).toBeNull();
   });
 
   it("navigates to /update/new?from=<id> when Recreate is clicked", () => {
-    render(
-      React.createElement(UpdateDetailPage, {
-        requestId: "req-1",
-        permissions: ["update:submit"],
-      }),
-      { wrapper: Wrapper },
-    );
+    (Route as Record<string, unknown>).useRouteContext = vi
+      .fn()
+      .mockReturnValue(makeRouteContext(["update:submit"]));
+    render(React.createElement(UpdateDetailPage), { wrapper: Wrapper });
     fireEvent.click(screen.getByRole("button", { name: /recreate/i }));
     expect(mockNavigate).toHaveBeenCalledWith({
       to: "/update/new",

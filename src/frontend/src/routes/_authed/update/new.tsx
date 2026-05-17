@@ -29,14 +29,8 @@ export const Route = createFileRoute("/_authed/update/new")({
   component: NewUpdatePage,
 });
 
-export function NewUpdatePage({ searchFrom }: { searchFrom?: string } = {}) {
-  const from: string | undefined = (() => {
-    try {
-      return Route.useSearch().from;
-    } catch {
-      return searchFrom;
-    }
-  })();
+export function NewUpdatePage() {
+  const { from } = Route.useSearch();
 
   const navigate = useNavigate();
   const servers = useCatalogServer();
