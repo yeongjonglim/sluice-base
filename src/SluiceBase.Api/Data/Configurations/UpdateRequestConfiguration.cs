@@ -34,5 +34,9 @@ internal sealed class UpdateRequestConfiguration : IEntityTypeConfiguration<Upda
         builder.HasOne(r => r.CancelledBy).WithMany()
             .HasForeignKey(r => r.CancelledById)
             .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(r => r.SourceRequest).WithMany()
+            .HasForeignKey(r => r.SourceRequestId)
+            .OnDelete(DeleteBehavior.Restrict);
     }
 }

@@ -768,6 +768,8 @@ export interface components {
             databaseId: components["schemas"]["DatabaseId"];
             sqlText: string;
             reason: string;
+            /** Format: uuid */
+            sourceRequestId?: null | string;
         };
         TableInfo: {
             name: string;
@@ -820,6 +822,7 @@ export interface components {
             /** Format: int32 */
             execAffectedRows: null | number | string;
             execError: null | string;
+            sourceRequestId: null | components["schemas"]["UpdateRequestId"];
         };
         /** Format: uuid */
         UpdateRequestId: string;

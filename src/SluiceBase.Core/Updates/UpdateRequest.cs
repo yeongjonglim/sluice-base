@@ -22,6 +22,7 @@ public sealed class UpdateRequest
     public UserId? ReviewerId { get; private set; }
     public string? ReviewNote { get; private set; }
 
+    public UpdateRequestId? SourceRequestId { get; private set; }
     public UserId? CancelledById { get; private set; }
     public string? CancelNote { get; private set; }
     public DateTimeOffset? CancelledAt { get; private set; }
@@ -41,6 +42,7 @@ public sealed class UpdateRequest
     public User? Reviewer { get; private set; }
     public User? Executor { get; private set; }
     public User? CancelledBy { get; private set; }
+    public UpdateRequest? SourceRequest { get; private set; }
 
     // Trigger names are an implementation detail — hidden from callers.
     private enum Trigger
@@ -131,7 +133,8 @@ public sealed class UpdateRequest
         DatabaseId databaseId,
         string sqlText,
         string reason,
-        Actioned by) => new()
+        Actioned by,
+        UpdateRequestId? sourceRequestId = null) => new()
     {
         Id = UpdateRequestId.FromNewVersion7Guid(),
         DatabaseId = databaseId,
@@ -140,6 +143,7 @@ public sealed class UpdateRequest
         Reason = reason,
         Status = UpdateRequestStatus.Pending,
         SubmittedAt = by.At,
+        SourceRequestId = sourceRequestId,
     };
 
     // Fires the machine trigger (throws InvalidOperationException on invalid transition),

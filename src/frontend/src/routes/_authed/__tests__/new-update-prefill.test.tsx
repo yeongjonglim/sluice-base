@@ -68,29 +68,27 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("NewUpdateForm — pre-fill via props", () => {
-  it("seeds SQL and reason when initial values are provided", () => {
+  it("seeds SQL from source and leaves reason empty when sourceRequestId provided", () => {
     render(
       React.createElement(NewUpdateForm, {
         initialDatabaseId: "db-abc",
         initialSqlText: "UPDATE public.users SET active = false WHERE id = 42",
-        initialReason: "Deactivating stale account per JIRA-999",
+        sourceRequestId: "req-1",
       }),
       { wrapper: Wrapper },
     );
     expect(screen.getByTestId("sql-editor")).toHaveValue(
       "UPDATE public.users SET active = false WHERE id = 42",
     );
-    expect(screen.getByPlaceholderText(/https:\/\/linear\.app/i)).toHaveValue(
-      "Deactivating stale account per JIRA-999",
-    );
+    expect(screen.getByPlaceholderText(/https:\/\/linear\.app/i)).toHaveValue("");
   });
 
-  it("leaves fields empty when initial values are empty", () => {
+  it("leaves all fields empty when no source", () => {
     render(
       React.createElement(NewUpdateForm, {
         initialDatabaseId: null,
         initialSqlText: "",
-        initialReason: "",
+        sourceRequestId: undefined,
       }),
       { wrapper: Wrapper },
     );

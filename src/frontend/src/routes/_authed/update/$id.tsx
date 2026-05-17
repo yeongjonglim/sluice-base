@@ -163,6 +163,21 @@ export function UpdateDetailPage() {
         </Badge>
       </Group>
 
+      {/* Recreated from */}
+      {r.sourceRequestId && (
+        <Text size="sm" c="dimmed">
+          Recreated from{" "}
+          <Text
+            component="a"
+            href={`/update/${r.sourceRequestId}`}
+            size="sm"
+            c="blue"
+          >
+            {`/update/${r.sourceRequestId}`}
+          </Text>
+        </Text>
+      )}
+
       {/* SQL */}
       <Box
         style={{
