@@ -246,9 +246,6 @@ internal sealed partial class BrandingHtmlMiddleware(
     IHttpClientFactory httpClientFactory,
     ILogger<BrandingHtmlMiddleware> logger)
 {
-    private static readonly string[] SupportedExtensions =
-        [".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp", ".ico"];
-
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -287,8 +284,8 @@ internal sealed partial class BrandingHtmlMiddleware(
     private string InjectBranding(string html)
     {
         var branding = options.Value;
-        var logoUrl = ResolveAssetUrl(branding.LogoUrl, "logo");
-        var faviconUrl = ResolveAssetUrl(branding.FaviconUrl, "favicon");
+        var logoUrl = ResolveAssetUrl(branding.LogoUrl);
+        var faviconUrl = ResolveAssetUrl(branding.FaviconUrl);
         var primaryColor = branding.GetValidatedPrimaryColor(logger);
 
         var brandingJson = JsonSerializer.Serialize(
@@ -312,29 +309,10 @@ internal sealed partial class BrandingHtmlMiddleware(
         return html;
     }
 
-    private string? ResolveAssetUrl(string configuredUrl, string assetName)
-    {
-        if (!string.IsNullOrEmpty(configuredUrl) &&
-            (configuredUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
-             configuredUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
-        {
-            return configuredUrl;
-        }
-
-        if (!string.IsNullOrEmpty(env.WebRootPath))
-        {
-            foreach (var ext in SupportedExtensions)
-            {
-                var filePath = Path.Combine(env.WebRootPath, "branding", $"{assetName}{ext}");
-                if (File.Exists(filePath))
-                {
-                    return $"/branding/{assetName}{ext}";
-                }
-            }
-        }
-
-        return null;
-    }
+    // Any non-empty configured value is used as-is — relative path (/branding/logo.png)
+    // or remote URL (https://cdn.example.com/logo.png). Empty means not configured.
+    private static string? ResolveAssetUrl(string configuredUrl) =>
+        string.IsNullOrEmpty(configuredUrl) ? null : configuredUrl;
 
     [GeneratedRegex(@"<title>[^<]*</title>")]
     private static partial Regex TitleRegex();
@@ -564,15 +542,11 @@ export default defineConfig(({ command }) => ({
   },
   server: {
     port,
-    proxy: {
-      // /api removed — API calls resolve to the backend natively because the
-      // document is now served from the backend port, not Vite's port.
-      "/openapi": { target: apiUrl, changeOrigin: false, secure: false },
-      "/login": { target: apiUrl, changeOrigin: false, secure: false },
-      "/logout": { target: apiUrl, changeOrigin: false, secure: false },
-      "/signin-oidc": { target: apiUrl, changeOrigin: false, secure: false },
-      "/signout-callback-oidc": { target: apiUrl, changeOrigin: false, secure: false },
-    },
+    // No proxy needed — the document is served from the backend port so all
+    // route-relative fetches (/api, /login, /logout, etc.) resolve to the
+    // backend natively. Vite's dev server includes permissive CORS headers
+    // by default, so cross-origin module loading from the backend document
+    // origin works without any additional configuration.
   },
 }));
 ```
@@ -581,7 +555,7 @@ export default defineConfig(({ command }) => ({
 
 ```bash
 git add src/frontend/vite.config.ts
-git commit -m "feat: set Vite base URL for dev mode, remove /api proxy"
+git commit -m "feat: set Vite base URL for dev mode, remove all proxies"
 ```
 
 ---
@@ -697,9 +671,7 @@ Replace lines 99–115 of `README.md` with:
 ```markdown
 ### Using local branding files
 
-Mount a directory into `/app/wwwroot/branding/` inside the container. Name the files `logo.<ext>` and `favicon.<ext>` — they are detected automatically and served at `/branding/logo.<ext>` and `/branding/favicon.<ext>`. Do **not** set `LogoUrl`/`FaviconUrl` when using local files; those vars are only for remote `http(s)://` URLs.
-
-Supported extensions: `.png` `.svg` `.jpg` `.jpeg` `.gif` `.webp` `.ico`
+Mount a directory into `/app/wwwroot/branding/` inside the container and set `LogoUrl`/`FaviconUrl` to the corresponding relative paths. The files are served natively as static assets.
 
 ```yaml
 # docker-compose.yml
@@ -708,10 +680,12 @@ services:
     image: ghcr.io/yeongjonglim/sluice-base:latest
     volumes:
       - ./branding:/app/wwwroot/branding:ro
-    # Branding__LogoUrl and Branding__FaviconUrl are NOT set — local files are auto-detected
+    environment:
+      - Branding__LogoUrl=/branding/logo.png
+      - Branding__FaviconUrl=/branding/favicon.ico
 ```
 
-Place `logo.png` (and/or `favicon.ico`) in a local `./branding/` directory.
+Place `logo.png` and `favicon.ico` in a local `./branding/` directory. Both `LogoUrl` and `FaviconUrl` also accept remote `http(s)://` URLs if the assets are hosted externally — in that case no volume mount is needed.
 ```
 
 - [ ] **Step 2: Commit**

@@ -46,15 +46,12 @@ The frontend reads `window.__BRANDING__` synchronously in `main.tsx` on startup.
 
 Operators place logo and favicon files in `wwwroot/branding/`. `UseStaticFiles` serves them natively at `/branding/logo.{ext}` and `/branding/favicon.{ext}` — no custom endpoint required.
 
-The middleware resolves asset URLs using this priority order:
+The middleware resolves asset URLs as follows:
 
-1. File exists at `{WebRootPath}/branding/logo.*` → inject `/branding/logo.{ext}`
-2. `BrandingOptions.LogoUrl` is a remote `http(s)://` URL → inject that URL directly
-3. Neither → inject `null`
+- `BrandingOptions.LogoUrl` / `BrandingOptions.FaviconUrl` is non-empty → inject as-is (relative path such as `/branding/logo.png` or remote `https://` URL)
+- Empty (default) → inject `null`
 
-Same logic applies for favicon. Supported extensions: `.png` `.svg` `.jpg` `.jpeg` `.gif` `.webp` `.ico`
-
-In the Docker deployment, operators volume-mount their files into `/app/wwwroot/branding/`.
+Operators place files in `wwwroot/branding/` and must explicitly set `LogoUrl`/`FaviconUrl` to the corresponding path (e.g. `Branding__LogoUrl=/branding/logo.png`). In the Docker deployment, operators volume-mount their files into `/app/wwwroot/branding/`.
 
 ---
 
