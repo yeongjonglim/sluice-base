@@ -59,6 +59,9 @@ var web = builder.AddViteApp("web", "../frontend")
     .WithHttpsDeveloperCertificate();
 #pragma warning restore ASPIRECERTIFICATES001
 
+web.WithEnvironment("VITE_BASE_URL",
+    ReferenceExpression.Create($"{web.GetEndpoint("http")}"));
+
 api.WithEnvironment("Frontend__BaseUrl",
     ReferenceExpression.Create($"{web.GetEndpoint("http")}"));
 
