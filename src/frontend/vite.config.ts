@@ -5,7 +5,7 @@ import viteReact from "@vitejs/plugin-react";
 
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
-const apiUrl = process.env["services__api__http__0"] ?? "http://localhost:5001";
+const port = Number(process.env["PORT"] ?? 5173);
 
 export default defineConfig({
   plugins: [
@@ -23,14 +23,6 @@ export default defineConfig({
     },
   },
   server: {
-    port: Number(process.env.PORT ?? 5173),
-    proxy: {
-      "/api": { target: apiUrl, changeOrigin: false, secure: false },
-      "/openapi": { target: apiUrl, changeOrigin: false, secure: false },
-      "/login": { target: apiUrl, changeOrigin: false, secure: false },
-      "/logout": { target: apiUrl, changeOrigin: false, secure: false },
-      "/signin-oidc": { target: apiUrl, changeOrigin: false, secure: false },
-      "/signout-callback-oidc": { target: apiUrl, changeOrigin: false, secure: false },
-    },
+    port,
   },
 });

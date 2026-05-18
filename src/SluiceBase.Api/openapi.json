@@ -1375,52 +1375,6 @@
           }
         }
       }
-    },
-    "/api/branding": {
-      "get": {
-        "tags": [
-          "SluiceBase.Api"
-        ],
-        "operationId": "GetBranding",
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BrandingResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/branding/logo": {
-      "get": {
-        "tags": [
-          "SluiceBase.Api"
-        ],
-        "operationId": "GetBrandingLogo",
-        "responses": {
-          "404": {
-            "description": "Not Found"
-          }
-        }
-      }
-    },
-    "/api/branding/favicon": {
-      "get": {
-        "tags": [
-          "SluiceBase.Api"
-        ],
-        "operationId": "GetBrandingFavicon",
-        "responses": {
-          "404": {
-            "description": "Not Found"
-          }
-        }
-      }
     }
   },
   "components": {
@@ -1574,35 +1528,6 @@
           },
           "permission": {
             "type": "string"
-          }
-        }
-      },
-      "BrandingResponse": {
-        "required": [
-          "appName",
-          "primaryColor",
-          "logoUrl",
-          "faviconUrl"
-        ],
-        "type": "object",
-        "properties": {
-          "appName": {
-            "type": "string"
-          },
-          "primaryColor": {
-            "type": "string"
-          },
-          "logoUrl": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "faviconUrl": {
-            "type": [
-              "null",
-              "string"
-            ]
           }
         }
       },

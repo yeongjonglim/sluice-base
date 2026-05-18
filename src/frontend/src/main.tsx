@@ -18,24 +18,24 @@ import { BrandingContext } from "@/theme/BrandingContext.tsx";
 import { routeTree } from "@/routeTree.gen.ts";
 // @ts-ignore — generated at build/dev time by @tanstack/router-plugin
 
-const res = await fetch("/api/branding").catch(() => null);
-const branding = res?.ok ? await res.json() : null;
+declare global {
+  interface Window {
+    __BRANDING__?: {
+      appName: string;
+      primaryColor: string;
+      logoUrl: string | null;
+      faviconUrl: string | null;
+    };
+  }
+}
+
+const branding = window.__BRANDING__;
 
 const brandingValue: BrandingValue = {
   appName: branding?.appName ?? "SluiceBase",
   logoUrl: branding?.logoUrl ?? null,
   faviconUrl: branding?.faviconUrl ?? null,
 };
-
-document.title = brandingValue.appName;
-
-if (brandingValue.faviconUrl) {
-  const link =
-    document.querySelector<HTMLLinkElement>("link[rel~='icon']") ??
-    Object.assign(document.createElement("link"), { rel: "icon" });
-  link.href = brandingValue.faviconUrl;
-  document.head.appendChild(link);
-}
 
 const appTheme = createAppTheme(branding?.primaryColor ?? "teal");
 
