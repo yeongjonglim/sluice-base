@@ -5,6 +5,7 @@ using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Extensions;
+using SluiceBase.Api.Middleware;
 using SluiceBase.Api.Servers;
 using SluiceBase.Api.Targets;
 using SluiceBase.Core.Branding;
@@ -43,6 +44,22 @@ builder.Services.AddSingleton<ITargetEngine, PostgresTargetEngine>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 
+// Register the "vite" HttpClient used by BrandingHtmlMiddleware in dev.
+// In prod the client is registered but never used.
+var viteClientBuilder = builder.Services.AddHttpClient("vite");
+if (builder.Environment.IsDevelopment())
+{
+    var viteBaseUrl = builder.Configuration["Frontend__BaseUrl"] ?? "https://localhost:5173";
+    viteClientBuilder
+        .ConfigureHttpClient(c => c.BaseAddress = new Uri(viteBaseUrl))
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+        {
+            // Vite uses a dev certificate that the HttpClient won't trust by default.
+            ServerCertificateCustomValidationCallback =
+                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+        });
+}
+
 var app = builder.Build();
 
 if (builder.Configuration.GetValue("Migrations:AutoApply", true)
@@ -53,11 +70,9 @@ if (builder.Configuration.GetValue("Migrations:AutoApply", true)
     await db.Database.MigrateAsync();
 }
 
-if (!app.Environment.IsDevelopment())
-{
-    app.UseDefaultFiles();
-    app.UseStaticFiles();
-}
+// Serve wwwroot static files in all environments so operators can place
+// branding files at wwwroot/branding/ and have them served at /branding/*.
+app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -67,9 +82,9 @@ app.MapOpenApi();
 app.MapDefaultEndpoints();
 app.MapAllEndpoints();
 
-if (!app.Environment.IsDevelopment())
-{
-    app.MapFallbackToFile("index.html");
-}
+// Terminal handler: inject branding into index.html for all non-API GET requests.
+// In dev: fetches index.html from the Vite dev server and injects branding.
+// In prod: reads wwwroot/index.html from disk and injects branding.
+app.UseMiddleware<BrandingHtmlMiddleware>();
 
 app.Run();
