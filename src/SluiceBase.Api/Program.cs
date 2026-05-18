@@ -49,7 +49,7 @@ builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 var viteClientBuilder = builder.Services.AddHttpClient("vite");
 if (builder.Environment.IsDevelopment())
 {
-    var viteBaseUrl = builder.Configuration["Frontend__BaseUrl"] ?? "http://localhost:5173";
+    var viteBaseUrl = builder.Configuration["Frontend:BaseUrl"] ?? "http://localhost:5173";
     viteClientBuilder.ConfigureHttpClient(c => c.BaseAddress = new Uri(viteBaseUrl));
 }
 
@@ -71,7 +71,11 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
 
-app.MapOpenApi();
+if (builder.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
+
 app.MapDefaultEndpoints();
 app.MapAllEndpoints();
 
