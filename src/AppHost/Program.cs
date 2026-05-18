@@ -42,23 +42,16 @@ var keycloak = builder.AddKeycloak("keycloak")
     // replacing the ever-growing cookie with a single small session ID reference.
     .WithEnvironment("QUARKUS_HTTP_LIMITS_MAX_HEADER_SIZE", "128K");
 
+var web = builder.AddViteApp("web", "../frontend").WithNpm(install: true);
+
 var api = builder.AddProject<Projects.SluiceBase_Api>("api")
     .WithReference(metadataDb, "Metadata").WaitFor(metadataDb)
     .WithEnvironment("Oidc__Authority",
         ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/sluicebase"))
     .WithEnvironment("Oidc__ClientId", "sluicebase-app")
-    .WithEnvironment("Oidc__ClientSecret", "dev-secret");
-
-var web = builder.AddViteApp("web", "../frontend")
-    .WithNpm(install: true)
-    .WithReference(api)
-    .WithEndpoint("http", e => e.Port = 5173);
-
-web.WithEnvironment("VITE_BASE_URL",
-    ReferenceExpression.Create($"{web.GetEndpoint("http")}"));
-
-api.WithEnvironment("Frontend__BaseUrl",
-    ReferenceExpression.Create($"{web.GetEndpoint("http")}"));
+    .WithEnvironment("Oidc__ClientSecret", "dev-secret")
+    .WithEnvironment("Frontend__BaseUrl",
+        ReferenceExpression.Create($"{web.GetEndpoint("http")}"));
 
 metadataDb.WithCommand(
     name: "seed-servers",
