@@ -76,31 +76,10 @@ internal static class AuthSetup
 
                 options.Events.OnRedirectToIdentityProvider = ctx =>
                 {
-                    if (ctx.Request.Path.StartsWithSegments("/api") &&
-                        !ctx.Request.Path.StartsWithSegments("/api/auth/login"))
+                    if (ctx.Request.Path.StartsWithSegments("/api"))
                     {
                         ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
                         ctx.HandleResponse();
-                        return Task.CompletedTask;
-                    }
-
-                    var frontendBaseUrl = config["Frontend:BaseUrl"];
-                    if (!string.IsNullOrEmpty(frontendBaseUrl))
-                    {
-                        ctx.ProtocolMessage.RedirectUri =
-                            new Uri(new Uri(frontendBaseUrl), options.CallbackPath).ToString();
-                    }
-
-                    return Task.CompletedTask;
-                };
-
-                options.Events.OnRedirectToIdentityProviderForSignOut = ctx =>
-                {
-                    var frontendBaseUrl = config["Frontend:BaseUrl"];
-                    if (!string.IsNullOrEmpty(frontendBaseUrl))
-                    {
-                        ctx.ProtocolMessage.PostLogoutRedirectUri =
-                            new Uri(new Uri(frontendBaseUrl), options.SignedOutCallbackPath).ToString();
                     }
 
                     return Task.CompletedTask;

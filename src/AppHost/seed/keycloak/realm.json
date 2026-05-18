@@ -16,7 +16,6 @@
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": false,
       "redirectUris": [
-        "https://localhost:5173/signin-oidc",
         "https://localhost:7024/signin-oidc"
       ],
       "webOrigins": [
@@ -24,7 +23,7 @@
       ],
       "protocol": "openid-connect",
       "attributes": {
-        "post.logout.redirect.uris": "+##https://localhost:5173/signout-callback-oidc##https://localhost:7024/signout-callback-oidc"
+        "post.logout.redirect.uris": "+##https://localhost:7024/signout-callback-oidc"
       }
     }
   ],

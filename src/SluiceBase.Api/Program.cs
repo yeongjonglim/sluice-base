@@ -49,15 +49,8 @@ builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 var viteClientBuilder = builder.Services.AddHttpClient("vite");
 if (builder.Environment.IsDevelopment())
 {
-    var viteBaseUrl = builder.Configuration["Frontend__BaseUrl"] ?? "https://localhost:5173";
-    viteClientBuilder
-        .ConfigureHttpClient(c => c.BaseAddress = new Uri(viteBaseUrl))
-        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-        {
-            // Vite uses a dev certificate that the HttpClient won't trust by default.
-            ServerCertificateCustomValidationCallback =
-                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-        });
+    var viteBaseUrl = builder.Configuration["Frontend__BaseUrl"] ?? "http://localhost:5173";
+    viteClientBuilder.ConfigureHttpClient(c => c.BaseAddress = new Uri(viteBaseUrl));
 }
 
 var app = builder.Build();
