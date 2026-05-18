@@ -20,8 +20,11 @@ internal sealed partial class BrandingHtmlMiddleware(
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // Only intercept GET requests that have no matched route — true SPA fallback.
+        // Routing runs before this middleware, so GetEndpoint() is non-null for any
+        // registered route (login, logout, openapi, health, /api/*, etc.).
         if (!HttpMethods.IsGet(context.Request.Method) ||
-            context.Request.Path.StartsWithSegments("/api"))
+            context.GetEndpoint() is not null)
         {
             await next(context);
             return;
