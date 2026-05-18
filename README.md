@@ -98,9 +98,7 @@ The app is available at `http://localhost:8080`.
 
 ### Using local branding files
 
-Mount a directory into `/branding/` inside the container. Name the files `logo.<ext>` and `favicon.<ext>` — the API detects them automatically and serves them via `/api/branding/logo` and `/api/branding/favicon`. Do **not** set `LogoUrl`/`FaviconUrl` when using local files; those vars are only for remote `http(s)://` URLs.
-
-Supported extensions: `.png` `.svg` `.jpg` `.jpeg` `.gif` `.webp` `.ico`
+Mount a directory into `/app/wwwroot/branding/` inside the container and set `LogoUrl`/`FaviconUrl` to the corresponding relative paths. The files are served natively as static assets.
 
 ```yaml
 # docker-compose.yml
@@ -108,11 +106,13 @@ services:
   app:
     image: ghcr.io/yeongjonglim/sluice-base:latest
     volumes:
-      - ./branding:/branding:ro
-    # Branding__LogoUrl and Branding__FaviconUrl are NOT set — local files are auto-detected
+      - ./branding:/app/wwwroot/branding:ro
+    environment:
+      - Branding__LogoUrl=/branding/logo.png
+      - Branding__FaviconUrl=/branding/favicon.ico
 ```
 
-Place `logo.png` (and/or `favicon.ico`) in a local `./branding/` directory.
+Place `logo.png` and `favicon.ico` in a local `./branding/` directory. Both `LogoUrl` and `FaviconUrl` also accept remote `http(s)://` URLs if the assets are hosted externally — in that case no volume mount is needed.
 
 ## Database migrations
 
