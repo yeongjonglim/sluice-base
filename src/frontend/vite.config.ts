@@ -5,9 +5,15 @@ import viteReact from "@vitejs/plugin-react";
 
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 
-const apiUrl = process.env["services__api__http__0"] ?? "http://localhost:5001";
+const port = Number(process.env["PORT"] ?? 5173);
 
-export default defineConfig({
+// When running via Aspire, VITE_BASE_URL is set to the frontend's own public URL
+// (e.g. https://localhost:5173). The backend uses this as the base for absolute
+// asset URLs so the browser fetches JS/CSS/HMR directly from Vite.
+const viteBaseUrl = process.env["VITE_BASE_URL"] ?? `http://localhost:${port}`;
+
+export default defineConfig(({ command }) => ({
+  base: command === "serve" ? `${viteBaseUrl}/` : "/",
   plugins: [
     devtools(),
     tanstackRouter({
@@ -23,14 +29,11 @@ export default defineConfig({
     },
   },
   server: {
-    port: Number(process.env.PORT ?? 5173),
-    proxy: {
-      "/api": { target: apiUrl, changeOrigin: false, secure: false },
-      "/openapi": { target: apiUrl, changeOrigin: false, secure: false },
-      "/login": { target: apiUrl, changeOrigin: false, secure: false },
-      "/logout": { target: apiUrl, changeOrigin: false, secure: false },
-      "/signin-oidc": { target: apiUrl, changeOrigin: false, secure: false },
-      "/signout-callback-oidc": { target: apiUrl, changeOrigin: false, secure: false },
-    },
+    port,
+    // No proxy needed — the document is served from the backend port so all
+    // route-relative fetches (/api, /login, /logout, etc.) resolve to the
+    // backend natively. Vite's dev server includes permissive CORS headers
+    // by default, so cross-origin module loading from the backend document
+    // origin works without any additional configuration.
   },
-});
+}));
