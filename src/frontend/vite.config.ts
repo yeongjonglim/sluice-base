@@ -24,12 +24,5 @@ export default defineConfig({
   },
   server: {
     port,
-    // The backend proxies all unmatched requests to Vite (including /@vite/*, /src/*, etc.)
-    // so base = "/" works correctly. HMR is configured to connect directly to Vite's own
-    // port rather than through the backend, so the WebSocket doesn't need proxying.
-    hmr: {
-      protocol: "ws",
-      clientPort: port,
-    },
   },
 });

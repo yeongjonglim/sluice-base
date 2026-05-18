@@ -33,8 +33,14 @@ internal sealed partial class BrandingHtmlMiddleware(
 
         if (env.IsDevelopment())
         {
-            // In dev, proxy ALL unmatched requests to Vite regardless of method so that
-            // dev-tool endpoints (e.g. POST /__tsd/console-pipe) work alongside SSE and assets.
+            // CONNECT is an HTTP proxy-tunnelling method that HttpClient cannot forward.
+            if (HttpMethods.IsConnect(context.Request.Method))
+            {
+                await next(context);
+                return;
+            }
+            // Proxy all other unmatched requests to Vite so that dev-tool endpoints
+            // (e.g. POST /__tsd/console-pipe, SSE, static assets) work correctly.
             await ProxyToViteAsync(context, ct);
             return;
         }

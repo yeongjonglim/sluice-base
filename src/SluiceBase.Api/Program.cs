@@ -45,11 +45,10 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 
 // Register the "vite" HttpClient used by BrandingHtmlMiddleware in dev.
-// In prod the client is registered but never used.
-var viteClientBuilder = builder.Services.AddHttpClient("vite");
 if (builder.Environment.IsDevelopment())
 {
     var viteBaseUrl = builder.Configuration["Frontend:BaseUrl"] ?? "http://localhost:5173";
+    var viteClientBuilder = builder.Services.AddHttpClient("vite");
     viteClientBuilder.ConfigureHttpClient(c => c.BaseAddress = new Uri(viteBaseUrl));
 }
 
@@ -65,7 +64,10 @@ if (builder.Configuration.GetValue("Migrations:AutoApply", true)
 
 // Serve wwwroot static files in all environments so operators can place
 // branding files at wwwroot/branding/ and have them served at /branding/*.
-app.UseStaticFiles();
+if (builder.Environment.IsDevelopment())
+{
+    app.UseStaticFiles();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
