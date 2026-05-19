@@ -555,7 +555,6 @@ export function useAssignDatabaseRole() {
     onSuccess: (_data, { databaseId, userId }) => {
       void qc.invalidateQueries({ queryKey: ["admin", "database", databaseId, "role"] });
       void qc.invalidateQueries({ queryKey: ["admin", "user", userId, "role"] });
-      notifications.show({ title: "Role assigned", message: "", color: "teal" });
     },
     onError: (error) => {
       notifications.show({
@@ -589,7 +588,6 @@ export function useAssignUserRole() {
     onSuccess: (_data, { databaseId, userId }) => {
       void qc.invalidateQueries({ queryKey: ["admin", "database", databaseId, "role"] });
       void qc.invalidateQueries({ queryKey: ["admin", "user", userId, "role"] });
-      notifications.show({ title: "Role assigned", message: "", color: "teal" });
     },
     onError: (error) => {
       notifications.show({
@@ -619,7 +617,6 @@ export function useRemoveDatabaseRole() {
     onSuccess: (_data, { databaseId, userId }) => {
       void qc.invalidateQueries({ queryKey: ["admin", "database", databaseId, "role"] });
       void qc.invalidateQueries({ queryKey: ["admin", "user", userId, "role"] });
-      notifications.show({ title: "Role removed", message: "", color: "teal" });
     },
     onError: (error) => {
       notifications.show({
