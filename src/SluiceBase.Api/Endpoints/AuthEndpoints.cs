@@ -17,7 +17,9 @@ internal static class AuthEndpoints
         app.MapGet("/login",
                 ChallengeHttpResult (string? returnUrl) =>
                 {
-                    var redirectUri = string.IsNullOrEmpty(returnUrl) ? "/" : returnUrl;
+                    var redirectUri = !string.IsNullOrEmpty(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
+                        ? returnUrl
+                        : "/";
                     return TypedResults.Challenge(
                         new AuthenticationProperties { RedirectUri = redirectUri },
                         authenticationSchemes: [OpenIdConnectDefaults.AuthenticationScheme]);
