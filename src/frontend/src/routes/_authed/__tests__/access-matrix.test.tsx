@@ -24,10 +24,10 @@ const mockUseUsers = vi.fn();
 
 vi.mock("@/api/hooks", () => ({
   meQueryOptions: { queryKey: ["me"] },
-  useAdminServers: (...args: unknown[]) => mockUseAdminServers(...args),
-  useUserRoles: (...args: unknown[]) => mockUseUserRoles(...args),
-  useDatabaseRoles: (...args: unknown[]) => mockUseDatabaseRoles(...args),
-  useUsers: (...args: unknown[]) => mockUseUsers(...args),
+  useAdminServers: (...args: Array<unknown>) => mockUseAdminServers(...args),
+  useUserRoles: (...args: Array<unknown>) => mockUseUserRoles(...args),
+  useDatabaseRoles: (...args: Array<unknown>) => mockUseDatabaseRoles(...args),
+  useUsers: (...args: Array<unknown>) => mockUseUsers(...args),
   useAssignUserRole: () => ({ mutate: mockAssignUserRole }),
   useAssignDatabaseRole: () => ({ mutate: mockAssignDatabaseRole }),
   useRemoveDatabaseRole: () => ({ mutate: mockRemoveRole }),
@@ -99,7 +99,7 @@ describe("UserRolePanel", () => {
   });
 
   it("calls assignUserRole when checking an unchecked box", async () => {
-    mockAssignUserRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs?.onSuccess?.());
+    mockAssignUserRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs.onSuccess?.());
     render(React.createElement(UserRolePanel, { user: testUser }), { wrapper: Wrapper });
     await userEvent.click(screen.getAllByRole("checkbox", { checked: false })[0].closest("td")!);
     expect(mockAssignUserRole).toHaveBeenCalledWith(
@@ -113,7 +113,7 @@ describe("UserRolePanel", () => {
       isLoading: false,
       data: { roles: [{ id: "r-1", databaseId: "db-1", permission: "query:execute", databaseDisplayName: "Blue App DB", serverName: "Blue", grantedAt: "" }] },
     });
-    mockRemoveRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs?.onSuccess?.());
+    mockRemoveRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs.onSuccess?.());
     render(React.createElement(UserRolePanel, { user: testUser }), { wrapper: Wrapper });
     await userEvent.click(screen.getAllByRole("checkbox", { checked: true })[0].closest("td")!);
     expect(mockRemoveRole).toHaveBeenCalledWith(
@@ -124,7 +124,7 @@ describe("UserRolePanel", () => {
 
   it("shows Access updated notification after mutation settles", async () => {
     const { notifications } = await import("@mantine/notifications");
-    mockAssignUserRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs?.onSuccess?.());
+    mockAssignUserRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs.onSuccess?.());
     render(React.createElement(UserRolePanel, { user: testUser }), { wrapper: Wrapper });
     await userEvent.click(screen.getAllByRole("checkbox", { checked: false })[0].closest("td")!);
     expect(notifications.show).toHaveBeenCalledWith(
@@ -160,7 +160,7 @@ describe("DatabaseRolePanel", () => {
   });
 
   it("calls assignDatabaseRole when checking an unchecked box", async () => {
-    mockAssignDatabaseRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs?.onSuccess?.());
+    mockAssignDatabaseRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs.onSuccess?.());
     render(React.createElement(DatabaseRolePanel, { database: testDatabase }), { wrapper: Wrapper });
     await userEvent.click(screen.getAllByRole("checkbox", { checked: false })[0].closest("td")!);
     expect(mockAssignDatabaseRole).toHaveBeenCalledWith(
@@ -174,7 +174,7 @@ describe("DatabaseRolePanel", () => {
       isLoading: false,
       data: { roles: [{ id: "r-2", userId: "user-2", permission: "query:execute", userEmail: "bob@example.com", userName: "Bob Dev", grantedAt: "", grantedById: null }] },
     });
-    mockRemoveRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs?.onSuccess?.());
+    mockRemoveRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs.onSuccess?.());
     render(React.createElement(DatabaseRolePanel, { database: testDatabase }), { wrapper: Wrapper });
     await userEvent.click(screen.getAllByRole("checkbox", { checked: true })[0].closest("td")!);
     expect(mockRemoveRole).toHaveBeenCalledWith(
