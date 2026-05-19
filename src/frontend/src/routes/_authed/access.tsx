@@ -219,13 +219,20 @@ export function UserRolePanel({
                   <Table.Tr key={db.id}>
                     <Table.Td><Text size="sm">{db.displayName}</Text></Table.Td>
                     {SCOPEABLE_PERMISSIONS.map((p) => (
-                      <Table.Td key={p.value} style={{ textAlign: "center" }}>
-                        <Checkbox
-                          checked={isChecked(db.id, p.value)}
-                          disabled={roles.isLoading}
-                          onChange={(e) => handleToggle(db.id, p.value, e.currentTarget.checked)}
-                          aria-label={`${p.label} on ${db.displayName}`}
-                        />
+                      <Table.Td
+                        key={p.value}
+                        onClick={() => { if (!roles.isLoading) handleToggle(db.id, p.value, !isChecked(db.id, p.value)); }}
+                        style={{ cursor: roles.isLoading ? "default" : "pointer" }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "center" }}>
+                          <Checkbox
+                            checked={isChecked(db.id, p.value)}
+                            disabled={roles.isLoading}
+                            onChange={() => {}}
+                            aria-label={`${p.label} on ${db.displayName}`}
+                            styles={{ root: { pointerEvents: "none" } }}
+                          />
+                        </div>
                       </Table.Td>
                     ))}
                   </Table.Tr>
@@ -306,13 +313,20 @@ export function DatabaseRolePanel({
                   {user.name && <Text size="xs" c="dimmed">{user.name}</Text>}
                 </Table.Td>
                 {SCOPEABLE_PERMISSIONS.map((p) => (
-                  <Table.Td key={p.value} style={{ textAlign: "center" }}>
-                    <Checkbox
-                      checked={isChecked(user.id, p.value)}
-                      disabled={roles.isLoading}
-                      onChange={(e) => handleToggle(user.id, p.value, e.currentTarget.checked)}
-                      aria-label={`${p.label} for ${user.email ?? user.id}`}
-                    />
+                  <Table.Td
+                    key={p.value}
+                    onClick={() => { if (!roles.isLoading) handleToggle(user.id, p.value, !isChecked(user.id, p.value)); }}
+                    style={{ cursor: roles.isLoading ? "default" : "pointer" }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "center" }}>
+                      <Checkbox
+                        checked={isChecked(user.id, p.value)}
+                        disabled={roles.isLoading}
+                        onChange={() => {}}
+                        aria-label={`${p.label} for ${user.email ?? user.id}`}
+                        styles={{ root: { pointerEvents: "none" } }}
+                      />
+                    </div>
                   </Table.Td>
                 ))}
               </Table.Tr>
