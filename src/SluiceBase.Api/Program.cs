@@ -62,9 +62,7 @@ if (builder.Configuration.GetValue("Migrations:AutoApply", true)
     await db.Database.MigrateAsync();
 }
 
-// Serve wwwroot static files in all environments so operators can place
-// branding files at wwwroot/branding/ and have them served at /branding/*.
-if (builder.Environment.IsDevelopment())
+if (!builder.Environment.IsDevelopment())
 {
     app.UseStaticFiles();
 }
