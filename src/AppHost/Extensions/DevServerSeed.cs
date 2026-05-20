@@ -7,7 +7,7 @@ internal static class DevServerSeed
 {
     public static async Task<ExecuteCommandResult> SeedAsync(
         ExecuteCommandContext context,
-        IResourceBuilder<ProjectResource> api,
+        IResourceBuilder<IResourceWithEndpoints> api,
         IResourceBuilder<PostgresDatabaseResource> metadataDb,
         IResourceBuilder<PostgresDatabaseResource> blueDb,
         IResourceBuilder<PostgresDatabaseResource> greenDb)
