@@ -22,6 +22,23 @@ export default defineConfig({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  build: {
+    rolldownOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules")) {
+            if (id.includes("react-dom") || id.includes("/react/"))
+              return "vendor/react";
+            if (id.includes("@mantine")) return "vendor/mantine";
+            if (id.includes("@tanstack")) return "vendor/tanstack";
+            if (id.includes("@codemirror")) return "vendor/codemirror";
+            if (id.includes("@uiw")) return "vendor/codemirror-ui";
+            if (id.includes("@tabler")) return "vendor/icons";
+          }
+        },
+      },
+    },
+  },
   server: {
     port,
   },
