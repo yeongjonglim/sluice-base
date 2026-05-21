@@ -127,6 +127,57 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
     }
 
+    [Fact]
+    public async Task GetSchema_SensitiveColumn_MarkedAsRestricted()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "user", "email", xsrf, ct);
+
+        var schema = await session.Client.GetFromJsonAsync<SchemaTreeBody>(
+            $"/api/schema/{databaseId}", ct);
+
+        var col = schema!.Schemas
+            .Single(s => s.Name == "public").Tables
+            .Single(t => t.Name == "user").Columns
+            .Single(c => c.Name == "email");
+
+        Assert.True(col.IsRestricted);
+    }
+
+    [Fact]
+    public async Task GetSchema_SensitiveColumnWithBypass_NotRestricted()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var users = await session.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var alice = users!.Users.Single(u => u.Email == "alice@example.com");
+
+        var columnId = await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "user", "email", xsrf, ct);
+        await SensitiveColumnTestHelper.GrantBypassAsync(
+            session, databaseId.ToString(), columnId, alice.Id, xsrf, ct);
+
+        var schema = await session.Client.GetFromJsonAsync<SchemaTreeBody>(
+            $"/api/schema/{databaseId}", ct);
+
+        var col = schema!.Schemas
+            .Single(s => s.Name == "public").Tables
+            .Single(t => t.Name == "user").Columns
+            .Single(c => c.Name == "email");
+
+        Assert.False(col.IsRestricted);
+    }
+
     private sealed record ListUserBody(UserRow[] Users);
     private sealed record UserRow(string Id, string Email);
+    private sealed record SchemaTreeBody(SchemaInfoBody[] Schemas);
+    private sealed record SchemaInfoBody(string Name, TableInfoBody[] Tables);
+    private sealed record TableInfoBody(string Name, ColumnInfoBody[] Columns);
+    private sealed record ColumnInfoBody(string Name, string DataType, bool IsNullable, bool IsRestricted);
 }
