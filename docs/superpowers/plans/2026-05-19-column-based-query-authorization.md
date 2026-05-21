@@ -4,9 +4,9 @@
 
 **Goal:** Globally mark columns as sensitive so all `query:execute` users are blocked from referencing them in SQL queries, with a per-user bypass grant for trusted users and full audit logging.
 
-**Architecture:** Two new EF entities (`sensitive_column`, `user_column_bypass`) drive a pre-execution SQL AST check in `QueryEndpoints`. A pure `SqlColumnChecker` service parses SQL with `SqlParserCS`, walks all clauses, resolves aliases, and returns any blocked column hits. The schema endpoint is annotated to mark restricted columns for the frontend so the generate-query button can exclude them.
+**Architecture:** Two new EF entities (`sensitive_column`, `user_column_bypass`) drive a pre-execution check in `QueryEndpoints`. A hand-written `SqlTokenizer` breaks SQL into typed tokens (identifiers, string literals, comments, dollar-quoted strings) with no external dependencies. `SqlColumnChecker` uses it to find identifier tokens matching sensitive column names and blocks the query. The schema endpoint is annotated to mark restricted columns for the frontend so the generate-query button can exclude them.
 
-**Tech Stack:** .NET 10, EF Core (snake_case naming), Vogen IDs, SqlParserCS 0.6.5 (already added to `SluiceBase.Api.csproj`), React/TypeScript/Mantine frontend, `openapi-typescript` for type generation.
+**Tech Stack:** .NET 10, EF Core (snake_case naming), Vogen IDs, React/TypeScript/Mantine frontend, `openapi-typescript` for type generation. No external SQL parser dependency.
 
 ---
 
@@ -25,7 +25,8 @@
 **New — Api:**
 - `src/SluiceBase.Api/Data/Configurations/SensitiveColumnConfiguration.cs`
 - `src/SluiceBase.Api/Data/Configurations/UserColumnBypassConfiguration.cs`
-- `src/SluiceBase.Api/Queries/SqlColumnChecker.cs` — pure SQL parsing service
+- `src/SluiceBase.Api/Queries/SqlTokenizer.cs` — hand-written SQL tokenizer (no external deps)
+- `src/SluiceBase.Api/Queries/SqlColumnChecker.cs` — uses tokenizer to find blocked column hits
 - `src/SluiceBase.Api/Endpoints/SensitiveColumnEndpoints.cs`
 - `src/SluiceBase.Api/Data/Migrations/<timestamp>_AddSensitiveColumns.cs` — EF generated
 
@@ -36,7 +37,8 @@
 - `src/SluiceBase.Api/Endpoints/EndpointMapper.cs` — register `SensitiveColumnEndpoints`
 
 **New — Tests:**
-- `tests/IntegrationTests/SqlColumnCheckerTests.cs` — fast unit tests (no Aspire stack needed)
+- `tests/IntegrationTests/SqlTokenizerTests.cs` — fast unit tests for the tokenizer
+- `tests/IntegrationTests/SqlColumnCheckerTests.cs` — fast unit tests for the checker
 - `tests/IntegrationTests/SensitiveColumnEndpointTests.cs` — integration tests
 
 **Modified — Tests:**
@@ -623,15 +625,366 @@ git commit -m "feat: add SensitiveColumnEndpoints"
 
 ---
 
-## Task 5: SqlColumnChecker (TDD)
+## Task 5: SqlTokenizer + SqlColumnChecker (TDD)
 
 **Files:**
+- Create: `tests/IntegrationTests/SqlTokenizerTests.cs`
 - Create: `tests/IntegrationTests/SqlColumnCheckerTests.cs`
+- Create: `src/SluiceBase.Api/Queries/SqlTokenizer.cs`
 - Create: `src/SluiceBase.Api/Queries/SqlColumnChecker.cs`
 
-The checker is a pure static service: no DB, no HTTP. It takes SQL + metadata and returns hits. Test it directly without the Aspire stack.
+Both are pure static services: no DB, no HTTP, no external dependencies. Test them directly without the Aspire stack.
 
-- [ ] **Step 1: Write the first failing test**
+**Approach:** `SqlTokenizer` does a single left-to-right scan, classifying each stretch of SQL as an identifier, string literal, comment, or punctuation. Only identifier tokens are emitted. `SqlColumnChecker` checks emitted identifiers against sensitive column names and conservatively blocks any query containing `*` when sensitive columns exist.
+
+**Known limitation:** `SELECT id AS price` — an alias named after a sensitive column — is a false positive (the alias is an identifier token). This is accepted as a rare and safe-to-block case.
+
+- [ ] **Step 1: Write the first failing tokenizer test**
+
+```csharp
+// tests/IntegrationTests/SqlTokenizerTests.cs
+using SluiceBase.Api.Queries;
+
+namespace IntegrationTests;
+
+public class SqlTokenizerTests
+{
+    [Fact]
+    public void Tokenize_ExtractsIdentifiers()
+    {
+        var result = SqlTokenizer.Tokenize("SELECT email, name FROM users");
+        Assert.Contains("email", result.Identifiers);
+        Assert.Contains("name", result.Identifiers);
+        Assert.Contains("users", result.Identifiers);
+    }
+}
+```
+
+- [ ] **Step 2: Run to verify it fails**
+
+```bash
+dotnet test tests/IntegrationTests \
+  --filter "FullyQualifiedName~SqlTokenizerTests.Tokenize_ExtractsIdentifiers"
+```
+Expected: build error — `SqlTokenizer` doesn't exist yet.
+
+- [ ] **Step 3: Create SqlTokenizer**
+
+```csharp
+// src/SluiceBase.Api/Queries/SqlTokenizer.cs
+using System.Text;
+
+namespace SluiceBase.Api.Queries;
+
+internal static class SqlTokenizer
+{
+    public sealed record Result(IReadOnlyList<string> Identifiers, bool HasWildcard);
+
+    /// <summary>
+    /// Extracts identifier tokens from SQL, skipping string literals, comments, and
+    /// dollar-quoted strings. Also reports whether a bare * appears outside those contexts.
+    /// </summary>
+    public static Result Tokenize(string sql)
+    {
+        var identifiers = new List<string>();
+        var hasWildcard = false;
+        var pos = 0;
+        var len = sql.Length;
+
+        while (pos < len)
+        {
+            var c = sql[pos];
+
+            // Line comment: -- to end of line
+            if (c == '-' && pos + 1 < len && sql[pos + 1] == '-')
+            {
+                pos += 2;
+                while (pos < len && sql[pos] != '\n') pos++;
+                continue;
+            }
+
+            // Block comment: /* ... */ with PostgreSQL nesting support
+            if (c == '/' && pos + 1 < len && sql[pos + 1] == '*')
+            {
+                pos += 2;
+                var depth = 1;
+                while (pos + 1 < len && depth > 0)
+                {
+                    if (sql[pos] == '/' && sql[pos + 1] == '*') { depth++; pos += 2; }
+                    else if (sql[pos] == '*' && sql[pos + 1] == '/') { depth--; pos += 2; }
+                    else pos++;
+                }
+                continue;
+            }
+
+            // Dollar-quoted string: $tag$...$tag$ (tag may be empty)
+            if (c == '$')
+            {
+                var tagEnd = pos + 1;
+                while (tagEnd < len && (sql[tagEnd] == '_' || char.IsLetterOrDigit(sql[tagEnd])))
+                    tagEnd++;
+                if (tagEnd < len && sql[tagEnd] == '$')
+                {
+                    var tag = sql[pos..(tagEnd + 1)];
+                    pos = tagEnd + 1;
+                    var close = sql.IndexOf(tag, pos, StringComparison.Ordinal);
+                    pos = close >= 0 ? close + tag.Length : len;
+                }
+                else
+                {
+                    pos++; // lone $ — skip as punctuation
+                }
+                continue;
+            }
+
+            // Single-quoted string: '...' with '' as escape
+            if (c == '\'')
+            {
+                pos++;
+                while (pos < len)
+                {
+                    if (sql[pos] == '\'') { pos++; if (pos < len && sql[pos] == '\'') pos++; else break; }
+                    else pos++;
+                }
+                continue;
+            }
+
+            // Double-quoted identifier: "..." with "" as escape — emit as identifier
+            if (c == '"')
+            {
+                pos++;
+                var sb = new StringBuilder();
+                while (pos < len)
+                {
+                    if (sql[pos] == '"') { pos++; if (pos < len && sql[pos] == '"') { sb.Append('"'); pos++; } else break; }
+                    else sb.Append(sql[pos++]);
+                }
+                if (sb.Length > 0) identifiers.Add(sb.ToString());
+                continue;
+            }
+
+            // Unquoted identifier: [a-zA-Z_][a-zA-Z0-9_]*
+            // Prefix strings (E'...', B'...', X'...', N'...') start with a letter then '.
+            // Treat them as string literals — skip without emitting the prefix letter.
+            if (c == '_' || char.IsLetter(c))
+            {
+                var start = pos;
+                while (pos < len && (sql[pos] == '_' || char.IsLetterOrDigit(sql[pos]))) pos++;
+                if (pos < len && sql[pos] == '\'')
+                {
+                    // Prefix string — skip the following string literal
+                    pos++;
+                    while (pos < len)
+                    {
+                        if (sql[pos] == '\'') { pos++; if (pos < len && sql[pos] == '\'') pos++; else break; }
+                        else pos++;
+                    }
+                    continue;
+                }
+                identifiers.Add(sql[start..pos]);
+                continue;
+            }
+
+            // Wildcard
+            if (c == '*') { hasWildcard = true; pos++; continue; }
+
+            // Everything else (operators, punctuation, digits): skip
+            pos++;
+        }
+
+        return new Result(identifiers, hasWildcard);
+    }
+}
+```
+
+- [ ] **Step 4: Run the first test to verify it passes**
+
+```bash
+dotnet test tests/IntegrationTests \
+  --filter "FullyQualifiedName~SqlTokenizerTests.Tokenize_ExtractsIdentifiers"
+```
+Expected: PASS.
+
+- [ ] **Step 5: Add remaining tokenizer tests**
+
+Add these tests to `SqlTokenizerTests.cs`:
+
+```csharp
+[Fact]
+public void Tokenize_SkipsSingleQuotedStringContent()
+{
+    var result = SqlTokenizer.Tokenize("SELECT id FROM users WHERE note = 'email address'");
+    Assert.DoesNotContain("email", result.Identifiers);
+    Assert.DoesNotContain("address", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_SkipsLineComments()
+{
+    var result = SqlTokenizer.Tokenize("SELECT id FROM users -- email column");
+    Assert.DoesNotContain("email", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_SkipsBlockComments()
+{
+    var result = SqlTokenizer.Tokenize("SELECT /* email */ id FROM users");
+    Assert.DoesNotContain("email", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_SkipsNestedBlockComments()
+{
+    var result = SqlTokenizer.Tokenize("SELECT /* /* email */ inner */ id FROM users");
+    Assert.DoesNotContain("email", result.Identifiers);
+    Assert.DoesNotContain("inner", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_SkipsDollarQuotedStrings()
+{
+    var result = SqlTokenizer.Tokenize("SELECT $$email$$, id FROM users");
+    Assert.DoesNotContain("email", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_SkipsTaggedDollarQuotedStrings()
+{
+    var result = SqlTokenizer.Tokenize("SELECT $body$email$body$, id FROM users");
+    Assert.DoesNotContain("email", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_ExtractsDoubleQuotedIdentifiers()
+{
+    var result = SqlTokenizer.Tokenize("SELECT \"email\" FROM users");
+    Assert.Contains("email", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_SkipsPrefixStringContent()
+{
+    // E'...' is a string literal — 'email' inside it should not be extracted
+    var result = SqlTokenizer.Tokenize("SELECT id FROM users WHERE note = E'email'");
+    Assert.DoesNotContain("email", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_PriceAndPriceTypeAreDistinctTokens()
+{
+    var result = SqlTokenizer.Tokenize("SELECT price_type FROM orders");
+    Assert.Contains("price_type", result.Identifiers);
+    Assert.DoesNotContain("price", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_DetectsWildcard()
+{
+    var result = SqlTokenizer.Tokenize("SELECT * FROM users");
+    Assert.True(result.HasWildcard);
+}
+
+[Fact]
+public void Tokenize_WildcardInsideString_NotDetected()
+{
+    var result = SqlTokenizer.Tokenize("SELECT id FROM users WHERE note LIKE '%*%'");
+    Assert.False(result.HasWildcard);
+}
+
+[Fact]
+public void Tokenize_UppercaseKeywords_ExtractedAsIdentifiers()
+{
+    // Keywords like SELECT and FROM are valid identifiers in the token stream;
+    // column names may be written in any casing by the user.
+    var result = SqlTokenizer.Tokenize("SELECT EMAIL, FIRST_NAME FROM USERS");
+    Assert.Contains("EMAIL", result.Identifiers);
+    Assert.Contains("FIRST_NAME", result.Identifiers);
+    Assert.Contains("USERS", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_MixedCasing_ExtractedVerbatim()
+{
+    // The tokenizer preserves original casing — the checker handles case-insensitive comparison.
+    var result = SqlTokenizer.Tokenize("SELECT Email FROM Users");
+    Assert.Contains("Email", result.Identifiers);
+    Assert.DoesNotContain("email", result.Identifiers);
+    Assert.DoesNotContain("EMAIL", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_IdentifiersWithNumbers_Extracted()
+{
+    // Identifiers may contain digits anywhere after the first character.
+    var result = SqlTokenizer.Tokenize("SELECT order_v2, column1, v3_price FROM orders_2024");
+    Assert.Contains("order_v2", result.Identifiers);
+    Assert.Contains("column1", result.Identifiers);
+    Assert.Contains("v3_price", result.Identifiers);
+    Assert.Contains("orders_2024", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_MultilineQuery_ExtractsAllIdentifiers()
+{
+    var sql = """
+        SELECT
+          id,
+          email,
+          created_at
+        FROM users
+        WHERE status = 'active'
+        ORDER BY created_at DESC
+        """;
+    var result = SqlTokenizer.Tokenize(sql);
+    Assert.Contains("id", result.Identifiers);
+    Assert.Contains("email", result.Identifiers);
+    Assert.Contains("created_at", result.Identifiers);
+    Assert.Contains("users", result.Identifiers);
+    Assert.Contains("status", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_CTE_ExtractsIdentifiersFromBothParts()
+{
+    var sql = """
+        WITH active_users AS (
+            SELECT id, email FROM users WHERE active = true
+        )
+        SELECT id, email FROM active_users
+        """;
+    var result = SqlTokenizer.Tokenize(sql);
+    // identifiers from both the CTE body and the outer query
+    Assert.Contains("active_users", result.Identifiers);
+    Assert.Contains("id", result.Identifiers);
+    Assert.Contains("email", result.Identifiers);
+    Assert.Contains("users", result.Identifiers);
+    Assert.Contains("active", result.Identifiers);
+}
+
+[Fact]
+public void Tokenize_SchemaQualifiedColumn_ExtractsSeparateTokens()
+{
+    // The dot is punctuation; schema, table, and column become separate identifier tokens.
+    // SqlColumnChecker matches on column name alone, so this is still correctly detected.
+    var result = SqlTokenizer.Tokenize("SELECT public.users.email FROM public.users");
+    Assert.Contains("public", result.Identifiers);
+    Assert.Contains("users", result.Identifiers);
+    Assert.Contains("email", result.Identifiers);
+    // Dot must NOT become part of any token
+    Assert.DoesNotContain("public.users", result.Identifiers);
+    Assert.DoesNotContain("users.email", result.Identifiers);
+}
+```
+
+- [ ] **Step 6: Run all tokenizer tests**
+
+```bash
+dotnet test tests/IntegrationTests \
+  --filter "FullyQualifiedName~SqlTokenizerTests"
+```
+Expected: all PASS.
+
+- [ ] **Step 7: Write failing checker tests**
 
 ```csharp
 // tests/IntegrationTests/SqlColumnCheckerTests.cs
@@ -641,47 +994,21 @@ namespace IntegrationTests;
 
 public class SqlColumnCheckerTests
 {
-    private static readonly IReadOnlyDictionary<(string Schema, string Table), string[]> EmptySchema =
-        new Dictionary<(string, string), string[]>();
-
     [Fact]
     public void FindBlockedColumns_SimpleSelect_ReturnsHit()
     {
-        var blocked = new HashSet<(string, string, string)>
-        {
-            ("public", "users", "email")
-        };
-
-        var hits = SqlColumnChecker.FindBlockedColumns(
-            "SELECT email FROM users",
-            blocked,
-            EmptySchema);
-
+        var blocked = new[] { ("public", "users", "email") };
+        var hits = SqlColumnChecker.FindBlockedColumns("SELECT email FROM users", blocked);
         Assert.Single(hits);
-        Assert.Equal("public", hits[0].Schema);
-        Assert.Equal("users", hits[0].Table);
         Assert.Equal("email", hits[0].Column);
     }
 }
 ```
 
-- [ ] **Step 2: Run to verify it fails**
-
-```bash
-dotnet test tests/IntegrationTests \
-  --filter "FullyQualifiedName~SqlColumnCheckerTests" \
-  --no-build 2>&1 | grep -E "FAIL|error|SqlColumnChecker"
-```
-Expected: build error — `SqlColumnChecker` doesn't exist yet.
-
-- [ ] **Step 3: Create SqlColumnChecker with minimal implementation**
+- [ ] **Step 8: Create SqlColumnChecker**
 
 ```csharp
 // src/SluiceBase.Api/Queries/SqlColumnChecker.cs
-using SqlParser;
-using SqlParser.Ast;
-using SqlParser.Dialects;
-
 namespace SluiceBase.Api.Queries;
 
 public sealed record SensitiveColumnHit(string Schema, string Table, string Column);
@@ -689,186 +1016,53 @@ public sealed record SensitiveColumnHit(string Schema, string Table, string Colu
 internal static class SqlColumnChecker
 {
     /// <summary>
-    /// Returns sensitive column hits for <paramref name="sql"/> that are not covered by bypass.
+    /// Returns hits for sensitive columns referenced in <paramref name="sql"/>.
     /// </summary>
-    /// <param name="sql">The SQL to analyse.</param>
+    /// <param name="sql">The SQL to check.</param>
     /// <param name="blockedColumns">
-    ///   (schema, table, column) tuples that are sensitive AND have no bypass for the current user.
-    ///   All values are expected to be lower-case.
-    /// </param>
-    /// <param name="tableColumns">
-    ///   Live schema used to expand SELECT *: (schema, table) → column names (lower-case).
+    ///   Sensitive columns that are NOT bypassed for the current user.
+    ///   (schema, table, column) — values need not be pre-lowercased.
     /// </param>
     public static IReadOnlyList<SensitiveColumnHit> FindBlockedColumns(
         string sql,
-        IReadOnlySet<(string Schema, string Table, string Column)> blockedColumns,
-        IReadOnlyDictionary<(string Schema, string Table), string[]> tableColumns)
+        IReadOnlyList<(string Schema, string Table, string Column)> blockedColumns)
     {
         if (blockedColumns.Count == 0) return [];
 
-        IReadOnlyList<Statement> statements;
-        try
-        {
-            statements = new SqlQueryParser().Parse(sql, new PostgreSqlDialect());
-        }
-        catch
-        {
-            // Unparseable SQL — let the DB handle the error. Don't block.
-            return [];
-        }
-
+        var tokenResult = SqlTokenizer.Tokenize(sql);
         var hits = new HashSet<SensitiveColumnHit>();
 
-        foreach (var statement in statements)
+        // SELECT * — conservatively block all sensitive columns on this database.
+        // We cannot know which tables * expands to without a live schema lookup,
+        // so any wildcard in a query that has sensitive columns is blocked.
+        if (tokenResult.HasWildcard)
         {
-            if (statement is not Statement.Select sel) continue;
-            if (sel.Query.Body is not SetExpression.SelectExpression body) continue;
+            foreach (var (schema, table, column) in blockedColumns)
+                hits.Add(new(schema, table, column));
+            return [.. hits];
+        }
 
-            var aliasMap = BuildAliasMap(body.Select.From);
-            CheckProjections(body.Select.Projection, aliasMap, blockedColumns, tableColumns, hits);
-            CheckExpressions(statement, aliasMap, blockedColumns, hits);
+        // Check identifier tokens against blocked column names (case-insensitive).
+        // Table/schema qualification is not available after tokenization, so any
+        // identifier matching a blocked column name is treated as a hit regardless
+        // of which table it belongs to. This is conservative and correct for the
+        // common case where a column name uniquely identifies the sensitive field.
+        foreach (var identifier in tokenResult.Identifiers)
+        {
+            var lower = identifier.ToLowerInvariant();
+            foreach (var (schema, table, column) in blockedColumns)
+            {
+                if (column.ToLowerInvariant() == lower)
+                    hits.Add(new(schema, table, column));
+            }
         }
 
         return [.. hits];
     }
-
-    // ── alias map ─────────────────────────────────────────────────────────────
-
-    private static Dictionary<string, (string Schema, string Table)> BuildAliasMap(
-        IReadOnlyList<TableWithJoins> from)
-    {
-        var map = new Dictionary<string, (string, string)>(StringComparer.OrdinalIgnoreCase);
-        foreach (var twj in from)
-        {
-            AddTable(twj.Relation, map);
-            foreach (var join in twj.Joins)
-                AddTable(join.Relation, map);
-        }
-        return map;
-    }
-
-    private static void AddTable(TableFactor? factor, Dictionary<string, (string, string)> map)
-    {
-        if (factor is not TableFactor.Table tbl) return;
-
-        var nameParts = tbl.Name.Values.Select(i => i.Value.ToLowerInvariant()).ToArray();
-        var schema = nameParts.Length >= 2 ? nameParts[^2] : "public";
-        var table = nameParts[^1];
-
-        // Key is alias if present, otherwise table name
-        var key = tbl.Alias?.Name.Value ?? table;
-        map[key.ToLowerInvariant()] = (schema, table);
-    }
-
-    // ── projection (SELECT list) ───────────────────────────────────────────────
-
-    private static void CheckProjections(
-        IReadOnlyList<SelectItem> projections,
-        Dictionary<string, (string Schema, string Table)> aliasMap,
-        IReadOnlySet<(string Schema, string Table, string Column)> blocked,
-        IReadOnlyDictionary<(string Schema, string Table), string[]> tableColumns,
-        HashSet<SensitiveColumnHit> hits)
-    {
-        foreach (var item in projections)
-        {
-            if (item is SelectItem.Wildcard)
-            {
-                // SELECT * — expand all tables in scope
-                foreach (var (_, (schema, table)) in aliasMap)
-                    CheckWildcardTable(schema, table, blocked, tableColumns, hits);
-            }
-            else if (item is SelectItem.QualifiedWildcard qw)
-            {
-                // SELECT t.* — resolve qualifier then expand
-                var qualifier = qw.Name.Values.Last().Value.ToLowerInvariant();
-                if (aliasMap.TryGetValue(qualifier, out var resolved))
-                    CheckWildcardTable(resolved.Schema, resolved.Table, blocked, tableColumns, hits);
-            }
-            // Other projection types (UnnamedExpression, ExpressionWithAlias) are
-            // expressions and will be visited by CheckExpressions below.
-        }
-    }
-
-    private static void CheckWildcardTable(
-        string schema, string table,
-        IReadOnlySet<(string Schema, string Table, string Column)> blocked,
-        IReadOnlyDictionary<(string Schema, string Table), string[]> tableColumns,
-        HashSet<SensitiveColumnHit> hits)
-    {
-        if (!tableColumns.TryGetValue((schema, table), out var cols)) return;
-        foreach (var col in cols)
-        {
-            if (blocked.Contains((schema, table, col.ToLowerInvariant())))
-                hits.Add(new(schema, table, col));
-        }
-    }
-
-    // ── expression visitor ────────────────────────────────────────────────────
-
-    private static void CheckExpressions(
-        Statement statement,
-        Dictionary<string, (string Schema, string Table)> aliasMap,
-        IReadOnlySet<(string Schema, string Table, string Column)> blocked,
-        HashSet<SensitiveColumnHit> hits)
-    {
-        var visitor = new ColumnRefVisitor(aliasMap, blocked);
-        statement.Visit(visitor);
-        foreach (var hit in visitor.Hits)
-            hits.Add(hit);
-    }
-
-    private sealed class ColumnRefVisitor(
-        Dictionary<string, (string Schema, string Table)> aliasMap,
-        IReadOnlySet<(string Schema, string Table, string Column)> blocked) : SqlVisitor
-    {
-        private readonly HashSet<SensitiveColumnHit> _hits = new();
-        public IReadOnlySet<SensitiveColumnHit> Hits => _hits;
-
-        public override Expression VisitExpression(Expression expr)
-        {
-            switch (expr)
-            {
-                case Expression.Identifier id:
-                {
-                    var col = id.Ident.Value.ToLowerInvariant();
-                    foreach (var (_, (schema, table)) in aliasMap)
-                    {
-                        if (blocked.Contains((schema, table, col)))
-                            _hits.Add(new(schema, table, id.Ident.Value));
-                    }
-                    break;
-                }
-                case Expression.CompoundIdentifier compound:
-                {
-                    var parts = compound.Idents.Select(i => i.Value).ToArray();
-                    if (parts.Length == 2)
-                    {
-                        var qualifier = parts[0].ToLowerInvariant();
-                        var col = parts[1].ToLowerInvariant();
-                        if (aliasMap.TryGetValue(qualifier, out var resolved))
-                        {
-                            if (blocked.Contains((resolved.Schema, resolved.Table, col)))
-                                _hits.Add(new(resolved.Schema, resolved.Table, parts[1]));
-                        }
-                    }
-                    else if (parts.Length == 3)
-                    {
-                        var schema = parts[0].ToLowerInvariant();
-                        var table = parts[1].ToLowerInvariant();
-                        var col = parts[2].ToLowerInvariant();
-                        if (blocked.Contains((schema, table, col)))
-                            _hits.Add(new(schema, table, parts[2]));
-                    }
-                    break;
-                }
-            }
-            return base.VisitExpression(expr);
-        }
-    }
 }
 ```
 
-- [ ] **Step 4: Run the first test to verify it passes**
+- [ ] **Step 9: Run the first checker test**
 
 ```bash
 dotnet test tests/IntegrationTests \
@@ -876,131 +1070,115 @@ dotnet test tests/IntegrationTests \
 ```
 Expected: PASS.
 
-- [ ] **Step 5: Add remaining unit tests**
-
-Add these tests to `SqlColumnCheckerTests.cs`:
+- [ ] **Step 10: Add remaining checker tests**
 
 ```csharp
 [Fact]
-public void FindBlockedColumns_AliasedTable_ResolvedCorrectly()
+public void FindBlockedColumns_SafeColumn_ReturnsEmpty()
 {
-    var blocked = new HashSet<(string, string, string)> { ("public", "users", "email") };
-
-    var hits = SqlColumnChecker.FindBlockedColumns(
-        "SELECT u.email FROM users u",
-        blocked, EmptySchema);
-
-    Assert.Single(hits);
-}
-
-[Fact]
-public void FindBlockedColumns_UnblockedColumn_ReturnsEmpty()
-{
-    var blocked = new HashSet<(string, string, string)> { ("public", "users", "email") };
-
-    var hits = SqlColumnChecker.FindBlockedColumns(
-        "SELECT name FROM users",
-        blocked, EmptySchema);
-
+    var blocked = new[] { ("public", "users", "email") };
+    var hits = SqlColumnChecker.FindBlockedColumns("SELECT name FROM users", blocked);
     Assert.Empty(hits);
 }
 
 [Fact]
 public void FindBlockedColumns_WhereClause_Detected()
 {
-    var blocked = new HashSet<(string, string, string)> { ("public", "users", "email") };
-
+    var blocked = new[] { ("public", "users", "email") };
     var hits = SqlColumnChecker.FindBlockedColumns(
-        "SELECT id FROM users WHERE email = 'x@example.com'",
-        blocked, EmptySchema);
-
+        "SELECT id FROM users WHERE email = 'x@example.com'", blocked);
     Assert.Single(hits);
 }
 
 [Fact]
-public void FindBlockedColumns_SelectStar_BlockedWhenSchemaKnown()
+public void FindBlockedColumns_ColumnInStringLiteral_NotBlocked()
 {
-    var blocked = new HashSet<(string, string, string)> { ("public", "users", "email") };
-    var schema = new Dictionary<(string, string), string[]>
-    {
-        { ("public", "users"), ["id", "name", "email"] }
-    };
-
+    var blocked = new[] { ("public", "users", "email") };
     var hits = SqlColumnChecker.FindBlockedColumns(
-        "SELECT * FROM users",
-        blocked, schema);
-
-    Assert.Single(hits);
-    Assert.Equal("email", hits[0].Column);
-}
-
-[Fact]
-public void FindBlockedColumns_SelectStar_AllowedWhenNoSensitiveColumns()
-{
-    var blocked = new HashSet<(string, string, string)>();
-    var schema = new Dictionary<(string, string), string[]>
-    {
-        { ("public", "users"), ["id", "name", "email"] }
-    };
-
-    var hits = SqlColumnChecker.FindBlockedColumns(
-        "SELECT * FROM users",
-        blocked, schema);
-
+        "SELECT id FROM users WHERE note = 'email address'", blocked);
     Assert.Empty(hits);
 }
 
 [Fact]
-public void FindBlockedColumns_NoBypassed_BlockedInResult()
+public void FindBlockedColumns_ColumnInComment_NotBlocked()
 {
-    var blocked = new HashSet<(string, string, string)> { ("public", "users", "email") };
-
+    var blocked = new[] { ("public", "users", "email") };
     var hits = SqlColumnChecker.FindBlockedColumns(
-        "SELECT email FROM users",
-        blocked, EmptySchema);
-
-    Assert.Single(hits);
-}
-
-[Fact]
-public void FindBlockedColumns_FullyQualifiedColumn_Detected()
-{
-    var blocked = new HashSet<(string, string, string)> { ("public", "users", "email") };
-
-    var hits = SqlColumnChecker.FindBlockedColumns(
-        "SELECT public.users.email FROM public.users",
-        blocked, EmptySchema);
-
-    Assert.Single(hits);
-}
-
-[Fact]
-public void FindBlockedColumns_UnparsableSQL_ReturnsEmpty()
-{
-    var blocked = new HashSet<(string, string, string)> { ("public", "users", "email") };
-
-    var hits = SqlColumnChecker.FindBlockedColumns(
-        "THIS IS NOT SQL !!!",
-        blocked, EmptySchema);
-
+        "SELECT id FROM users -- email is sensitive", blocked);
     Assert.Empty(hits);
+}
+
+[Fact]
+public void FindBlockedColumns_Wildcard_BlocksAllSensitiveColumns()
+{
+    var blocked = new[] { ("public", "users", "email"), ("public", "users", "ssn") };
+    var hits = SqlColumnChecker.FindBlockedColumns("SELECT * FROM users", blocked);
+    Assert.Equal(2, hits.Count);
+}
+
+[Fact]
+public void FindBlockedColumns_PriceVsPriceType_OnlyExactNameBlocked()
+{
+    var blocked = new[] { ("public", "orders", "price") };
+    var hits = SqlColumnChecker.FindBlockedColumns("SELECT price_type FROM orders", blocked);
+    Assert.Empty(hits);
+}
+
+[Fact]
+public void FindBlockedColumns_NoSensitiveColumns_ReturnsEmpty()
+{
+    var hits = SqlColumnChecker.FindBlockedColumns("SELECT email FROM users", []);
+    Assert.Empty(hits);
+}
+
+[Fact]
+public void FindBlockedColumns_UppercaseColumn_MatchesCaseInsensitively()
+{
+    // Users may write column names in any casing; matching must be case-insensitive.
+    var blocked = new[] { ("public", "users", "email") };
+    var hits = SqlColumnChecker.FindBlockedColumns("SELECT EMAIL FROM users", blocked);
+    Assert.Single(hits);
+}
+
+[Fact]
+public void FindBlockedColumns_SchemaQualified_MatchesColumnName()
+{
+    // schema.table.email tokenises into three separate identifiers; "email" is still found.
+    var blocked = new[] { ("public", "users", "email") };
+    var hits = SqlColumnChecker.FindBlockedColumns(
+        "SELECT public.users.email FROM public.users", blocked);
+    Assert.Single(hits);
+}
+
+[Fact]
+public void FindBlockedColumns_CTE_DetectsColumnInCteBody()
+{
+    var blocked = new[] { ("public", "users", "email") };
+    var sql = """
+        WITH cte AS (SELECT id, email FROM users WHERE active = true)
+        SELECT id FROM cte
+        """;
+    var hits = SqlColumnChecker.FindBlockedColumns(sql, blocked);
+    Assert.Single(hits);
 }
 ```
 
-- [ ] **Step 6: Run all checker tests**
+- [ ] **Step 11: Run all checker tests**
 
 ```bash
 dotnet test tests/IntegrationTests \
   --filter "FullyQualifiedName~SqlColumnCheckerTests"
 ```
-Expected: all PASS. If any fail, the SqlParserCS property names (`Ident.Value`, `Idents`, `Name.Values`) may differ — check the actual types by inspecting the DLL with `dotnet-decompiler` or looking at the [source](https://github.com/TylerBrinks/SqlParser-cs). Fix the property names in `SqlColumnChecker.cs` as needed.
+Expected: all PASS.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
-git add src/SluiceBase.Api/Queries/SqlColumnChecker.cs \
+git add src/SluiceBase.Api/Queries/SqlTokenizer.cs \
+        src/SluiceBase.Api/Queries/SqlColumnChecker.cs \
+        tests/IntegrationTests/SqlTokenizerTests.cs \
         tests/IntegrationTests/SqlColumnCheckerTests.cs
-git commit -m "feat: add SqlColumnChecker with SQL AST-based column enforcement"
+git commit -m "feat: add SqlTokenizer and SqlColumnChecker for sensitive column enforcement"
 ```
 
 ---
