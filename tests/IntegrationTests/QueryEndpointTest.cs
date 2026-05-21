@@ -205,6 +205,67 @@ public class QueryEndpointTests(SluiceBaseStackFactory factory)
         Assert.Equal(HttpStatusCode.BadRequest, (await session.Client.SendAsync(queryReq, ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task PostQuery_SensitiveColumn_Returns403WithColumnList()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "user", "email", xsrf, ct);
+
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId, "SELECT email FROM public.user LIMIT 1"));
+        var resp = await session.Client.SendAsync(req, ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(ct);
+        Assert.Equal("sensitive_columns", body.GetProperty("type").GetString());
+        var columns = body.GetProperty("columns");
+        Assert.True(columns.GetArrayLength() > 0);
+    }
+
+    [Fact]
+    public async Task PostQuery_SensitiveColumnWithBypass_Returns200()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var users = await session.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var alice = users!.Users.Single(u => u.Email == "alice@example.com");
+
+        var columnId = await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "user", "email", xsrf, ct);
+        await SensitiveColumnTestHelper.GrantBypassAsync(
+            session, databaseId.ToString(), columnId, alice.Id, xsrf, ct);
+
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId, "SELECT email FROM public.user LIMIT 1"));
+        var resp = await session.Client.SendAsync(req, ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task PostQuery_SensitiveInWhereClause_Returns403()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "user", "email", xsrf, ct);
+
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId,
+                "SELECT id FROM public.user WHERE email = 'test@example.com'"));
+        var resp = await session.Client.SendAsync(req, ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
     private sealed record ListUserBody(UserRow[] Users);
     private sealed record UserRow(string Id, string Email);
 }
