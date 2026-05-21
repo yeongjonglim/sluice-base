@@ -135,14 +135,14 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         using var _ = session;
 
         await SensitiveColumnTestHelper.MarkColumnAsync(
-            session, databaseId.ToString(), "public", "user", "email", xsrf, ct);
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
 
         var schema = await session.Client.GetFromJsonAsync<SchemaTreeBody>(
             $"/api/schema/{databaseId}", ct);
 
         var col = schema!.Schemas
             .Single(s => s.Name == "public").Tables
-            .Single(t => t.Name == "user").Columns
+            .Single(t => t.Name == "users").Columns
             .Single(c => c.Name == "email");
 
         Assert.True(col.IsRestricted);
@@ -159,7 +159,7 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         var alice = users!.Users.Single(u => u.Email == "alice@example.com");
 
         var columnId = await SensitiveColumnTestHelper.MarkColumnAsync(
-            session, databaseId.ToString(), "public", "user", "email", xsrf, ct);
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
         await SensitiveColumnTestHelper.GrantBypassAsync(
             session, databaseId.ToString(), columnId, alice.Id, xsrf, ct);
 
@@ -168,7 +168,7 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
 
         var col = schema!.Schemas
             .Single(s => s.Name == "public").Tables
-            .Single(t => t.Name == "user").Columns
+            .Single(t => t.Name == "users").Columns
             .Single(c => c.Name == "email");
 
         Assert.False(col.IsRestricted);

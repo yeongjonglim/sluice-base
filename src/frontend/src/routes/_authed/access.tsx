@@ -28,11 +28,11 @@ import {
   useMarkSensitiveColumn,
   useRemoveDatabaseRole,
   useRevokeColumnBypass,
+  useSchema,
   useSensitiveColumns,
   useUnmarkSensitiveColumn,
   useUserRoles,
   useUsers,
-  useSchema,
 } from "@/api/hooks";
 
 const SCOPEABLE_PERMISSIONS = [
@@ -453,7 +453,7 @@ function SensitiveColumnsPanel({ database }: { database: AdminDatabaseItem & { s
               <Table.Tbody>
                 {col.bypasses.map((b) => (
                   <Table.Tr key={b.id as string}>
-                    <Table.Td>{b.userEmail ?? (b.userId as string)}</Table.Td>
+                    <Table.Td>{b.userEmail ?? b.userId}</Table.Td>
                     <Table.Td>{new Date(b.grantedAt).toLocaleDateString()}</Table.Td>
                     <Table.Td>
                       <Button
@@ -464,7 +464,7 @@ function SensitiveColumnsPanel({ database }: { database: AdminDatabaseItem & { s
                           revokeBypass.mutate({
                             databaseId: database.id,
                             sensitiveColumnId: col.id as string,
-                            userId: b.userId as string,
+                            userId: b.userId,
                           })
                         }
                       >
@@ -480,7 +480,7 @@ function SensitiveColumnsPanel({ database }: { database: AdminDatabaseItem & { s
           <Select
             placeholder="Add bypass for user…"
             size="xs"
-            data={(users.data?.users ?? []).map((u) => ({ value: u.id as string, label: u.email ?? (u.id as string) }))}
+            data={(users.data?.users ?? []).map((u) => ({ value: u.id, label: u.email ?? u.id }))}
             onChange={(userId) => {
               if (userId) {
                 grantBypass.mutate({ databaseId: database.id, sensitiveColumnId: col.id as string, userId });
