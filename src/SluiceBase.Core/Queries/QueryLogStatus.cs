@@ -5,5 +5,6 @@ public enum QueryLogStatus
     Unknown = 0,
     Success,
     Error,
-    Timeout
+    Timeout,
+    Blocked
 }
