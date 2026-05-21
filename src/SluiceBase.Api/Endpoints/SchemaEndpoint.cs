@@ -47,7 +47,45 @@ internal static class SchemaEndpoints
         {
             var connectionString = await connectionFactory.GetConnectionStringAsync(databaseId, CredentialKind.Read, ct);
             var tree = await targetEngine.GetSchemaAsync(connectionString, ct);
-            return TypedResults.Ok(tree);
+
+            var sensitiveColumns = await db.SensitiveColumns
+                .AsNoTracking()
+                .Where(c => c.DatabaseId == databaseId)
+                .ToListAsync(ct);
+
+            if (sensitiveColumns.Count == 0)
+            {
+                return TypedResults.Ok(tree);
+            }
+
+            var sensitiveColumnIds = sensitiveColumns.Select(c => c.Id).ToList();
+            var bypassedIds = await db.UserColumnBypasses
+                .AsNoTracking()
+                .Where(b => b.UserId == user!.Id && sensitiveColumnIds.Contains(b.SensitiveColumnId))
+                .Select(b => b.SensitiveColumnId)
+                .ToListAsync(ct);
+
+            var restrictedKeys = sensitiveColumns
+                .Where(c => !bypassedIds.Contains(c.Id))
+                .Select(c => (c.SchemaName.ToLowerInvariant(), c.TableName.ToLowerInvariant(), c.ColumnName.ToLowerInvariant()))
+                .ToHashSet();
+
+            var annotatedSchemas = tree.Schemas.Select(s =>
+                new SchemaInfo(s.Name,
+                    s.Tables.Select(t =>
+                        new TableInfo(t.Name,
+                            t.Columns.Select(c =>
+                                new ColumnInfo(
+                                    c.Name, c.DataType, c.IsNullable,
+                                    restrictedKeys.Contains((
+                                        s.Name.ToLowerInvariant(),
+                                        t.Name.ToLowerInvariant(),
+                                        c.Name.ToLowerInvariant()))
+                                )).ToList()
+                        )).ToList()
+                )).ToList();
+
+            return TypedResults.Ok(new SchemaTree(annotatedSchemas));
         }
         catch (InvalidOperationException ex)
         {
