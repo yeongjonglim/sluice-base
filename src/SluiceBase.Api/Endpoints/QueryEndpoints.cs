@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
+using SluiceBase.Api.Queries;
 using SluiceBase.Api.Servers;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Queries;
@@ -24,7 +25,7 @@ internal static class QueryEndpoints
             .WithName("GetQueryHistory");
     }
 
-    private static async Task<Results<Ok<QueryResponse>, NotFound, BadRequest<string>, ForbidHttpResult>> ExecuteQuery(
+    private static async Task<Results<Ok<QueryResponse>, NotFound, BadRequest<string>, ForbidHttpResult, ProblemHttpResult>> ExecuteQuery(
         QueryRequest request,
         AppDbContext db,
         IServerConnectionFactory connectionFactory,
@@ -50,6 +51,46 @@ internal static class QueryEndpoints
         if (!hasRole)
         {
             return TypedResults.Forbid();
+        }
+
+        // ── sensitive column check ────────────────────────────────────────────────
+        var sensitiveColumns = await db.SensitiveColumns
+            .AsNoTracking()
+            .Where(c => c.DatabaseId == database.Id)
+            .ToListAsync(ct);
+
+        if (sensitiveColumns.Count > 0)
+        {
+            var sensitiveColumnIds = sensitiveColumns.Select(c => c.Id).ToList();
+            var bypassedIds = await db.UserColumnBypasses
+                .AsNoTracking()
+                .Where(b => b.UserId == user!.Id && sensitiveColumnIds.Contains(b.SensitiveColumnId))
+                .Select(b => b.SensitiveColumnId)
+                .ToListAsync(ct);
+
+            var blockedColumns = sensitiveColumns
+                .Where(c => !bypassedIds.Contains(c.Id))
+                .Select(c => (c.SchemaName, c.TableName, c.ColumnName))
+                .ToList();
+
+            var hits = SqlColumnChecker.FindBlockedColumns(request.Sql, blockedColumns);
+
+            if (hits.Count > 0)
+            {
+                var blocked = hits.Select(h => new { schema = h.Schema, table = h.Table, column = h.Column }).ToArray();
+                var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
+                var logEntry = QueryLog.Create(user?.Id, database.Id, request.Sql,
+                    QueryLogStatus.Blocked, startedAt, durationMs, null,
+                    $"Sensitive columns: {string.Join(", ", hits.Select(h => $"{h.Schema}.{h.Table}.{h.Column}"))}");
+                db.QueryLogs.Add(logEntry);
+                await db.SaveChangesAsync(ct);
+
+                return TypedResults.Problem(
+                    statusCode: StatusCodes.Status403Forbidden,
+                    title: "Sensitive columns",
+                    type: "sensitive_columns",
+                    extensions: new Dictionary<string, object?> { ["columns"] = blocked });
+            }
         }
 
         var timeoutSeconds = configuration.GetValue("Query:TimeoutSeconds", 30);
