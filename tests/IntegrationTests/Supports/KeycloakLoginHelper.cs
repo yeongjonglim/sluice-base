@@ -41,7 +41,7 @@ public sealed partial class KeycloakLoginHelper(DistributedApplication app)
         };
         using var loginClient = new HttpClient(loginHandler)
         {
-            BaseAddress = app.GetEndpoint("api", "https")
+            BaseAddress = app.GetEndpoint("gateway", "https")
         };
 
         var loginPage = await loginClient.GetAsync("/login", ct);
@@ -77,7 +77,7 @@ public sealed partial class KeycloakLoginHelper(DistributedApplication app)
         };
         var testClient = new HttpClient(testHandler)
         {
-            BaseAddress = app.GetEndpoint("api", "https"),
+            BaseAddress = app.GetEndpoint("gateway", "https"),
         };
         return new AuthenticatedSession(testClient, cookies);
     }
