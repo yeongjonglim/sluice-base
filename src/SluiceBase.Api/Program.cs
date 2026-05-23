@@ -64,10 +64,10 @@ if (builder.Configuration.GetValue("Migrations:AutoApply", true)
 
 if (!builder.Environment.IsDevelopment())
 {
-    app.UseWebSockets();
     app.UseStaticFiles();
 }
 
+app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
