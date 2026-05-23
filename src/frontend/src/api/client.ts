@@ -52,7 +52,7 @@ export async function apiRequest<TRequest, TResponse>(
   });
 
   const contentType = response.headers.get("content-type") ?? "";
-  const isJson = contentType.includes("application/json");
+  const isJson = contentType.includes("/json") || contentType.includes("+json");
   const payload = isJson ? await response.json() : await response.text();
 
   if (!response.ok) {

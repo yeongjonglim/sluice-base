@@ -278,7 +278,7 @@ function QueryResults({
     if (apiErr?.status === 403) {
       const body = apiErr.body as {
         type?: string;
-        extensions?: { columns?: Array<{ schema: string; table: string; column: string }> };
+        columns?: Array<{ schema: string; table: string; column: string }>;
       } | null;
       if (body?.type === "sensitive_columns") {
         return (
@@ -286,7 +286,7 @@ function QueryResults({
             <Text size="sm" mb="xs">
               Your query references columns you are not authorised to access:
             </Text>
-            {(body.extensions?.columns ?? []).map((c, i) => (
+            {(body.columns ?? []).map((c, i) => (
               <Code key={i} display="block" fz="xs">
                 {c.schema}.{c.table}.{c.column}
               </Code>
