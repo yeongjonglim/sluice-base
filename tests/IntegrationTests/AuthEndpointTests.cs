@@ -19,7 +19,7 @@ public class AuthEndpointTests(SluiceBaseStackFactory factory)
     [Fact]
     public async Task Login_Redirects_ToKeycloak()
     {
-        using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
+        using var client = factory.InitialisedApp.CreateHttpClient("gateway", "https");
 
         var response = await client.GetAsync("/login", TestContext.Current.CancellationToken);
 

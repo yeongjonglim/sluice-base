@@ -1,7 +1,6 @@
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Microsoft.AspNetCore.Http.Features;
 using Microsoft.Extensions.Options;
 using SluiceBase.Core.Branding;
 
@@ -29,77 +28,30 @@ internal sealed partial class BrandingHtmlMiddleware(
             return;
         }
 
-        var ct = context.RequestAborted;
-
-        if (env.IsDevelopment())
-        {
-            // CONNECT is an HTTP proxy-tunnelling method that HttpClient cannot forward.
-            if (HttpMethods.IsConnect(context.Request.Method))
-            {
-                await next(context);
-                return;
-            }
-            // Proxy all other unmatched requests to Vite so that dev-tool endpoints
-            // (e.g. POST /__tsd/console-pipe, SSE, static assets) work correctly.
-            await ProxyToViteAsync(context, ct);
-            return;
-        }
-
-        // In prod, only serve the SPA fallback for GET requests.
+        // Only serve the SPA fallback for GET requests.
         if (!HttpMethods.IsGet(context.Request.Method))
         {
             await next(context);
             return;
         }
 
-        var indexPath = Path.Combine(env.WebRootPath, "index.html");
-        var html = await File.ReadAllTextAsync(indexPath, ct);
+        var ct = context.RequestAborted;
+        string html;
+
+        if (env.IsDevelopment())
+        {
+            var client = httpClientFactory.CreateClient("vite");
+            using var response = await client.GetAsync("/index.html", ct);
+            html = await response.Content.ReadAsStringAsync(ct);
+        }
+        else
+        {
+            var indexPath = Path.Combine(env.WebRootPath, "index.html");
+            html = await File.ReadAllTextAsync(indexPath, ct);
+        }
+
         context.Response.ContentType = "text/html; charset=utf-8";
         await context.Response.WriteAsync(InjectBranding(html), ct);
-    }
-
-    // In dev, proxy every unmatched request to Vite.
-    // HTML responses get branding injected; everything else (JS, CSS, SSE, …) is streamed
-    // through without buffering so long-lived connections like SSE work correctly.
-    // HMR WebSocket bypasses this proxy — Vite's hmr.clientPort config makes the browser
-    // connect directly to Vite's port for WebSocket upgrades.
-    private async Task ProxyToViteAsync(HttpContext context, CancellationToken ct)
-    {
-        var client = httpClientFactory.CreateClient("vite");
-        var path = context.Request.Path + context.Request.QueryString;
-
-        using var request = new HttpRequestMessage(new HttpMethod(context.Request.Method), path);
-
-        // Forward request body for methods that carry one (e.g. POST).
-        if (context.Request.ContentLength is > 0)
-        {
-            request.Content = new StreamContent(context.Request.Body);
-            if (context.Request.ContentType is { Length: > 0 } reqContentType)
-            {
-                request.Content.Headers.TryAddWithoutValidation("Content-Type", reqContentType);
-            }
-        }
-
-        // ResponseHeadersRead streams the body instead of buffering it to completion first.
-        using var response = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
-
-        var contentType = response.Content.Headers.ContentType?.MediaType ?? "";
-        context.Response.StatusCode = (int)response.StatusCode;
-
-        if (contentType.StartsWith("text/html", StringComparison.OrdinalIgnoreCase))
-        {
-            var html = await response.Content.ReadAsStringAsync(ct);
-            context.Response.ContentType = "text/html; charset=utf-8";
-            await context.Response.WriteAsync(InjectBranding(html), ct);
-            return;
-        }
-
-        context.Response.ContentType = contentType;
-        // Disable ASP.NET Core's response buffering so SSE and other streaming responses
-        // are forwarded to the browser incrementally rather than held in memory.
-        context.Features.Get<IHttpResponseBodyFeature>()?.DisableBuffering();
-        await using var body = await response.Content.ReadAsStreamAsync(ct);
-        await body.CopyToAsync(context.Response.Body, ct);
     }
 
     private string InjectBranding(string html)

@@ -52,7 +52,7 @@ const STATUS_COLOR: Record<string, string> = {
   Executed: "teal",
 };
 
-export function UpdateDetailPage() {
+function UpdateDetailPage() {
   const { id } = Route.useParams();
   const meData = Route.useRouteContext().queryClient.getQueryData(meQueryOptions.queryKey);
   const navigate = useNavigate();

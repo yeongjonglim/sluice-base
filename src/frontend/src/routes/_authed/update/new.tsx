@@ -30,7 +30,7 @@ export const Route = createFileRoute("/_authed/update/new")({
   component: NewUpdatePage,
 });
 
-export function NewUpdatePage() {
+function NewUpdatePage() {
   const { from } = Route.useSearch();
   const source = useUpdateRequest(from ?? "");
 
