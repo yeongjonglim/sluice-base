@@ -67,7 +67,6 @@ if (!builder.Environment.IsDevelopment())
     app.UseStaticFiles();
 }
 
-app.UseWebSockets();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();

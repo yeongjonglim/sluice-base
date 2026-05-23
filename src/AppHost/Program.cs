@@ -1,4 +1,6 @@
 using AppHost.Extensions;
+using Aspire.Hosting.Yarp;
+using Yarp.ReverseProxy.Configuration;
 
 var builder = DistributedApplication.CreateBuilder(args);
 
@@ -53,6 +55,36 @@ var api = builder.AddProject<Projects.SluiceBase_Api>("api")
     .WithEnvironment("Oidc__ClientId", "sluicebase-app")
     .WithEnvironment("Oidc__ClientSecret", "dev-secret")
     .WithEnvironment("Frontend__BaseUrl", web.GetEndpoint("http"));
+
+builder.AddYarp("gateway")
+    .WithHostHttpsPort(5443)
+    .WithReference(api)
+    .WithReference(web)
+    .WithConfiguration(cfg =>
+    {
+        var apiCluster = cfg.AddCluster(api.GetEndpoint("https"));
+        cfg.AddRoute("/api/{**rest}", apiCluster);
+        cfg.AddRoute("/login", apiCluster);
+        cfg.AddRoute("/logout", apiCluster);
+        cfg.AddRoute("/signin-oidc", apiCluster);
+        cfg.AddRoute("/signout-callback-oidc", apiCluster);
+        cfg.AddRoute("/openapi/{**rest}", apiCluster);
+
+        // Browser navigations carry Accept: text/html — route through the API
+        // so BrandingHtmlMiddleware can inject __BRANDING__ into index.html.
+        cfg.AddRoute("/{**rest}", apiCluster)
+            .WithMatchHeaders([new RouteHeader
+            {
+                Name = "Accept",
+                Values = ["text/html"],
+                Mode = HeaderMatchMode.Contains,
+            }])
+            .WithOrder(100);
+
+        // Everything else (JS, CSS, WebSocket/HMR, images) goes to Vite.
+        var viteCluster = cfg.AddCluster(web.GetEndpoint("http"));
+        cfg.AddRoute("/{**rest}", viteCluster).WithOrder(int.MaxValue);
+    });
 
 metadataDb.WithCommand(
     name: "seed-servers",
