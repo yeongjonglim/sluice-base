@@ -2,7 +2,9 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import React from "react";
-import { Route, UpdateDetailPage } from "../update/$id.tsx";
+import { Route } from "../update/$id.tsx";
+
+const UpdateDetailPage = (Route as unknown as Record<string, () => React.ReactNode>).component;
 
 const mockNavigate = vi.fn();
 
