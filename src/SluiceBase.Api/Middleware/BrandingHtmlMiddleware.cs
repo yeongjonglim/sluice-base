@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.WebSockets;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Http.Features;
@@ -33,6 +34,12 @@ internal sealed partial class BrandingHtmlMiddleware(
 
         if (env.IsDevelopment())
         {
+            if (context.WebSockets.IsWebSocketRequest)
+            {
+                await ProxyWebSocketToViteAsync(context, ct);
+                return;
+            }
+
             // CONNECT is an HTTP proxy-tunnelling method that HttpClient cannot forward.
             if (HttpMethods.IsConnect(context.Request.Method))
             {
@@ -58,11 +65,53 @@ internal sealed partial class BrandingHtmlMiddleware(
         await context.Response.WriteAsync(InjectBranding(html), ct);
     }
 
-    // In dev, proxy every unmatched request to Vite.
-    // HTML responses get branding injected; everything else (JS, CSS, SSE, …) is streamed
-    // through without buffering so long-lived connections like SSE work correctly.
-    // HMR WebSocket bypasses this proxy — Vite's hmr.clientPort config makes the browser
-    // connect directly to Vite's port for WebSocket upgrades.
+    private async Task ProxyWebSocketToViteAsync(HttpContext context, CancellationToken ct)
+    {
+        var client = httpClientFactory.CreateClient("vite");
+        var viteBase = client.BaseAddress!;
+        var wsUri = new UriBuilder(viteBase)
+        {
+            Scheme = "ws",
+            Path = context.Request.Path,
+            Query = context.Request.QueryString.ToString()
+        }.Uri;
+
+        using var remote = new ClientWebSocket();
+        foreach (var protocol in context.WebSockets.WebSocketRequestedProtocols)
+        {
+            remote.Options.AddSubProtocol(protocol);
+        }
+        await remote.ConnectAsync(wsUri, ct);
+        using var local = await context.WebSockets.AcceptWebSocketAsync(remote.SubProtocol);
+
+        var up = PumpWebSocketAsync(local, remote, ct);
+        var down = PumpWebSocketAsync(remote, local, ct);
+        await Task.WhenAny(up, down);
+    }
+
+    private static async Task PumpWebSocketAsync(WebSocket from, WebSocket to, CancellationToken ct)
+    {
+        var buffer = new byte[4096];
+        while (true)
+        {
+            var result = await from.ReceiveAsync(buffer, ct);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                await to.CloseAsync(
+                    result.CloseStatus ?? WebSocketCloseStatus.NormalClosure,
+                    result.CloseStatusDescription,
+                    ct);
+                return;
+            }
+
+            await to.SendAsync(
+                buffer.AsMemory(0, result.Count),
+                result.MessageType,
+                result.EndOfMessage,
+                ct);
+        }
+    }
+
     private async Task ProxyToViteAsync(HttpContext context, CancellationToken ct)
     {
         var client = httpClientFactory.CreateClient("vite");
