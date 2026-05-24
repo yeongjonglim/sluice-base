@@ -1,14 +1,1 @@
-{
-  "hooks": {
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "git config user.name 'Yeong Jong Lim' && git config user.email 'yeongjong.lim@gmail.com'"
-          }
-        ]
-      }
-    ]
-  }
-}
+{}
