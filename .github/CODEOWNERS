@@ -1,4 +1,1 @@
-# Require review for CI/CD and security-sensitive paths
-/.github/                     @yeongjonglim
-/Dockerfile                   @yeongjonglim
-/src/SluiceBase.Api/Auth/     @yeongjonglim
+*   @yeongjonglim
