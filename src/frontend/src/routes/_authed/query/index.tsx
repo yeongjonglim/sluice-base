@@ -32,7 +32,7 @@ import React, { useCallback, useEffect, useRef } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
-import { keymap } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
@@ -102,10 +102,10 @@ function QueryPage() {
   );
 
   const handleTableClick = useCallback(
-    (schemaName: string, tableName: string, columns: Array<{ name: string; isRestricted: boolean }>) => {
-      const allowedCols = columns.filter((c) => !c.isRestricted);
-      if (allowedCols.length === 0) return;
-      const colList = allowedCols.map((c) => c.name).join(", ");
+    (schemaName: string, tableName: string, columns: Array<{ name: string; isSensitive: boolean; isRestricted: boolean }>) => {
+      const safeCols = columns.filter((c) => !c.isSensitive);
+      if (safeCols.length === 0) return;
+      const colList = safeCols.map((c) => c.name).join(", ");
       const snippet = `SELECT ${colList}\nFROM ${schemaName}.${tableName}\nLIMIT 1000;\n`;
       setEditorContent((prev) =>
         prev.trimEnd() === "" ? snippet : `${prev.trimEnd()}\n\n${snippet}`,
@@ -204,7 +204,7 @@ function QueryPage() {
                   ref={editorRef}
                   value={editorContent}
                   onChange={setEditorContent}
-                  extensions={[sql(), runKeymap, noIndentKeymap]}
+                  extensions={[sql(), runKeymap, noIndentKeymap, EditorView.lineWrapping]}
                   theme={computedColorScheme === "dark" ? githubDark : githubLight}
                   height="100%"
                   style={{ height: "100%" }}
@@ -388,7 +388,7 @@ function QueryResults({
 type TableClickHandler = (
   schemaName: string,
   tableName: string,
-  columns: Array<{ name: string; isRestricted: boolean }>,
+  columns: Array<{ name: string; isSensitive: boolean; isRestricted: boolean }>,
 ) => void;
 
 function SchemaSidebar({
@@ -486,7 +486,7 @@ function SchemaSidebar({
                           onClick={() => onTableClick(s.name, t.name, t.columns)}
                           size="xs"
                           variant="subtle"
-                          disabled={t.columns.every((c) => c.isRestricted)}
+                          disabled={t.columns.every((c) => c.isSensitive)}
                         >
                           <IconPlaylistAdd />
                         </Button>

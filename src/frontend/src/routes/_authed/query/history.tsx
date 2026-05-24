@@ -18,12 +18,13 @@ import { DateInput } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
 import { IconCopy, IconShieldLock } from "@tabler/icons-react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
+import { EditorView } from "@codemirror/view";
 import type { QueryHistoryFilters, QueryHistoryItem } from "@/api/hooks";
-import { meQueryOptions, useCatalogServer, useQueryHistory, useSensitiveColumns } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useQueryHistory } from "@/api/hooks";
 import { useHasPermission } from "@/auth/permission";
 
 type HistorySearch = {
@@ -87,7 +88,6 @@ function QueryHistoryPage() {
   const [userSearch, setUserSearch] = useState("");
 
   const servers = useCatalogServer();
-  const sensitiveColumns = useSensitiveColumns(search.databaseId ?? null);
   const filters: QueryHistoryFilters = {
     from: search.from,
     to: search.to,
@@ -104,13 +104,18 @@ function QueryHistoryPage() {
     ),
   ];
 
-  const sensitiveColumnOptions = [
-    { value: "any", label: "Any sensitive column" },
-    ...(sensitiveColumns.data?.columns ?? []).map((c) => ({
-      value: `${c.schemaName}.${c.tableName}.${c.columnName}`,
-      label: `${c.schemaName}.${c.tableName}.${c.columnName}`,
-    })),
-  ];
+  const sensitiveColumnOptions = useMemo(() => {
+    const cols = new Set<string>();
+    for (const item of history.data?.items ?? []) {
+      for (const sc of item.sensitiveColumns) {
+        cols.add(sc);
+      }
+    }
+    return [
+      { value: "any", label: "Any sensitive column" },
+      ...[...cols].sort().map((c) => ({ value: c, label: c })),
+    ];
+  }, [history.data]);
 
   function setFilter(key: keyof HistorySearch, value: string | Array<string> | undefined) {
     void navigate({
@@ -244,7 +249,7 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
   return (
     <Table.Tr>
       <Table.Td>
-        <Group gap={4} wrap="nowrap">
+        <Group gap={4} justify="center">
           <Badge color={STATUS_COLOR[item.status] ?? "gray"} size="sm">
             {item.status}
           </Badge>
@@ -264,7 +269,7 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
               value={item.queryText}
               readOnly
               editable={false}
-              extensions={[sql()]}
+              extensions={[sql(), EditorView.lineWrapping]}
               theme={colorScheme === "dark" ? githubDark : githubLight}
               height="auto"
               maxHeight="120px"

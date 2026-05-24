@@ -635,6 +635,8 @@ export interface components {
             dataType: string;
             isNullable: boolean;
             /** @default false */
+            isSensitive: boolean;
+            /** @default false */
             isRestricted: boolean;
         };
         ConnectivityResult: {

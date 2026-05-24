@@ -145,6 +145,7 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
             .Single(t => t.Name == "users").Columns
             .Single(c => c.Name == "email");
 
+        Assert.True(col.IsSensitive);
         Assert.True(col.IsRestricted);
     }
 
@@ -171,6 +172,26 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
             .Single(t => t.Name == "users").Columns
             .Single(c => c.Name == "email");
 
+        Assert.True(col.IsSensitive);
+        Assert.False(col.IsRestricted);
+    }
+
+    [Fact]
+    public async Task GetSchema_NormalColumn_NotSensitiveOrRestricted()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var schema = await session.Client.GetFromJsonAsync<SchemaTreeBody>(
+            $"/api/schema/{databaseId}", ct);
+
+        var col = schema!.Schemas
+            .Single(s => s.Name == "public").Tables
+            .Single(t => t.Name == "users").Columns
+            .First(c => c.Name == "id");
+
+        Assert.False(col.IsSensitive);
         Assert.False(col.IsRestricted);
     }
 
@@ -179,5 +200,5 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
     private sealed record SchemaTreeBody(SchemaInfoBody[] Schemas);
     private sealed record SchemaInfoBody(string Name, TableInfoBody[] Tables);
     private sealed record TableInfoBody(string Name, ColumnInfoBody[] Columns);
-    private sealed record ColumnInfoBody(string Name, string DataType, bool IsNullable, bool IsRestricted);
+    private sealed record ColumnInfoBody(string Name, string DataType, bool IsNullable, bool IsSensitive, bool IsRestricted);
 }

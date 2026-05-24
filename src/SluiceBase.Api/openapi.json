@@ -1863,6 +1863,10 @@
           "isNullable": {
             "type": "boolean"
           },
+          "isSensitive": {
+            "type": "boolean",
+            "default": false
+          },
           "isRestricted": {
             "type": "boolean",
             "default": false
