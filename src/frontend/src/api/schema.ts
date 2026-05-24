@@ -292,6 +292,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/database/{databaseId}/sensitive-column": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListSensitiveColumns"];
+        put?: never;
+        post: operations["MarkSensitiveColumn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["UnmarkSensitiveColumn"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}/bypass": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["GrantColumnBypass"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}/bypass/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["RevokeColumnBypass"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/server": {
         parameters: {
             query?: never;
@@ -541,6 +605,15 @@ export interface components {
             databaseId: components["schemas"]["DatabaseId"];
             permission: string;
         };
+        BypassItem: {
+            id: components["schemas"]["UserColumnBypassId"];
+            userId: components["schemas"]["UserId"];
+            userEmail: null | string;
+            userName: null | string;
+            /** Format: date-time */
+            grantedAt: string;
+            grantedById: null | components["schemas"]["UserId"];
+        };
         CancelUpdateRequest: {
             note: string;
         };
@@ -561,6 +634,8 @@ export interface components {
             name: string;
             dataType: string;
             isNullable: boolean;
+            /** @default false */
+            isRestricted: boolean;
         };
         ConnectivityResult: {
             ok: boolean;
@@ -612,6 +687,9 @@ export interface components {
         DatabaseRoleListResponse: {
             roles: components["schemas"]["DatabaseRoleItem"][];
         };
+        GrantBypassRequest: {
+            userId: components["schemas"]["UserId"];
+        };
         GrantPermissionRequest: {
             permission: string;
         };
@@ -638,6 +716,11 @@ export interface components {
         };
         ListUsersResponse: {
             users: components["schemas"]["UserSummaryResponse"][];
+        };
+        MarkSensitiveColumnRequest: {
+            schemaName: string;
+            tableName: string;
+            columnName: string;
         };
         MeResponse: {
             id: components["schemas"]["UserId"];
@@ -669,7 +752,7 @@ export interface components {
         };
         QueryLogId: unknown;
         /** @enum {string} */
-        QueryLogStatus: "Unknown" | "Success" | "Error" | "Timeout";
+        QueryLogStatus: "Unknown" | "Success" | "Error" | "Timeout" | "Blocked";
         QueryRequest: {
             databaseId: components["schemas"]["DatabaseId"];
             sql: string;
@@ -692,6 +775,20 @@ export interface components {
         };
         SchemaTree: {
             schemas: components["schemas"]["SchemaInfo"][];
+        };
+        SensitiveColumnId: unknown;
+        SensitiveColumnItem: {
+            id: components["schemas"]["SensitiveColumnId"];
+            schemaName: string;
+            tableName: string;
+            columnName: string;
+            /** Format: date-time */
+            markedAt: string;
+            markedById: null | components["schemas"]["UserId"];
+            bypasses: components["schemas"]["BypassItem"][];
+        };
+        SensitiveColumnListResponse: {
+            columns: components["schemas"]["SensitiveColumnItem"][];
         };
         /** Format: uuid */
         ServerId: string;
@@ -793,6 +890,7 @@ export interface components {
             submittedAt: string;
             execSuccess: null | boolean;
         };
+        UserColumnBypassId: unknown;
         /** Format: uuid */
         UserDatabaseRoleId: string;
         /** Format: uuid */
@@ -1355,6 +1453,157 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListSensitiveColumns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                databaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SensitiveColumnListResponse"];
+                };
+            };
+        };
+    };
+    MarkSensitiveColumn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                databaseId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkSensitiveColumnRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UnmarkSensitiveColumn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                databaseId: string;
+                sensitiveColumnId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GrantColumnBypass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                databaseId: string;
+                sensitiveColumnId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantBypassRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RevokeColumnBypass: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                databaseId: string;
+                sensitiveColumnId: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

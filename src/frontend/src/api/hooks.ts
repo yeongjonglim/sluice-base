@@ -667,3 +667,121 @@ export function useQueryHistory(filters: QueryHistoryFilters) {
     },
   });
 }
+
+// ── Sensitive columns ─────────────────────────────────────────────────────
+
+export type SensitiveColumnListResponse =
+  paths["/api/admin/database/{databaseId}/sensitive-column"]["get"]["responses"][200]["content"]["application/json"];
+
+export function useSensitiveColumns(databaseId: string | null) {
+  return useQuery({
+    queryKey: ["admin", "database", databaseId, "sensitive-column"] as const,
+    enabled: databaseId !== null,
+    queryFn: () =>
+      apiRequest<void, SensitiveColumnListResponse>(
+        `/api/admin/database/${databaseId}/sensitive-column`,
+      ),
+  });
+}
+
+export function useMarkSensitiveColumn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      databaseId,
+      schemaName,
+      tableName,
+      columnName,
+    }: {
+      databaseId: string;
+      schemaName: string;
+      tableName: string;
+      columnName: string;
+    }) =>
+      apiRequest<
+        paths["/api/admin/database/{databaseId}/sensitive-column"]["post"]["requestBody"]["content"]["application/json"],
+        void
+      >(`/api/admin/database/${databaseId}/sensitive-column`, {
+        method: "POST",
+        body: { schemaName, tableName, columnName },
+      }),
+    onSuccess: (_, { databaseId }) => {
+      void qc.invalidateQueries({
+        queryKey: ["admin", "database", databaseId, "sensitive-column"],
+      });
+    },
+  });
+}
+
+export function useUnmarkSensitiveColumn() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      databaseId,
+      sensitiveColumnId,
+    }: {
+      databaseId: string;
+      sensitiveColumnId: string;
+    }) =>
+      apiRequest<void, void>(
+        `/api/admin/database/${databaseId}/sensitive-column/${sensitiveColumnId}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: (_, { databaseId }) => {
+      void qc.invalidateQueries({
+        queryKey: ["admin", "database", databaseId, "sensitive-column"],
+      });
+    },
+  });
+}
+
+export function useGrantColumnBypass() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      databaseId,
+      sensitiveColumnId,
+      userId,
+    }: {
+      databaseId: string;
+      sensitiveColumnId: string;
+      userId: string;
+    }) =>
+      apiRequest<
+        paths["/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}/bypass"]["post"]["requestBody"]["content"]["application/json"],
+        void
+      >(
+        `/api/admin/database/${databaseId}/sensitive-column/${sensitiveColumnId}/bypass`,
+        { method: "POST", body: { userId } },
+      ),
+    onSuccess: (_, { databaseId }) => {
+      void qc.invalidateQueries({
+        queryKey: ["admin", "database", databaseId, "sensitive-column"],
+      });
+    },
+  });
+}
+
+export function useRevokeColumnBypass() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      databaseId,
+      sensitiveColumnId,
+      userId,
+    }: {
+      databaseId: string;
+      sensitiveColumnId: string;
+      userId: string;
+    }) =>
+      apiRequest<void, void>(
+        `/api/admin/database/${databaseId}/sensitive-column/${sensitiveColumnId}/bypass/${userId}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: (_, { databaseId }) => {
+      void qc.invalidateQueries({
+        queryKey: ["admin", "database", databaseId, "sensitive-column"],
+      });
+    },
+  });
+}

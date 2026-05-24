@@ -3,6 +3,10 @@ import {
   Button,
   Checkbox,
   Group,
+  Loader,
+  Modal,
+  NavLink,
+  Select,
   Stack,
   Table,
   Tabs,
@@ -10,7 +14,7 @@ import {
   Title,
 } from "@mantine/core";
 import { notifications } from "@mantine/notifications";
-import { IconDatabase, IconUser } from "@tabler/icons-react";
+import { IconDatabase, IconShieldLock, IconUser } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import type { AdminDatabaseItem } from "@/api/hooks";
@@ -20,7 +24,13 @@ import {
   useAssignDatabaseRole,
   useAssignUserRole,
   useDatabaseRoles,
+  useGrantColumnBypass,
+  useMarkSensitiveColumn,
   useRemoveDatabaseRole,
+  useRevokeColumnBypass,
+  useSchema,
+  useSensitiveColumns,
+  useUnmarkSensitiveColumn,
   useUserRoles,
   useUsers,
 } from "@/api/hooks";
@@ -55,12 +65,18 @@ function AccessPage() {
           <Tabs.Tab value="user" leftSection={<IconUser size={14} />}>
             By User
           </Tabs.Tab>
+          <Tabs.Tab value="sensitive" leftSection={<IconShieldLock size={14} />}>
+            Sensitive Columns
+          </Tabs.Tab>
         </Tabs.List>
         <Tabs.Panel value="database" pt="md">
           <ByDatabaseTab />
         </Tabs.Panel>
         <Tabs.Panel value="user" pt="md">
           <ByUserTab />
+        </Tabs.Panel>
+        <Tabs.Panel value="sensitive" pt="md">
+          <SensitiveColumnsTab />
         </Tabs.Panel>
       </Tabs>
     </Stack>
@@ -341,6 +357,218 @@ export function DatabaseRolePanel({
           </Table.Tbody>
         </Table>
       </Table.ScrollContainer>
+    </Stack>
+  );
+}
+
+function SensitiveColumnsTab() {
+  const servers = useAdminServers();
+  const [selectedDb, setSelectedDb] = useState<(AdminDatabaseItem & { serverName: string }) | null>(null);
+
+  return (
+    <Group align="flex-start" gap="md">
+      <Stack gap={4} style={{ minWidth: 220, maxWidth: 260 }}>
+        <Text size="xs" fw={600} c="dimmed" tt="uppercase">
+          Databases
+        </Text>
+        {(servers.data?.servers ?? []).map((s) => (
+          <Stack key={s.id} gap={2}>
+            <Text size="xs" c="dimmed" fw={500} pl={4}>
+              {s.name}
+            </Text>
+            {s.databases.map((d) => (
+              <NavLink
+                key={d.id}
+                label={d.displayName}
+                active={selectedDb?.id === d.id}
+                onClick={() => setSelectedDb({ ...d, serverName: s.name })}
+                pl="lg"
+              />
+            ))}
+          </Stack>
+        ))}
+      </Stack>
+      {selectedDb && <SensitiveColumnsPanel database={selectedDb} />}
+    </Group>
+  );
+}
+
+function SensitiveColumnsPanel({ database }: { database: AdminDatabaseItem & { serverName: string } }) {
+  const cols = useSensitiveColumns(database.id);
+  const schema = useSchema(database.id);
+  const mark = useMarkSensitiveColumn();
+  const unmark = useUnmarkSensitiveColumn();
+  const grantBypass = useGrantColumnBypass();
+  const revokeBypass = useRevokeColumnBypass();
+  const users = useUsers();
+  const [addOpen, setAddOpen] = useState(false);
+
+  return (
+    <Stack gap="md" style={{ flex: 1 }}>
+      <Group justify="space-between">
+        <Text fw={500}>{database.displayName}</Text>
+        <Button size="xs" onClick={() => setAddOpen(true)}>
+          Mark column as sensitive
+        </Button>
+      </Group>
+
+      {cols.isLoading && <Loader size="sm" />}
+
+      {cols.data?.columns.length === 0 && (
+        <Text size="sm" c="dimmed">
+          No sensitive columns configured.
+        </Text>
+      )}
+
+      {(cols.data?.columns ?? []).map((col) => (
+        <Stack
+          key={col.id as string}
+          gap={4}
+          p="xs"
+          style={{ border: "1px solid var(--mantine-color-default-border)", borderRadius: 4 }}
+        >
+          <Group justify="space-between">
+            <Text size="sm" fw={500}>
+              {col.schemaName}.{col.tableName}.{col.columnName}
+            </Text>
+            <Button
+              size="xs"
+              color="red"
+              variant="light"
+              onClick={() => unmark.mutate({ databaseId: database.id, sensitiveColumnId: col.id as string })}
+            >
+              Remove
+            </Button>
+          </Group>
+
+          {col.bypasses.length > 0 && (
+            <Table fz="xs">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>User</Table.Th>
+                  <Table.Th>Granted</Table.Th>
+                  <Table.Th />
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {col.bypasses.map((b) => (
+                  <Table.Tr key={b.id as string}>
+                    <Table.Td>{b.userEmail ?? b.userId}</Table.Td>
+                    <Table.Td>{new Date(b.grantedAt).toLocaleDateString()}</Table.Td>
+                    <Table.Td>
+                      <Button
+                        size="xs"
+                        variant="subtle"
+                        color="red"
+                        onClick={() =>
+                          revokeBypass.mutate({
+                            databaseId: database.id,
+                            sensitiveColumnId: col.id as string,
+                            userId: b.userId,
+                          })
+                        }
+                      >
+                        Revoke
+                      </Button>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
+
+          <Select
+            placeholder="Add bypass for user…"
+            size="xs"
+            data={(users.data?.users ?? []).map((u) => ({ value: u.id, label: u.email ?? u.id }))}
+            onChange={(userId) => {
+              if (userId) {
+                grantBypass.mutate({ databaseId: database.id, sensitiveColumnId: col.id as string, userId });
+              }
+            }}
+            clearable
+          />
+        </Stack>
+      ))}
+
+      <Modal opened={addOpen} onClose={() => setAddOpen(false)} title="Mark column as sensitive">
+        <MarkColumnsForm
+          schema={schema.data}
+          onMark={(schemaName, tableName, columnName) =>
+            mark.mutate(
+              { databaseId: database.id, schemaName, tableName, columnName },
+              { onSuccess: () => setAddOpen(false) },
+            )
+          }
+        />
+      </Modal>
+    </Stack>
+  );
+}
+
+function MarkColumnsForm({
+  schema,
+  onMark,
+}: {
+  schema: ReturnType<typeof useSchema>["data"];
+  onMark: (schema: string, table: string, column: string) => void;
+}) {
+  const [selectedSchema, setSelectedSchema] = useState<string | null>(null);
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [selectedColumn, setSelectedColumn] = useState<string | null>(null);
+
+  const schemaOptions = (schema?.schemas ?? []).map((s) => ({ value: s.name, label: s.name }));
+  const tableOptions = (
+    schema?.schemas.find((s) => s.name === selectedSchema)?.tables ?? []
+  ).map((t) => ({ value: t.name, label: t.name }));
+  const columnOptions = (
+    schema?.schemas
+      .find((s) => s.name === selectedSchema)
+      ?.tables.find((t) => t.name === selectedTable)?.columns ?? []
+  ).map((c) => ({ value: c.name, label: c.name }));
+
+  return (
+    <Stack gap="sm">
+      <Select
+        label="Schema"
+        placeholder="Pick schema"
+        data={schemaOptions}
+        value={selectedSchema}
+        onChange={(v) => {
+          setSelectedSchema(v);
+          setSelectedTable(null);
+          setSelectedColumn(null);
+        }}
+      />
+      <Select
+        label="Table"
+        placeholder="Pick table"
+        data={tableOptions}
+        value={selectedTable}
+        disabled={!selectedSchema}
+        onChange={(v) => {
+          setSelectedTable(v);
+          setSelectedColumn(null);
+        }}
+      />
+      <Select
+        label="Column"
+        placeholder="Pick column"
+        data={columnOptions}
+        value={selectedColumn}
+        disabled={!selectedTable}
+        onChange={setSelectedColumn}
+      />
+      <Button
+        disabled={!selectedSchema || !selectedTable || !selectedColumn}
+        onClick={() => {
+          if (selectedSchema && selectedTable && selectedColumn) {
+            onMark(selectedSchema, selectedTable, selectedColumn);
+          }
+        }}
+      >
+        Mark as sensitive
+      </Button>
     </Stack>
   );
 }

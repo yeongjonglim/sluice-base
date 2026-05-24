@@ -22,6 +22,7 @@ import {
   IconChevronRight,
   IconDatabase,
   IconDownload,
+  IconLock,
   IconPlayerPlay,
   IconPlaylistAdd,
   IconTable,
@@ -35,6 +36,7 @@ import { keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
+import { ApiError } from "@/api/client";
 import { exportToCsv } from "@/utils/csv.ts";
 import { useSessionState } from "@/utils/useSessionState";
 import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema } from "@/api/hooks";
@@ -100,8 +102,10 @@ function QueryPage() {
   );
 
   const handleTableClick = useCallback(
-    (schemaName: string, tableName: string, columns: Array<{ name: string }>) => {
-      const colList = columns.map((c) => c.name).join(", ");
+    (schemaName: string, tableName: string, columns: Array<{ name: string; isRestricted: boolean }>) => {
+      const allowedCols = columns.filter((c) => !c.isRestricted);
+      if (allowedCols.length === 0) return;
+      const colList = allowedCols.map((c) => c.name).join(", ");
       const snippet = `SELECT ${colList}\nFROM ${schemaName}.${tableName}\nLIMIT 1000;\n`;
       setEditorContent((prev) =>
         prev.trimEnd() === "" ? snippet : `${prev.trimEnd()}\n\n${snippet}`,
@@ -239,6 +243,7 @@ function QueryPage() {
               result={executeQuery.data ?? null}
               isPending={executeQuery.isPending}
               isError={executeQuery.isError}
+              error={executeQuery.error}
             />
           </Panel>
         </PanelGroup>
@@ -251,10 +256,12 @@ function QueryResults({
   result,
   isPending,
   isError,
+  error,
 }: {
   result: ExecuteQueryResponse | null;
   isPending: boolean;
   isError: boolean;
+  error: unknown;
 }) {
   if (isPending) {
     return (
@@ -267,6 +274,27 @@ function QueryResults({
   }
 
   if (isError) {
+    const apiErr = error instanceof ApiError ? error : null;
+    if (apiErr?.status === 403) {
+      const body = apiErr.body as {
+        type?: string;
+        columns?: Array<{ schema: string; table: string; column: string }>;
+      } | null;
+      if (body?.type === "sensitive_columns") {
+        return (
+          <Alert color="orange" title="Query blocked — restricted columns" m="xs">
+            <Text size="sm" mb="xs">
+              Your query references columns you are not authorised to access:
+            </Text>
+            {(body.columns ?? []).map((c, i) => (
+              <Code key={i} display="block" fz="xs">
+                {c.schema}.{c.table}.{c.column}
+              </Code>
+            ))}
+          </Alert>
+        );
+      }
+    }
     return (
       <Alert color="red" title="Request failed" m="xs">
         Could not reach the server. Check your connection and try again.
@@ -360,7 +388,7 @@ function QueryResults({
 type TableClickHandler = (
   schemaName: string,
   tableName: string,
-  columns: Array<{ name: string }>,
+  columns: Array<{ name: string; isRestricted: boolean }>,
 ) => void;
 
 function SchemaSidebar({
@@ -458,6 +486,7 @@ function SchemaSidebar({
                           onClick={() => onTableClick(s.name, t.name, t.columns)}
                           size="xs"
                           variant="subtle"
+                          disabled={t.columns.every((c) => c.isRestricted)}
                         >
                           <IconPlaylistAdd />
                         </Button>
@@ -469,7 +498,17 @@ function SchemaSidebar({
                         pl="calc(var(--mantine-spacing-xl) + var(--mantine-spacing-xs))"
                       >
                         {t.columns.map((c) => (
-                          <Group key={c.name} gap="xs" px="xs" py={2} wrap="nowrap">
+                          <Group
+                            key={c.name}
+                            gap="xs"
+                            px="xs"
+                            py={2}
+                            wrap="nowrap"
+                            style={c.isRestricted ? { opacity: 0.45 } : undefined}
+                          >
+                            {c.isRestricted && (
+                              <IconLock size={10} color="var(--mantine-color-red-6)" />
+                            )}
                             <Text size="xs" style={{ minWidth: 0 }}>
                               {c.name}
                             </Text>

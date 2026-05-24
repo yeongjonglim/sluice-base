@@ -614,6 +614,200 @@
         }
       }
     },
+    "/api/admin/database/{databaseId}/sensitive-column": {
+      "get": {
+        "tags": [
+          "SensitiveColumnEndpoints"
+        ],
+        "operationId": "ListSensitiveColumns",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SensitiveColumnListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "SensitiveColumnEndpoints"
+        ],
+        "operationId": "MarkSensitiveColumn",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkSensitiveColumnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK"
+          },
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}": {
+      "delete": {
+        "tags": [
+          "SensitiveColumnEndpoints"
+        ],
+        "operationId": "UnmarkSensitiveColumn",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sensitiveColumnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}/bypass": {
+      "post": {
+        "tags": [
+          "SensitiveColumnEndpoints"
+        ],
+        "operationId": "GrantColumnBypass",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sensitiveColumnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantBypassRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK"
+          },
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}/bypass/{userId}": {
+      "delete": {
+        "tags": [
+          "SensitiveColumnEndpoints"
+        ],
+        "operationId": "RevokeColumnBypass",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sensitiveColumnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
     "/api/server": {
       "get": {
         "tags": [
@@ -1531,6 +1725,51 @@
           }
         }
       },
+      "BypassItem": {
+        "required": [
+          "id",
+          "userId",
+          "userEmail",
+          "userName",
+          "grantedAt",
+          "grantedById"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/UserColumnBypassId"
+          },
+          "userId": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "userEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "userName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "grantedById": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          }
+        }
+      },
       "CancelUpdateRequest": {
         "required": [
           "note"
@@ -1613,6 +1852,10 @@
           },
           "isNullable": {
             "type": "boolean"
+          },
+          "isRestricted": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -1814,6 +2057,17 @@
           }
         }
       },
+      "GrantBypassRequest": {
+        "required": [
+          "userId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
       "GrantPermissionRequest": {
         "required": [
           "permission"
@@ -1929,6 +2183,25 @@
             "items": {
               "$ref": "#/components/schemas/UserSummaryResponse"
             }
+          }
+        }
+      },
+      "MarkSensitiveColumnRequest": {
+        "required": [
+          "schemaName",
+          "tableName",
+          "columnName"
+        ],
+        "type": "object",
+        "properties": {
+          "schemaName": {
+            "type": "string"
+          },
+          "tableName": {
+            "type": "string"
+          },
+          "columnName": {
+            "type": "string"
           }
         }
       },
@@ -2085,7 +2358,8 @@
           "Unknown",
           "Success",
           "Error",
-          "Timeout"
+          "Timeout",
+          "Blocked"
         ],
         "type": "string"
       },
@@ -2198,6 +2472,67 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SchemaInfo"
+            }
+          }
+        }
+      },
+      "SensitiveColumnId": { },
+      "SensitiveColumnItem": {
+        "required": [
+          "id",
+          "schemaName",
+          "tableName",
+          "columnName",
+          "markedAt",
+          "markedById",
+          "bypasses"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/SensitiveColumnId"
+          },
+          "schemaName": {
+            "type": "string"
+          },
+          "tableName": {
+            "type": "string"
+          },
+          "columnName": {
+            "type": "string"
+          },
+          "markedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "markedById": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          },
+          "bypasses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BypassItem"
+            }
+          }
+        }
+      },
+      "SensitiveColumnListResponse": {
+        "required": [
+          "columns"
+        ],
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SensitiveColumnItem"
             }
           }
         }
@@ -2683,6 +3018,7 @@
           }
         }
       },
+      "UserColumnBypassId": { },
       "UserDatabaseRoleId": {
         "type": "string",
         "format": "uuid"
@@ -2797,6 +3133,9 @@
     },
     {
       "name": "DatabaseRoleEndpoints"
+    },
+    {
+      "name": "SensitiveColumnEndpoints"
     },
     {
       "name": "ServerEndpoints"

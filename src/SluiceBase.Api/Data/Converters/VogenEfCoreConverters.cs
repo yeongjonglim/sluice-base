@@ -11,6 +11,8 @@ namespace SluiceBase.Api.Data.Converters;
 [EfCoreConverter<ExternalLoginId>]
 [EfCoreConverter<UserPermissionId>]
 [EfCoreConverter<UserDatabaseRoleId>]
+[EfCoreConverter<SensitiveColumnId>]
+[EfCoreConverter<UserColumnBypassId>]
 [EfCoreConverter<ServerId>]
 [EfCoreConverter<DatabaseId>]
 [EfCoreConverter<CredentialId>]
