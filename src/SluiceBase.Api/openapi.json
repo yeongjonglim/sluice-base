@@ -275,6 +275,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "sensitiveColumn",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         ],
         "responses": {
@@ -2263,7 +2273,8 @@
           "rowCount",
           "error",
           "userId",
-          "userName"
+          "userName",
+          "sensitiveColumns"
         ],
         "type": "object",
         "properties": {
@@ -2335,6 +2346,12 @@
               "null",
               "string"
             ]
+          },
+          "sensitiveColumns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },

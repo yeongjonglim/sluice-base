@@ -642,6 +642,7 @@ export interface QueryHistoryItem {
   error: string | null;
   userId: string | null;
   userName: string | null;
+  sensitiveColumns: Array<string>;
 }
 
 export interface QueryHistoryFilters {
@@ -649,6 +650,7 @@ export interface QueryHistoryFilters {
   to?: string;
   databaseId?: string;
   status?: string;
+  sensitiveColumn?: Array<string>;
 }
 
 export function useQueryHistory(filters: QueryHistoryFilters) {
@@ -660,6 +662,11 @@ export function useQueryHistory(filters: QueryHistoryFilters) {
       if (filters.to) params.set("to", filters.to);
       if (filters.databaseId) params.set("databaseId", filters.databaseId);
       if (filters.status) params.set("status", filters.status);
+      if (filters.sensitiveColumn) {
+        for (const sc of filters.sensitiveColumn) {
+          params.append("sensitiveColumn", sc);
+        }
+      }
       const qs = params.toString();
       return apiRequest<void, { items: Array<QueryHistoryItem> }>(
         qs ? `/api/query/history?${qs}` : "/api/query/history",

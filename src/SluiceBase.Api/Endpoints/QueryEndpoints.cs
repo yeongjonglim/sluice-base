@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
@@ -59,37 +60,55 @@ internal static class QueryEndpoints
             .Where(c => c.DatabaseId == database.Id)
             .ToListAsync(ct);
 
+        string[] touchedSensitive = [];
+
         if (sensitiveColumns.Count > 0)
         {
-            var sensitiveColumnIds = sensitiveColumns.Select(c => c.Id).ToList();
-            var bypassedIds = await db.UserColumnBypasses
-                .AsNoTracking()
-                .Where(b => b.UserId == user!.Id && sensitiveColumnIds.Contains(b.SensitiveColumnId))
-                .Select(b => b.SensitiveColumnId)
-                .ToListAsync(ct);
-
-            var blockedColumns = sensitiveColumns
-                .Where(c => !bypassedIds.Contains(c.Id))
+            var allSensitive = sensitiveColumns
                 .Select(c => (c.SchemaName, c.TableName, c.ColumnName))
                 .ToList();
+            var allHits = SqlColumnChecker.FindBlockedColumns(request.Sql, allSensitive);
 
-            var hits = SqlColumnChecker.FindBlockedColumns(request.Sql, blockedColumns);
-
-            if (hits.Count > 0)
+            if (allHits.Count > 0)
             {
-                var blocked = hits.Select(h => new { schema = h.Schema, table = h.Table, column = h.Column }).ToArray();
-                var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
-                var logEntry = QueryLog.Create(user?.Id, database.Id, request.Sql,
-                    QueryLogStatus.Blocked, startedAt, durationMs, null,
-                    $"Sensitive columns: {string.Join(", ", hits.Select(h => $"{h.Schema}.{h.Table}.{h.Column}"))}");
-                db.QueryLogs.Add(logEntry);
-                await db.SaveChangesAsync(ct);
+                touchedSensitive = allHits
+                    .Select(h => $"{h.Schema}.{h.Table}.{h.Column}")
+                    .ToArray();
 
-                return TypedResults.Problem(
-                    statusCode: StatusCodes.Status403Forbidden,
-                    title: "Sensitive columns",
-                    type: "sensitive_columns",
-                    extensions: new Dictionary<string, object?> { ["columns"] = blocked });
+                var sensitiveColumnIds = sensitiveColumns.Select(c => c.Id).ToList();
+                var bypassedIds = await db.UserColumnBypasses
+                    .AsNoTracking()
+                    .Where(b => b.UserId == user!.Id && sensitiveColumnIds.Contains(b.SensitiveColumnId))
+                    .Select(b => b.SensitiveColumnId)
+                    .ToListAsync(ct);
+
+                var blockedColumns = sensitiveColumns
+                    .Where(c => !bypassedIds.Contains(c.Id))
+                    .Select(c => (c.SchemaName, c.TableName, c.ColumnName))
+                    .ToList();
+
+                if (blockedColumns.Count > 0)
+                {
+                    var blockedHits = SqlColumnChecker.FindBlockedColumns(request.Sql, blockedColumns);
+
+                    if (blockedHits.Count > 0)
+                    {
+                        var blocked = blockedHits.Select(h => new { schema = h.Schema, table = h.Table, column = h.Column }).ToArray();
+                        var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
+                        var logEntry = QueryLog.Create(user?.Id, database.Id, request.Sql,
+                            QueryLogStatus.Blocked, startedAt, durationMs, null,
+                            $"Sensitive columns: {string.Join(", ", blockedHits.Select(h => $"{h.Schema}.{h.Table}.{h.Column}"))}",
+                            touchedSensitive);
+                        db.QueryLogs.Add(logEntry);
+                        await db.SaveChangesAsync(ct);
+
+                        return TypedResults.Problem(
+                            statusCode: StatusCodes.Status403Forbidden,
+                            title: "Sensitive columns",
+                            type: "sensitive_columns",
+                            extensions: new Dictionary<string, object?> { ["columns"] = blocked });
+                    }
+                }
             }
         }
 
@@ -118,7 +137,7 @@ internal static class QueryEndpoints
             logStatus = QueryLogStatus.Error;
             response = new QueryResponse(null, null, 0, durationMs, ex.Message);
 
-            var log = QueryLog.Create(user?.Id, database.Id, request.Sql, logStatus, startedAt, durationMs, null, ex.Message);
+            var log = QueryLog.Create(user?.Id, database.Id, request.Sql, logStatus, startedAt, durationMs, null, ex.Message, touchedSensitive);
             db.QueryLogs.Add(log);
             await db.SaveChangesAsync(ct);
             return TypedResults.BadRequest(ex.Message);
@@ -136,7 +155,7 @@ internal static class QueryEndpoints
             response = new QueryResponse(null, null, 0, durationMs, ex.Message);
         }
 
-        var queryLog = QueryLog.Create(user?.Id, database.Id, request.Sql, logStatus, startedAt, response.DurationMs, rowCount, response.Error);
+        var queryLog = QueryLog.Create(user?.Id, database.Id, request.Sql, logStatus, startedAt, response.DurationMs, rowCount, response.Error, touchedSensitive);
         db.QueryLogs.Add(queryLog);
         await db.SaveChangesAsync(ct);
 
@@ -148,6 +167,7 @@ internal static class QueryEndpoints
         DateTimeOffset? to,
         string? databaseId,
         string? status,
+        [FromQuery] string[]? sensitiveColumn,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
         CancellationToken ct)
@@ -181,7 +201,11 @@ internal static class QueryEndpoints
             ? parsedStatus
             : null;
 
-        var items = await db.QueryLogs
+        var hasSensitiveFilter = sensitiveColumn is { Length: > 0 };
+        var sensitiveFilterAny = hasSensitiveFilter && sensitiveColumn!.Length == 1
+            && string.Equals(sensitiveColumn[0], "any", StringComparison.OrdinalIgnoreCase);
+
+        var query = db.QueryLogs
             .AsNoTracking()
             .Where(q => q.DatabaseId != null &&
                         (auditDatabaseIds.Contains(q.DatabaseId.Value) ||
@@ -189,7 +213,18 @@ internal static class QueryEndpoints
             .Where(q => @from == null || q.ExecutedAt >= @from)
             .Where(q => to == null || q.ExecutedAt <= to)
             .Where(q => filterDb == null || q.DatabaseId == filterDb)
-            .Where(q => filterStatus == null || q.Status == filterStatus)
+            .Where(q => filterStatus == null || q.Status == filterStatus);
+
+        if (sensitiveFilterAny)
+        {
+            query = query.Where(q => q.SensitiveColumns.Length > 0);
+        }
+        else if (hasSensitiveFilter)
+        {
+            query = query.Where(q => q.SensitiveColumns.Any(sc => sensitiveColumn!.Contains(sc)));
+        }
+
+        var items = await query
             .OrderByDescending(q => q.ExecutedAt)
             .Take(100)
             .Select(q => new QueryHistoryItem(
@@ -203,7 +238,8 @@ internal static class QueryEndpoints
                 q.RowCount,
                 q.Error,
                 q.UserId,
-                db.Users.Where(u => u.Id == q.UserId).Select(u => u.Name ?? u.Email).FirstOrDefault()
+                db.Users.Where(u => u.Id == q.UserId).Select(u => u.Name ?? u.Email).FirstOrDefault(),
+                q.SensitiveColumns
             ))
             .ToListAsync(ct);
 
@@ -230,7 +266,8 @@ internal static class QueryEndpoints
         int? RowCount,
         string? Error,
         UserId? UserId,
-        string? UserName);
+        string? UserName,
+        string[] SensitiveColumns);
 
     public sealed record QueryHistoryResponse(IReadOnlyList<QueryHistoryItem> Items);
 }
