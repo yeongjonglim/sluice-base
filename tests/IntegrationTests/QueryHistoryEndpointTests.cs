@@ -257,8 +257,150 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
 
     // ── Private DTO records (mirrors the JSON the API will return) ──────────
 
+    [Fact]
+    public async Task GetHistory_NormalQuery_HasEmptySensitiveColumns()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, _, databaseId) = await AliceWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var sql = $"SELECT 1 -- no-sensitive-{Guid.NewGuid():N}";
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new { databaseId, sql });
+        (await session.Client.SendAsync(req, ct)).EnsureSuccessStatusCode();
+
+        var resp = await session.Client.GetFromJsonAsync<HistoryBody>("/api/query/history", ct);
+        var item = Assert.Single(resp!.Items, i => i.QueryText == sql);
+        Assert.Empty(item.SensitiveColumns);
+    }
+
+    [Fact]
+    public async Task GetHistory_BlockedQuery_HasSensitiveColumnsPopulated()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, _, databaseId) = await AliceWithBlueServerAsync(ct);
+        using var _ = session;
+
+        await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
+
+        var sql = $"SELECT email FROM public.users -- blocked-{Guid.NewGuid():N}";
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId, sql));
+        var resp = await session.Client.SendAsync(req, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+
+        var history = await session.Client.GetFromJsonAsync<HistoryBody>("/api/query/history", ct);
+        var item = Assert.Single(history!.Items, i => i.QueryText == sql);
+        Assert.Equal("Blocked", item.Status);
+        Assert.Contains("public.users.email", item.SensitiveColumns);
+    }
+
+    [Fact]
+    public async Task GetHistory_BypassedQuery_HasSensitiveColumnsPopulated()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, aliceId, databaseId) = await AliceWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var columnId = await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
+        await SensitiveColumnTestHelper.GrantBypassAsync(
+            session, databaseId.ToString(), columnId, aliceId, xsrf, ct);
+
+        var sql = $"SELECT email FROM public.users -- bypassed-{Guid.NewGuid():N}";
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId, sql));
+        (await session.Client.SendAsync(req, ct)).EnsureSuccessStatusCode();
+
+        var history = await session.Client.GetFromJsonAsync<HistoryBody>("/api/query/history", ct);
+        var item = Assert.Single(history!.Items, i => i.QueryText == sql);
+        Assert.Equal("Success", item.Status);
+        Assert.Contains("public.users.email", item.SensitiveColumns);
+    }
+
+    [Fact]
+    public async Task GetHistory_FilterBySensitiveColumnAny_ReturnsOnlySensitive()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, aliceId, databaseId) = await AliceWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var columnId = await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
+        await SensitiveColumnTestHelper.GrantBypassAsync(
+            session, databaseId.ToString(), columnId, aliceId, xsrf, ct);
+
+        var sensitiveSql = $"SELECT email FROM public.users -- filter-any-sensitive-{Guid.NewGuid():N}";
+        var normalSql    = $"SELECT 1 -- filter-any-normal-{Guid.NewGuid():N}";
+
+        using var r1 = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId, sensitiveSql));
+        (await session.Client.SendAsync(r1, ct)).EnsureSuccessStatusCode();
+
+        using var r2 = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new { databaseId, sql = normalSql });
+        (await session.Client.SendAsync(r2, ct)).EnsureSuccessStatusCode();
+
+        var resp = await session.Client.GetFromJsonAsync<HistoryBody>(
+            "/api/query/history?sensitiveColumn=any", ct);
+        Assert.NotNull(resp);
+        Assert.Contains(resp.Items, i => i.QueryText == sensitiveSql);
+        Assert.DoesNotContain(resp.Items, i => i.QueryText == normalSql);
+    }
+
+    [Fact]
+    public async Task GetHistory_FilterBySpecificColumn_ReturnsMatching()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, aliceId, databaseId) = await AliceWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var columnId = await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
+        await SensitiveColumnTestHelper.GrantBypassAsync(
+            session, databaseId.ToString(), columnId, aliceId, xsrf, ct);
+
+        var sql = $"SELECT email FROM public.users -- filter-specific-{Guid.NewGuid():N}";
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId, sql));
+        (await session.Client.SendAsync(req, ct)).EnsureSuccessStatusCode();
+
+        var matched = await session.Client.GetFromJsonAsync<HistoryBody>(
+            "/api/query/history?sensitiveColumn=public.users.email", ct);
+        Assert.Contains(matched!.Items, i => i.QueryText == sql);
+
+        var unmatched = await session.Client.GetFromJsonAsync<HistoryBody>(
+            "/api/query/history?sensitiveColumn=public.users.id", ct);
+        Assert.DoesNotContain(unmatched!.Items, i => i.QueryText == sql);
+    }
+
+    [Fact]
+    public async Task GetHistory_FilterByMultipleColumns_ReturnsUnion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, aliceId, databaseId) = await AliceWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var columnId = await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
+        await SensitiveColumnTestHelper.GrantBypassAsync(
+            session, databaseId.ToString(), columnId, aliceId, xsrf, ct);
+
+        var sql = $"SELECT email FROM public.users -- filter-union-{Guid.NewGuid():N}";
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId, sql));
+        (await session.Client.SendAsync(req, ct)).EnsureSuccessStatusCode();
+
+        var resp = await session.Client.GetFromJsonAsync<HistoryBody>(
+            "/api/query/history?sensitiveColumn=public.users.id&sensitiveColumn=public.users.email", ct);
+        Assert.Contains(resp!.Items, i => i.QueryText == sql);
+    }
+
     private sealed record HistoryBody(HistoryItem[] Items);
-    private sealed record HistoryItem(string QueryText, string Status, string? DatabaseId, string? DatabaseDisplayName, string? UserId, string? UserName, string ExecutedAt);
+    private sealed record HistoryItem(
+        string QueryText, string Status, string? DatabaseId, string? DatabaseDisplayName,
+        string? UserId, string? UserName, string ExecutedAt, string[] SensitiveColumns);
     private sealed record ListUserBody(UserRow[] Users);
     private sealed record UserRow(string Id, string Email);
 }
