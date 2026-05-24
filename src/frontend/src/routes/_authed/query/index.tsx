@@ -25,6 +25,7 @@ import {
   IconLock,
   IconPlayerPlay,
   IconPlaylistAdd,
+  IconShieldLock,
   IconTable,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
@@ -506,9 +507,6 @@ function SchemaSidebar({
                             wrap="nowrap"
                             style={c.isRestricted ? { opacity: 0.45 } : undefined}
                           >
-                            {c.isRestricted && (
-                              <IconLock size={10} color="var(--mantine-color-red-6)" />
-                            )}
                             <Text size="xs" style={{ minWidth: 0 }}>
                               {c.name}
                             </Text>
@@ -518,6 +516,15 @@ function SchemaSidebar({
                                 null
                               </Text>
                             )}
+                            {c.isRestricted ? (
+                              <Tooltip label="Restricted — you cannot access this column" withArrow>
+                                <IconLock size={10} color="var(--mantine-color-red-6)" />
+                              </Tooltip>
+                            ) : c.isSensitive ? (
+                              <Tooltip label="Sensitive — excluded from generated queries" withArrow>
+                                <IconShieldLock size={10} color="var(--mantine-color-yellow-6)" />
+                              </Tooltip>
+                            ) : null}
                           </Group>
                         ))}
                       </Stack>
