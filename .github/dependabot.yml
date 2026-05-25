@@ -4,6 +4,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: saturday
     reviewers:
       - yeongjonglim
     groups:
@@ -33,6 +34,7 @@ updates:
     directory: /src/frontend
     schedule:
       interval: weekly
+      day: saturday
     reviewers:
       - yeongjonglim
     groups:
@@ -71,6 +73,7 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: saturday
     reviewers:
       - yeongjonglim
     groups:
