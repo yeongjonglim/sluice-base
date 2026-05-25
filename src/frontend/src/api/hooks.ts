@@ -325,14 +325,43 @@ export function useTestDatabaseConnection(serverId: string) {
 
 // hooks.ts — update useServers return type annotation (auto-inferred from new schema.ts)
 // useSchema: change parameter name and path
+
+type SchemaTreeResponse = paths["/api/schema/{databaseId}"]["get"]["responses"][200]["content"]["application/json"];
+
+export function schemaToCompletions(
+  tree: SchemaTreeResponse,
+): Record<string, Array<string>> {
+  const result: Record<string, Array<string>> = {};
+  for (const schema of tree.schemas) {
+    for (const table of schema.tables) {
+      result[`${schema.name}.${table.name}`] = table.columns
+        .filter((c) => !c.isRestricted)
+        .map((c) => c.name);
+    }
+  }
+  return result;
+}
+
 export function useSchema(databaseId: string | null) {
   return useQuery({
     queryKey: ["schema", databaseId] as const,
     enabled: databaseId !== null,
     queryFn: () =>
-      apiRequest<void, paths["/api/schema/{databaseId}"]["get"]["responses"][200]["content"]["application/json"]>(
+      apiRequest<void, SchemaTreeResponse>(
         `/api/schema/${databaseId}`,
       ),
+  });
+}
+
+export function useSchemaCompletions(databaseId: string | null) {
+  return useQuery({
+    queryKey: ["schema", databaseId] as const,
+    enabled: databaseId !== null,
+    queryFn: () =>
+      apiRequest<void, SchemaTreeResponse>(
+        `/api/schema/${databaseId}`,
+      ),
+    select: schemaToCompletions,
   });
 }
 
