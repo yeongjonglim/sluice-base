@@ -12,15 +12,12 @@ updates:
         patterns:
           - "Aspire.*"
           - "CommunityToolkit.Aspire.*"
-      efcore:
-        patterns:
-          - "Microsoft.EntityFrameworkCore*"
-          - "Npgsql.EntityFrameworkCore*"
-          - "EFCore.NamingConventions"
       microsoft:
         patterns:
           - "Microsoft.AspNetCore.*"
           - "Microsoft.Extensions.*"
+          - "Microsoft.EntityFrameworkCore*"
+          - "EFCore.NamingConventions"
       opentelemetry:
         patterns:
           - "OpenTelemetry.*"
