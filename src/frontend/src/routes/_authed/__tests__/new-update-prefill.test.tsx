@@ -22,7 +22,7 @@ vi.mock("@uiw/react-codemirror", () => ({
     }),
 }));
 
-vi.mock("@codemirror/lang-sql", () => ({ sql: () => [] }));
+vi.mock("@codemirror/lang-sql", () => ({ sql: () => [], PostgreSQL: {} }));
 vi.mock("@uiw/codemirror-themes-all", () => ({ githubDark: {}, githubLight: {} }));
 
 vi.mock("@/api/hooks", () => ({
@@ -39,6 +39,7 @@ vi.mock("@/api/hooks", () => ({
   }),
   useSubmitUpdate: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateRequest: () => ({ data: undefined, isPending: false, isError: false }),
+  useSchemaCompletions: () => ({ data: undefined }),
 }));
 
 afterEach(cleanup);
