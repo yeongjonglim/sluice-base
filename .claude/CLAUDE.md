@@ -12,6 +12,10 @@
 - Never manually edit EF Core migration files. Suppress analyzer warnings via the `[**/Migrations/**.{cs,vb}]` section in `.editorconfig`.
 - Abstract database-specific operations (schema introspection, connection handling) behind interfaces — never hard-code Npgsql calls in domain/business code.
 
+## Code Style
+
+- Preserve existing comments. Only remove a comment if it is factually wrong or references something that no longer exists.
+
 ## TypeScript / Frontend
 
 - Use `Array<T>` instead of `T[]` (enforced by ESLint `@typescript-eslint/array-type`).
