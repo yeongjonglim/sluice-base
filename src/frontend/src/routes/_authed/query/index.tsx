@@ -29,9 +29,9 @@ import {
   IconTable,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { sql } from "@codemirror/lang-sql";
+import { PostgreSQL, sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
 import { EditorView, keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
@@ -40,7 +40,7 @@ import type { ExecuteQueryResponse } from "@/api/hooks";
 import { ApiError } from "@/api/client";
 import { exportToCsv } from "@/utils/csv.ts";
 import { useSessionState } from "@/utils/useSessionState";
-import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema, useSchemaCompletions } from "@/api/hooks";
 
 const noIndentKeymap = keymap.of([
   {
@@ -93,6 +93,11 @@ function QueryPage() {
     null,
   );
   const schema = useSchema(selectedDatabaseId);
+  const completions = useSchemaCompletions(selectedDatabaseId);
+  const sqlExtension = useMemo(
+    () => sql({ dialect: PostgreSQL, schema: completions.data }),
+    [completions.data],
+  );
   const [editorContent, setEditorContent] = useSessionState("sluice:query:editor", "");
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const executeQuery = useExecuteQuery();
@@ -205,7 +210,7 @@ function QueryPage() {
                   ref={editorRef}
                   value={editorContent}
                   onChange={setEditorContent}
-                  extensions={[sql(), runKeymap, noIndentKeymap, EditorView.lineWrapping]}
+                  extensions={[sqlExtension, runKeymap, noIndentKeymap, EditorView.lineWrapping]}
                   theme={computedColorScheme === "dark" ? githubDark : githubLight}
                   height="100%"
                   style={{ height: "100%" }}

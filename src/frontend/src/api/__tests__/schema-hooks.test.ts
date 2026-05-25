@@ -2,7 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
-import { useSchema } from "@/api/hooks";
+import { schemaToCompletions, useSchema, useSchemaCompletions } from "@/api/hooks";
 
 vi.mock("@/api/client", () => ({
   apiRequest: vi.fn(),
@@ -63,5 +63,134 @@ describe("useSchema", () => {
 
     expect(apiRequest).toHaveBeenCalledWith("/api/schema/db-abc");
     expect(result.current.data).toEqual(mockTree);
+  });
+});
+
+describe("schemaToCompletions", () => {
+  it("transforms SchemaTree into fully-qualified table→columns map", () => {
+    const tree = {
+      schemas: [
+        {
+          name: "public",
+          tables: [
+            {
+              name: "users",
+              columns: [
+                { name: "id", dataType: "integer", isNullable: false, isSensitive: false, isRestricted: false },
+                { name: "email", dataType: "text", isNullable: false, isSensitive: true, isRestricted: false },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(schemaToCompletions(tree)).toEqual({
+      "public.users": ["id", "email"],
+    });
+  });
+
+  it("excludes restricted columns but keeps sensitive ones", () => {
+    const tree = {
+      schemas: [
+        {
+          name: "hr",
+          tables: [
+            {
+              name: "employees",
+              columns: [
+                { name: "id", dataType: "integer", isNullable: false, isSensitive: false, isRestricted: false },
+                { name: "ssn", dataType: "text", isNullable: false, isSensitive: true, isRestricted: true },
+                { name: "salary", dataType: "numeric", isNullable: false, isSensitive: true, isRestricted: false },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(schemaToCompletions(tree)).toEqual({
+      "hr.employees": ["id", "salary"],
+    });
+  });
+
+  it("handles multiple schemas and tables", () => {
+    const tree = {
+      schemas: [
+        {
+          name: "public",
+          tables: [
+            {
+              name: "users",
+              columns: [
+                { name: "id", dataType: "integer", isNullable: false, isSensitive: false, isRestricted: false },
+              ],
+            },
+            {
+              name: "orders",
+              columns: [
+                { name: "id", dataType: "integer", isNullable: false, isSensitive: false, isRestricted: false },
+                { name: "user_id", dataType: "integer", isNullable: false, isSensitive: false, isRestricted: false },
+              ],
+            },
+          ],
+        },
+        {
+          name: "audit",
+          tables: [
+            {
+              name: "logs",
+              columns: [
+                { name: "ts", dataType: "timestamptz", isNullable: false, isSensitive: false, isRestricted: false },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(schemaToCompletions(tree)).toEqual({
+      "public.users": ["id"],
+      "public.orders": ["id", "user_id"],
+      "audit.logs": ["ts"],
+    });
+  });
+
+  it("returns empty object for empty schema tree", () => {
+    expect(schemaToCompletions({ schemas: [] })).toEqual({});
+  });
+});
+
+describe("useSchemaCompletions", () => {
+  it("returns undefined when databaseId is null", async () => {
+    const { result } = renderHook(() => useSchemaCompletions(null), { wrapper });
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(apiRequest).not.toHaveBeenCalled();
+    expect(result.current.data).toBeUndefined();
+  });
+
+  it("returns transformed schema when databaseId is set", async () => {
+    vi.mocked(apiRequest).mockResolvedValue({
+      schemas: [
+        {
+          name: "public",
+          tables: [
+            {
+              name: "items",
+              columns: [
+                { name: "id", dataType: "integer", isNullable: false, isSensitive: false, isRestricted: false },
+                { name: "secret", dataType: "text", isNullable: false, isSensitive: true, isRestricted: true },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+
+    const { result } = renderHook(() => useSchemaCompletions("db-1"), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data).toEqual({ "public.items": ["id"] });
   });
 });

@@ -11,11 +11,11 @@ import {
   useComputedColorScheme,
 } from "@mantine/core";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
-import { sql } from "@codemirror/lang-sql";
+import { PostgreSQL, sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
-import { meQueryOptions, useCatalogServer, useSubmitUpdate, useUpdateRequest } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useSchemaCompletions, useSubmitUpdate, useUpdateRequest } from "@/api/hooks";
 
 export const Route = createFileRoute("/_authed/update/new")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -66,6 +66,11 @@ export function NewUpdateForm({ initialDatabaseId, initialSqlText, sourceRequest
   const computedColorScheme = useComputedColorScheme();
 
   const [databaseId, setDatabaseId] = useState<string | null>(initialDatabaseId);
+  const completions = useSchemaCompletions(databaseId);
+  const sqlExtension = useMemo(
+    () => sql({ dialect: PostgreSQL, schema: completions.data }),
+    [completions.data],
+  );
   const [sqlText, setSqlText] = useState(initialSqlText);
   const [reason, setReason] = useState("");
 
@@ -119,7 +124,7 @@ export function NewUpdateForm({ initialDatabaseId, initialSqlText, sourceRequest
           <CodeMirror
             value={sqlText}
             onChange={setSqlText}
-            extensions={[sql()]}
+            extensions={[sqlExtension]}
             theme={computedColorScheme === "dark" ? githubDark : githubLight}
             minHeight="300px"
             basicSetup={{
