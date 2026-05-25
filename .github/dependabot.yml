@@ -1,0 +1,79 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+    reviewers:
+      - yeongjonglim
+    groups:
+      aspire:
+        patterns:
+          - "Aspire.*"
+          - "CommunityToolkit.Aspire.*"
+      efcore:
+        patterns:
+          - "Microsoft.EntityFrameworkCore*"
+          - "Npgsql.EntityFrameworkCore*"
+          - "EFCore.NamingConventions"
+      microsoft:
+        patterns:
+          - "Microsoft.AspNetCore.*"
+          - "Microsoft.Extensions.*"
+      opentelemetry:
+        patterns:
+          - "OpenTelemetry.*"
+      testing:
+        patterns:
+          - "xunit.*"
+          - "Testcontainers.*"
+          - "Microsoft.NET.Test.Sdk"
+
+  - package-ecosystem: npm
+    directory: /src/frontend
+    schedule:
+      interval: weekly
+    reviewers:
+      - yeongjonglim
+    groups:
+      mantine:
+        patterns:
+          - "@mantine/*"
+          - "postcss-preset-mantine"
+      tanstack:
+        patterns:
+          - "@tanstack/*"
+      codemirror:
+        patterns:
+          - "@codemirror/*"
+          - "@uiw/*"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      testing:
+        patterns:
+          - "@testing-library/*"
+          - "@playwright/*"
+          - "vitest"
+          - "jsdom"
+      build-tooling:
+        patterns:
+          - "eslint*"
+          - "typescript*"
+          - "vite"
+          - "@vitejs/*"
+          - "globals"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    reviewers:
+      - yeongjonglim
+    groups:
+      actions:
+        patterns:
+          - "*"
