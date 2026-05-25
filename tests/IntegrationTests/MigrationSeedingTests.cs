@@ -8,7 +8,8 @@ namespace IntegrationTests;
 
 public sealed class MigrationSeedingTests : IAsyncLifetime
 {
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
+    // Image tag sourced from https://github.com/microsoft/aspire/blob/main/src/Aspire.Hosting.PostgreSQL/PostgresContainerImageTags.cs
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.3")
         .WithDatabase("sluice_test")
         .WithUsername("postgres")
         .WithPassword("postgres")
