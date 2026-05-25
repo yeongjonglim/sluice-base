@@ -635,6 +635,8 @@ export interface components {
             dataType: string;
             isNullable: boolean;
             /** @default false */
+            isSensitive: boolean;
+            /** @default false */
             isRestricted: boolean;
         };
         ConnectivityResult: {
@@ -746,6 +748,7 @@ export interface components {
             error: null | string;
             userId: null | components["schemas"]["UserId"];
             userName: null | string;
+            sensitiveColumns: string[];
         };
         QueryHistoryResponse: {
             items: components["schemas"]["QueryHistoryItem"][];
@@ -1165,6 +1168,7 @@ export interface operations {
                 to?: string;
                 databaseId?: string;
                 status?: string;
+                sensitiveColumn?: string[];
             };
             header?: never;
             path?: never;

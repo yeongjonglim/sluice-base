@@ -65,6 +65,10 @@ internal static class SchemaEndpoints
                 .Select(b => b.SensitiveColumnId)
                 .ToListAsync(ct);
 
+            var sensitiveKeys = sensitiveColumns
+                .Select(c => (c.SchemaName.ToLowerInvariant(), c.TableName.ToLowerInvariant(), c.ColumnName.ToLowerInvariant()))
+                .ToHashSet();
+
             var restrictedKeys = sensitiveColumns
                 .Where(c => !bypassedIds.Contains(c.Id))
                 .Select(c => (c.SchemaName.ToLowerInvariant(), c.TableName.ToLowerInvariant(), c.ColumnName.ToLowerInvariant()))
@@ -75,13 +79,13 @@ internal static class SchemaEndpoints
                     s.Tables.Select(t =>
                         new TableInfo(t.Name,
                             t.Columns.Select(c =>
-                                new ColumnInfo(
+                            {
+                                var key = (s.Name.ToLowerInvariant(), t.Name.ToLowerInvariant(), c.Name.ToLowerInvariant());
+                                return new ColumnInfo(
                                     c.Name, c.DataType, c.IsNullable,
-                                    restrictedKeys.Contains((
-                                        s.Name.ToLowerInvariant(),
-                                        t.Name.ToLowerInvariant(),
-                                        c.Name.ToLowerInvariant()))
-                                )).ToList()
+                                    sensitiveKeys.Contains(key),
+                                    restrictedKeys.Contains(key));
+                            }).ToList()
                         )).ToList()
                 )).ToList();
 

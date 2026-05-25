@@ -3,6 +3,7 @@ import {
   Alert,
   Badge,
   Group,
+  MultiSelect,
   ScrollArea,
   Select,
   Stack,
@@ -10,16 +11,18 @@ import {
   Text,
   TextInput,
   Title,
+  Tooltip,
   useComputedColorScheme,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
-import { IconCopy } from "@tabler/icons-react";
+import { IconCopy, IconShieldLock } from "@tabler/icons-react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import CodeMirror from "@uiw/react-codemirror";
 import { sql } from "@codemirror/lang-sql";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
+import { EditorView } from "@codemirror/view";
 import type { QueryHistoryFilters, QueryHistoryItem } from "@/api/hooks";
 import { meQueryOptions, useCatalogServer, useQueryHistory } from "@/api/hooks";
 import { useHasPermission } from "@/auth/permission";
@@ -29,6 +32,7 @@ type HistorySearch = {
   to?: string;
   databaseId?: string;
   status?: string;
+  sensitiveColumn?: Array<string>;
 };
 
 export const Route = createFileRoute("/_authed/query/history")({
@@ -37,6 +41,11 @@ export const Route = createFileRoute("/_authed/query/history")({
     to: typeof search.to === "string" ? search.to : undefined,
     databaseId: typeof search.databaseId === "string" ? search.databaseId : undefined,
     status: typeof search.status === "string" ? search.status : undefined,
+    sensitiveColumn: Array.isArray(search.sensitiveColumn)
+      ? search.sensitiveColumn.filter((v): v is string => typeof v === "string")
+      : typeof search.sensitiveColumn === "string"
+        ? [search.sensitiveColumn]
+        : undefined,
   }),
   beforeLoad: ({ context }) => {
     const me = context.queryClient.getQueryData(meQueryOptions.queryKey);
@@ -51,6 +60,7 @@ const STATUS_COLOR: Record<string, string> = {
   Success: "teal",
   Error: "red",
   Timeout: "orange",
+  Blocked: "yellow",
   Unknown: "gray",
 };
 
@@ -59,6 +69,7 @@ const STATUS_OPTIONS = [
   { value: "Success", label: "Success" },
   { value: "Error", label: "Error" },
   { value: "Timeout", label: "Timeout" },
+  { value: "Blocked", label: "Blocked" },
 ];
 
 function dateToParam(d: string | null): string | undefined {
@@ -82,6 +93,7 @@ function QueryHistoryPage() {
     to: search.to,
     databaseId: search.databaseId,
     status: search.status,
+    sensitiveColumn: search.sensitiveColumn,
   };
   const history = useQueryHistory(filters);
 
@@ -92,10 +104,26 @@ function QueryHistoryPage() {
     ),
   ];
 
-  function setFilter(key: keyof HistorySearch, value: string | undefined) {
+  const sensitiveColumnOptions = useMemo(() => {
+    const cols = new Set<string>();
+    for (const item of history.data?.items ?? []) {
+      for (const sc of item.sensitiveColumns) {
+        cols.add(sc);
+      }
+    }
+    return [
+      { value: "any", label: "Any sensitive column" },
+      ...[...cols].sort().map((c) => ({ value: c, label: c })),
+    ];
+  }, [history.data]);
+
+  function setFilter(key: keyof HistorySearch, value: string | Array<string> | undefined) {
     void navigate({
       to: "/query/history",
-      search: (prev: HistorySearch) => ({ ...prev, [key]: value || undefined }),
+      search: (prev: HistorySearch) => ({
+        ...prev,
+        [key]: Array.isArray(value) ? (value.length > 0 ? value : undefined) : (value || undefined),
+      }),
     });
   }
 
@@ -144,6 +172,16 @@ function QueryHistoryPage() {
           value={search.status ?? ""}
           onChange={(v) => setFilter("status", v ?? undefined)}
           style={{ width: 160 }}
+        />
+        <MultiSelect
+          label="Sensitive columns"
+          size="sm"
+          placeholder="All queries"
+          data={sensitiveColumnOptions}
+          value={search.sensitiveColumn ?? []}
+          onChange={(v) => setFilter("sensitiveColumn", v)}
+          clearable
+          style={{ minWidth: 200 }}
         />
         {canAudit && (
           <TextInput
@@ -211,9 +249,16 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
   return (
     <Table.Tr>
       <Table.Td>
-        <Badge color={STATUS_COLOR[item.status] ?? "gray"} size="sm">
-          {item.status}
-        </Badge>
+        <Group gap={4} justify="center">
+          <Badge color={STATUS_COLOR[item.status] ?? "gray"} size="sm">
+            {item.status}
+          </Badge>
+          {item.sensitiveColumns.length > 0 && (
+            <Tooltip label={item.sensitiveColumns.join(", ")} multiline>
+              <IconShieldLock size={14} color="var(--mantine-color-yellow-6)" />
+            </Tooltip>
+          )}
+        </Group>
       </Table.Td>
       <Table.Td>{item.databaseDisplayName ?? "—"}</Table.Td>
       {canAudit && <Table.Td>{item.userName ?? "—"}</Table.Td>}
@@ -224,7 +269,7 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
               value={item.queryText}
               readOnly
               editable={false}
-              extensions={[sql()]}
+              extensions={[sql(), EditorView.lineWrapping]}
               theme={colorScheme === "dark" ? githubDark : githubLight}
               height="auto"
               maxHeight="120px"

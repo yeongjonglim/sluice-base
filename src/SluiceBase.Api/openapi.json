@@ -275,6 +275,16 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "sensitiveColumn",
+            "in": "query",
+            "schema": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
           }
         ],
         "responses": {
@@ -1853,6 +1863,10 @@
           "isNullable": {
             "type": "boolean"
           },
+          "isSensitive": {
+            "type": "boolean",
+            "default": false
+          },
           "isRestricted": {
             "type": "boolean",
             "default": false
@@ -2263,7 +2277,8 @@
           "rowCount",
           "error",
           "userId",
-          "userName"
+          "userName",
+          "sensitiveColumns"
         ],
         "type": "object",
         "properties": {
@@ -2335,6 +2350,12 @@
               "null",
               "string"
             ]
+          },
+          "sensitiveColumns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
