@@ -58,7 +58,7 @@ No new packages needed. Threshold enforcement is handled by the reporting script
 
 #### Frontend
 
-Add `@vitest/coverage-istanbul` as a dev dependency.
+Add `@vitest/coverage-v8` as a dev dependency.
 
 Update `vitest.config.ts`:
 
@@ -68,7 +68,7 @@ export default defineConfig({
   test: {
     // ...existing test config...
     coverage: {
-      provider: "istanbul",
+      provider: "v8",
       reporter: ["cobertura", "text"],
       reportsDirectory: "./coverage",
       thresholds: {
@@ -235,7 +235,7 @@ A separate workflow `.github/workflows/coverage-badges.yml` runs on pushes to `m
 | `.github/workflows/pr-checks.yml` | Modified — add coverage report steps, update permissions |
 | `.github/workflows/coverage-badges.yml` | New — badge generation on main merge |
 | `src/frontend/vitest.config.ts` | Modified — add coverage configuration |
-| `src/frontend/package.json` | Modified — add `@vitest/coverage-istanbul` dev dependency |
+| `src/frontend/package.json` | Modified — add `@vitest/coverage-v8` dev dependency |
 | `README.md` | Modified — add coverage badge images |
 
 ## Future Extensions
