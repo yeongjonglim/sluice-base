@@ -1,6 +1,5 @@
 # SluiceBase
 
-![Backend Coverage](https://raw.githubusercontent.com/yeongjonglim/sluice-base/gh-pages/badges/backend-coverage.svg)
 ![Frontend Coverage](https://raw.githubusercontent.com/yeongjonglim/sluice-base/gh-pages/badges/frontend-coverage.svg)
 
 SluiceBase is a self-hosted database query gateway. It gives a team controlled, auditable access to databases — secured by OIDC authentication, per-user permissions, and an optional approval workflow for write operations.

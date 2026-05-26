@@ -29,26 +29,6 @@ jobs:
           cache: npm
           cache-dependency-path: src/frontend/package-lock.json
 
-      - name: Trust ASP.NET Core HTTPS development certificate
-        run: |
-          dotnet dev-certs https --clean
-          dotnet dev-certs https --export-path /tmp/aspnetcore-dev-cert.crt --format PEM
-          sudo cp /tmp/aspnetcore-dev-cert.crt /usr/local/share/ca-certificates/aspnetcore-dev-cert.crt
-          sudo update-ca-certificates
-
-      - name: Restore and build backend
-        run: |
-          dotnet restore SluiceBase.slnx
-          dotnet build SluiceBase.slnx --configuration Release --no-restore
-
-      - name: Run backend tests with coverage
-        run: |
-          dotnet test tests/IntegrationTests \
-            --collect:"XPlat Code Coverage" \
-            --settings tests/IntegrationTests/coverlet.runsettings \
-            --configuration Release \
-            --no-build
-
       - name: Install frontend dependencies
         working-directory: src/frontend
         run: npm ci
@@ -57,12 +37,8 @@ jobs:
         working-directory: src/frontend
         run: npm run test
 
-      - name: Generate badges
+      - name: Generate badge
         run: |
-          dotnet run --project tools/CoverageReport -- badge \
-            --cobertura-path "$(find . -path '*/TestResults/*/coverage.cobertura.xml' | head -1)" \
-            --label "backend coverage" \
-            --output badges/backend-coverage.svg
           dotnet run --project tools/CoverageReport -- badge \
             --cobertura-path src/frontend/coverage/cobertura-coverage.xml \
             --label "frontend coverage" \

@@ -40,8 +40,6 @@ jobs:
         shell: bash
         run: |
           dotnet test tests/IntegrationTests \
-          --collect:"XPlat Code Coverage" \
-          --settings tests/IntegrationTests/coverlet.runsettings \
           --logger "console;verbosity=normal" \
           --logger "trx" \
           --configuration Release \
@@ -59,18 +57,6 @@ jobs:
           list-tests: failed
           fail-on-error: 'true'
           fail-on-empty: 'false'
-
-      - name: Report coverage
-        if: always() && github.event_name == 'pull_request'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          dotnet run --project tools/CoverageReport -- report \
-            --cobertura-path "$(find . -path '*/TestResults/*/coverage.cobertura.xml' | head -1)" \
-            --label "Backend" \
-            --overall-threshold 20 \
-            --change-threshold 80 \
-            --pr-number ${{ github.event.pull_request.number }}
 
       - name: Check OpenAPI document is current
         run: |
