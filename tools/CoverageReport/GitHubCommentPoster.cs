@@ -74,7 +74,14 @@ public static class GitHubCommentPoster
 
         using var process = Process.Start(psi)!;
         var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
         process.WaitForExit();
+
+        if (process.ExitCode != 0)
+        {
+            Console.Error.WriteLine($"gh exited with code {process.ExitCode}: {error}");
+        }
+
         return output;
     }
 }
