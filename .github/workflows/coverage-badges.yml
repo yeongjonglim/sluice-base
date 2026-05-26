@@ -45,6 +45,7 @@ jobs:
         run: |
           dotnet test tests/IntegrationTests \
             --collect:"XPlat Code Coverage" \
+            --settings tests/IntegrationTests/coverlet.runsettings \
             --configuration Release \
             --no-build
 

@@ -13,6 +13,11 @@ export default defineConfig({
       provider: "v8",
       reporter: ["cobertura", "text"],
       reportsDirectory: "./coverage",
+      exclude: [
+        "src/api/schema.ts",
+        "src/routeTree.gen.ts",
+        "src/main.tsx",
+      ],
       thresholds: {
         lines: 65,
         branches: 42,

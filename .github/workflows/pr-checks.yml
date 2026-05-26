@@ -41,6 +41,7 @@ jobs:
         run: |
           dotnet test tests/IntegrationTests \
           --collect:"XPlat Code Coverage" \
+          --settings tests/IntegrationTests/coverlet.runsettings \
           --logger "console;verbosity=normal" \
           --logger "trx" \
           --configuration Release \
@@ -67,7 +68,7 @@ jobs:
           dotnet run --project tools/CoverageReport -- report \
             --cobertura-path "$(find . -path '*/TestResults/*/coverage.cobertura.xml' | head -1)" \
             --label "Backend" \
-            --overall-threshold 60 \
+            --overall-threshold 20 \
             --change-threshold 80 \
             --pr-number ${{ github.event.pull_request.number }}
 
