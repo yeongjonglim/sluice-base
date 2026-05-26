@@ -17,8 +17,8 @@ public static class GitHubCommentPoster
         var marker = $"<!-- coverage-{label} -->";
 
         var existing = RunGh([
-            "pr", "view", prNumber, "--json", "comments", "--jq",
-            $".comments[] | select(.body | startswith(\"{marker}\")) | .id"
+            "api", "repos/{owner}/{repo}/issues/" + prNumber + "/comments",
+            "--jq", $".[] | select(.body | startswith(\"{marker}\")) | .id"
         ]);
 
         var commentId = existing.Trim().Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
