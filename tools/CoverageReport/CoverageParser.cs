@@ -30,11 +30,12 @@ public static class CoverageParser
                     totalCovered += file.CoveredLines;
 
                     var uncoveredLines = new List<int>();
-                    for (var line = 1; line <= (file.TotalLines ?? 0); line++)
+                    var lineStatus = file.LineVisitStatus;
+                    for (long line = 1; line < lineStatus.LongLength; line++)
                     {
-                        if (file.LineVisitStatus[line] == LineVisitStatus.NotCovered)
+                        if (lineStatus[line] == LineVisitStatus.NotCovered)
                         {
-                            uncoveredLines.Add(line);
+                            uncoveredLines.Add((int)line);
                         }
                     }
 
