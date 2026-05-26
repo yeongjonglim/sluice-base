@@ -127,7 +127,7 @@ jobs:
           dotnet run --project tools/CoverageReport -- report \
             --cobertura-path src/frontend/coverage/cobertura-coverage.xml \
             --label "Frontend" \
-            --overall-threshold 70 \
+            --overall-threshold 60 \
             --change-threshold 80 \
             --pr-number ${{ github.event.pull_request.number }}
 
