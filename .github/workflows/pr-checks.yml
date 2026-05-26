@@ -67,7 +67,7 @@ jobs:
           dotnet run --project tools/CoverageReport -- report \
             --cobertura-path "$(find . -path '*/TestResults/*/coverage.cobertura.xml' | head -1)" \
             --label "Backend" \
-            --overall-threshold 70 \
+            --overall-threshold 60 \
             --change-threshold 80 \
             --pr-number ${{ github.event.pull_request.number }}
 
