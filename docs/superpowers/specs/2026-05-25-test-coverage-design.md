@@ -89,11 +89,15 @@ Update `package.json` test script to include coverage:
 
 Vitest fails the run if thresholds aren't met.
 
-### Component 2: PR Reporting Script
+### Component 2: CoverageReport Console Tool
 
-A single Python script at `.github/scripts/coverage-report.py` that handles both backend and frontend reports.
+A C#/.NET console application at `tools/CoverageReport/` that handles both PR reporting and badge generation via subcommands.
 
-**Inputs** (command-line arguments):
+**Subcommands:**
+- `report` — parse Cobertura XML, post PR comment, enforce thresholds
+- `badge` — parse Cobertura XML, generate SVG badge file
+
+**Report inputs** (command-line arguments):
 - `--cobertura-path` — path to the Cobertura XML file
 - `--label` — "Backend" or "Frontend" (for the comment header)
 - `--overall-threshold` — minimum overall line coverage (default: 70)
@@ -101,8 +105,13 @@ A single Python script at `.github/scripts/coverage-report.py` that handles both
 - `--pr-number` — PR number for posting the comment
 - `--lowest-files-count` — how many lowest-coverage files to show (default: 5)
 
-**Behavior**:
-1. Parse the Cobertura XML using `xml.etree.ElementTree`
+**Badge inputs:**
+- `--cobertura-path` — path to the Cobertura XML file
+- `--label` — badge label text (e.g. "backend coverage")
+- `--output` — output SVG file path
+
+**Report behavior**:
+1. Parse the Cobertura XML using `System.Xml.Linq`
 2. Compute overall line coverage from the root `<coverage>` element's `line-rate` attribute
 3. Get the list of changed files via `gh pr diff --name-only`
 4. For each changed file, look up its coverage in the Cobertura `<class>` entries
@@ -115,7 +124,7 @@ A single Python script at `.github/scripts/coverage-report.py` that handles both
 **PR comment format**:
 
 ```markdown
-## 📊 Coverage Report — {label}
+## Coverage Report — {label}
 
 | Metric | Value | Threshold | Status |
 |--------|-------|-----------|--------|
@@ -137,9 +146,9 @@ A single Python script at `.github/scripts/coverage-report.py` that handles both
 | src/SluiceBase.Api/Endpoints/UpdateEndpoint.cs | 41.5% |
 ```
 
-**Comment update strategy**: Use `gh pr comment --edit-last` with a marker HTML comment (`<!-- coverage-{label} -->`) at the top of the body. This ensures repeated pushes update the existing comment rather than creating new ones.
+**Comment update strategy**: Use a marker HTML comment (`<!-- coverage-{label} -->`) at the top of the body. The tool searches existing PR comments for this marker and updates if found, otherwise posts a new comment.
 
-**Dependencies**: Python stdlib only (`xml.etree.ElementTree`, `subprocess`, `argparse`, `pathlib`). `gh` CLI is pre-installed on GitHub-hosted runners.
+**Dependencies**: .NET 10 SDK, `ReportGenerator.Core` NuGet package (5.5.10, 58M downloads — strongly-typed Cobertura parser, eliminates manual XML parsing). `gh` CLI is pre-installed on GitHub-hosted runners and invoked via `Process.Start`.
 
 ### Component 3: Workflow Changes
 
@@ -152,14 +161,14 @@ permissions:
   pull-requests: write
 ```
 
-**Backend job** — add after the existing "Run integration tests" step:
+**Backend job** — add after the existing "Report test results" step:
 ```yaml
 - name: Report coverage
   if: always() && github.event_name == 'pull_request'
   env:
     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   run: |
-    python .github/scripts/coverage-report.py \
+    dotnet run --project tools/CoverageReport -- report \
       --cobertura-path "$(find TestResults -name 'coverage.cobertura.xml' | head -1)" \
       --label "Backend" \
       --overall-threshold 70 \
@@ -167,18 +176,19 @@ permissions:
       --pr-number ${{ github.event.pull_request.number }}
 ```
 
-**Frontend job** — update existing test step and add coverage reporting:
+**Frontend job** — add .NET setup and coverage reporting after the existing "Run tests" step:
 ```yaml
-- name: Run tests
-  working-directory: src/frontend
-  run: npm run test
+- name: Set up .NET
+  uses: actions/setup-dotnet@v5
+  with:
+    dotnet-version: 10.0.x
 
 - name: Report coverage
   if: always() && github.event_name == 'pull_request'
   env:
     GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   run: |
-    python .github/scripts/coverage-report.py \
+    dotnet run --project tools/CoverageReport -- report \
       --cobertura-path src/frontend/coverage/cobertura-coverage.xml \
       --label "Frontend" \
       --overall-threshold 70 \
@@ -213,7 +223,7 @@ A separate workflow `.github/workflows/coverage-badges.yml` runs on pushes to `m
 2. Runs backend tests with coverage collection
 3. Runs frontend tests with coverage collection
 4. Parses both Cobertura XML files to extract overall line coverage percentages
-5. Generates two SVG badge files (`backend-coverage.svg`, `frontend-coverage.svg`) using a simple Python script (`.github/scripts/generate-badge.py`)
+5. Generates two SVG badge files (`backend-coverage.svg`, `frontend-coverage.svg`) using the CoverageReport tool's `badge` command
 6. Commits the SVGs to a `badges/` directory on the `gh-pages` branch
 
 **Badge SVG generation**: The script templates a minimal SVG with the coverage percentage and a color (green ≥ 70%, yellow ≥ 50%, red < 50%). No external service needed.
@@ -230,12 +240,13 @@ A separate workflow `.github/workflows/coverage-badges.yml` runs on pushes to `m
 
 | File | Change |
 |------|--------|
-| `.github/scripts/coverage-report.py` | New — coverage parsing and PR commenting script |
-| `.github/scripts/generate-badge.py` | New — SVG badge generator |
+| `tools/CoverageReport/` | New — C#/.NET console tool for coverage reporting and badge generation |
+| `tests/CoverageReport.Tests/` | New — xUnit tests for the CoverageReport tool |
 | `.github/workflows/pr-checks.yml` | Modified — add coverage report steps, update permissions |
 | `.github/workflows/coverage-badges.yml` | New — badge generation on main merge |
 | `src/frontend/vitest.config.ts` | Modified — add coverage configuration |
 | `src/frontend/package.json` | Modified — add `@vitest/coverage-v8` dev dependency |
+| `SluiceBase.slnx` | Modified — add CoverageReport and CoverageReport.Tests projects |
 | `README.md` | Modified — add coverage badge images |
 
 ## Future Extensions
