@@ -1,0 +1,69 @@
+name: Coverage badges
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  badges:
+    name: Generate coverage badges
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: src/frontend
+        run: npm ci
+
+      - name: Run frontend tests with coverage
+        working-directory: src/frontend
+        run: npm run test
+
+      - name: Generate badge
+        run: |
+          dotnet run --project tools/CoverageReport -- badge \
+            --cobertura-path src/frontend/coverage/cobertura-coverage.xml \
+            --label "frontend coverage" \
+            --output badges/frontend-coverage.svg
+
+      - name: Deploy badges to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Save badges to a temp location before switching branches
+          cp -r badges /tmp/coverage-badges
+
+          # Set up gh-pages branch
+          if git fetch origin gh-pages:gh-pages 2>/dev/null; then
+            git checkout gh-pages
+          else
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+          fi
+
+          # Copy badges into the branch
+          mkdir -p badges
+          cp -f /tmp/coverage-badges/*.svg badges/
+          git add badges/
+          git diff --cached --quiet && echo "No badge changes" && exit 0
+          git commit -m "Update coverage badges"
+          git push origin gh-pages

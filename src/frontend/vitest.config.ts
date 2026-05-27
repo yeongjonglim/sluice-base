@@ -9,6 +9,22 @@ export default defineConfig({
     setupFiles: ["./src/test-setup.ts"],
     globals: false,
     include: ["src/**/*.test.{ts,tsx}"],
+    coverage: {
+      provider: "v8",
+      reporter: ["cobertura", "text"],
+      reportsDirectory: "./coverage",
+      exclude: [
+        "src/api/schema.ts",
+        "src/routeTree.gen.ts",
+        "src/main.tsx",
+      ],
+      thresholds: {
+        lines: 65,
+        branches: 42,
+        functions: 58,
+        statements: 64,
+      },
+    },
   },
   resolve: {
     alias: {
