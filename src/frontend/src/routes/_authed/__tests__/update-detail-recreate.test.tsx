@@ -19,7 +19,7 @@ vi.mock("@uiw/react-codemirror", () => ({
     React.createElement("textarea", { "data-testid": "sql-editor", value, readOnly: true }),
 }));
 
-vi.mock("@codemirror/lang-sql", () => ({ sql: () => [] }));
+vi.mock("@codemirror/lang-sql", () => ({ sql: () => [], PostgreSQL: {} }));
 vi.mock("@uiw/codemirror-themes-all", () => ({ githubDark: {}, githubLight: {} }));
 vi.mock("@mantine/modals", () => ({ modals: { openConfirmModal: vi.fn() } }));
 
@@ -57,6 +57,7 @@ vi.mock("@/api/hooks", () => ({
   useRejectUpdate: () => ({ mutate: vi.fn(), isPending: false }),
   useCancelUpdate: () => ({ mutate: vi.fn(), isPending: false }),
   useExecuteUpdate: () => ({ mutate: vi.fn(), isPending: false }),
+  useSchemaCompletions: () => ({ data: undefined }),
 }));
 
 function makeRouteContext(permissions: Array<string>) {
