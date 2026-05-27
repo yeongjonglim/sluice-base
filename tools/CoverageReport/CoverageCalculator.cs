@@ -27,7 +27,13 @@ public static class CoverageCalculator
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var matched = fileCoverage
-            .Where(f => changedSet.Contains(NormalizePath(f.Filename)))
+            .Where(f =>
+            {
+                var normalized = NormalizePath(f.Filename);
+                return changedSet.Any(changed =>
+                    string.Equals(normalized, changed, StringComparison.OrdinalIgnoreCase) ||
+                    normalized.EndsWith("/" + changed, StringComparison.OrdinalIgnoreCase));
+            })
             .ToList();
 
         if (matched.Count == 0)
