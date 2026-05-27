@@ -8,14 +8,11 @@ import {
   Text,
   Textarea,
   Title,
-  useComputedColorScheme,
 } from "@mantine/core";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import { PostgreSQL, sql } from "@codemirror/lang-sql";
-import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
-import { meQueryOptions, useCatalogServer, useSchemaCompletions, useSubmitUpdate, useUpdateRequest } from "@/api/hooks";
+import { useState } from "react";
+import { SqlEditor } from "@/components/SqlEditor";
+import { meQueryOptions, useCatalogServer, useSubmitUpdate, useUpdateRequest } from "@/api/hooks";
 
 export const Route = createFileRoute("/_authed/update/new")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -63,14 +60,8 @@ export function NewUpdateForm({ initialDatabaseId, initialSqlText, sourceRequest
   const navigate = useNavigate();
   const servers = useCatalogServer();
   const submit = useSubmitUpdate();
-  const computedColorScheme = useComputedColorScheme();
 
   const [databaseId, setDatabaseId] = useState<string | null>(initialDatabaseId);
-  const completions = useSchemaCompletions(databaseId);
-  const sqlExtension = useMemo(
-    () => sql({ dialect: PostgreSQL, schema: completions.data }),
-    [completions.data],
-  );
   const [sqlText, setSqlText] = useState(initialSqlText);
   const [reason, setReason] = useState("");
 
@@ -114,26 +105,12 @@ export function NewUpdateForm({ initialDatabaseId, initialSqlText, sourceRequest
             *
           </Text>
         </Text>
-        <Box
-          style={{
-            border: "1px solid var(--mantine-color-default-border)",
-            borderRadius: "var(--mantine-radius-sm)",
-            overflow: "hidden",
-          }}
-        >
-          <CodeMirror
-            value={sqlText}
-            onChange={setSqlText}
-            extensions={[sqlExtension]}
-            theme={computedColorScheme === "dark" ? githubDark : githubLight}
-            minHeight="300px"
-            basicSetup={{
-              lineNumbers: true,
-              foldGutter: false,
-              defaultKeymap: false,
-            }}
-          />
-        </Box>
+        <SqlEditor
+          value={sqlText}
+          onChange={setSqlText}
+          databaseId={databaseId}
+          minHeight="300px"
+        />
       </Box>
 
       <Textarea
