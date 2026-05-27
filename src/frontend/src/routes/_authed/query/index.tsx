@@ -43,21 +43,23 @@ import { SqlEditor } from "@/components/SqlEditor";
 import { useSessionState } from "@/utils/useSessionState";
 import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema } from "@/api/hooks";
 
-const noIndentKeymap = keymap.of([
-  {
-    key: "Enter",
-    run: (view) => {
-      const { from, to } = view.state.selection.main;
+const noIndentKeymap = Prec.highest(
+  keymap.of([
+    {
+      key: "Enter",
+      run: (view) => {
+        const { from, to } = view.state.selection.main;
 
-      view.dispatch({
-        changes: { from, to, insert: "\n" },
-        selection: { anchor: from + 1 },
-      });
+        view.dispatch({
+          changes: { from, to, insert: "\n" },
+          selection: { anchor: from + 1 },
+        });
 
-      return true;
+        return true;
+      },
     },
-  },
-]);
+  ]),
+);
 
 export const Route = createFileRoute("/_authed/query/")({
   beforeLoad: ({ context }) => {
