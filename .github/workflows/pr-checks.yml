@@ -116,7 +116,8 @@ jobs:
             --label "Frontend" \
             --overall-threshold 60 \
             --change-threshold 80 \
-            --pr-number ${{ github.event.pull_request.number }}
+            --pr-number ${{ github.event.pull_request.number }} \
+            --source-prefix src/frontend/
 
       - name: Build
         working-directory: src/frontend
