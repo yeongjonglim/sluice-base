@@ -120,7 +120,7 @@ function QueryPage() {
 
   const handleRun = useCallback(() => {
     if (selectedDatabaseId && editorContent.trim()) {
-      executeQuery.mutate({ databaseId: selectedDatabaseId, sql: editorContent });
+      executeQuery.mutate({ databaseId: selectedDatabaseId, sql: editorContent.trim() });
     }
   }, [selectedDatabaseId, editorContent, executeQuery]);
 

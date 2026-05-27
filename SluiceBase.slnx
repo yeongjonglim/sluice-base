@@ -2,6 +2,7 @@
   <Folder Name="/Tests/">
     <Project Path="tests/CoverageReport.Tests/CoverageReport.Tests.csproj" />
     <Project Path="tests/IntegrationTests/IntegrationTests.csproj" />
+    <Project Path="tests/SluiceBase.Core.Tests/SluiceBase.Core.Tests.csproj" />
   </Folder>
   <Folder Name="/Tools/">
     <Project Path="tools/CoverageReport/CoverageReport.csproj" />

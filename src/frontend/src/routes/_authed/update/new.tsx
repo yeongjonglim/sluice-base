@@ -76,7 +76,7 @@ export function NewUpdateForm({ initialDatabaseId, initialSqlText, sourceRequest
   function handleSubmit() {
     if (!canSubmit) return;
     submit.mutate(
-      { databaseId, sqlText, reason, sourceRequestId },
+      { databaseId, sqlText: sqlText.trim(), reason: reason.trim(), sourceRequestId },
       {
         onSuccess: (data) => {
           void navigate({ to: "/update/$id", params: { id: data.id } });
