@@ -1,4 +1,4 @@
-import { forwardRef, useMemo } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useRef } from "react";
 import { Box, useComputedColorScheme } from "@mantine/core";
 import CodeMirror from "@uiw/react-codemirror";
 import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
@@ -40,6 +40,9 @@ export const SqlEditor = forwardRef<ReactCodeMirrorRef, SqlEditorProps>(
     },
     ref,
   ) {
+    const internalRef = useRef<ReactCodeMirrorRef>(null);
+    useImperativeHandle(ref, () => internalRef.current!);
+
     const computedColorScheme = useComputedColorScheme();
     const theme = computedColorScheme === "dark" ? githubDark : githubLight;
     const completions = useSchemaCompletions(databaseId ?? null);
@@ -61,15 +64,22 @@ export const SqlEditor = forwardRef<ReactCodeMirrorRef, SqlEditorProps>(
 
     return (
       <Box
+        onClick={() => {
+          const view = internalRef.current?.view;
+          if (view && !view.hasFocus) {
+            view.focus();
+          }
+        }}
         style={{
           border: "1px solid var(--mantine-color-default-border)",
           borderRadius: "var(--mantine-radius-sm)",
           overflow: "hidden",
+          cursor: editable !== false ? "text" : undefined,
           ...style,
         }}
       >
         <CodeMirror
-          ref={ref}
+          ref={internalRef}
           value={value}
           onChange={onChange}
           extensions={extensions}
