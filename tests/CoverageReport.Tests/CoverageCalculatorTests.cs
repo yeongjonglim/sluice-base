@@ -59,6 +59,63 @@ public class CoverageCalculatorTests
         Assert.Equal(expected, CoverageCalculator.CollapseLineRanges(lines.ToList()));
     }
 
+    [Fact]
+    public void ComputeChangeCoverage_WithSourcePrefix_StripsPrefix()
+    {
+        var files = new List<FileCoverage>
+        {
+            new("src/components/SqlEditor.tsx", 100.0, []),
+            new("src/routes/index.tsx", 70.0, [5]),
+        };
+
+        var changed = new List<string>
+        {
+            "src/frontend/src/components/SqlEditor.tsx",
+            "src/frontend/src/routes/index.tsx",
+        };
+
+        var result = CoverageCalculator.ComputeChangeCoverage(files, changed, "src/frontend/");
+
+        Assert.Equal(85.0, result.ChangeRate);
+        Assert.Equal(2, result.MatchedFiles.Count);
+    }
+
+    [Fact]
+    public void ComputeChangeCoverage_WithSourcePrefix_NoMatchOutsidePrefix()
+    {
+        var files = new List<FileCoverage>
+        {
+            new("src/components/SqlEditor.tsx", 100.0, []),
+        };
+
+        var result = CoverageCalculator.ComputeChangeCoverage(
+            files, ["tools/CoverageReport/Program.cs"], "src/frontend/");
+
+        Assert.Null(result.ChangeRate);
+        Assert.Empty(result.MatchedFiles);
+    }
+
+    [Fact]
+    public void ComputeChangeCoverage_AbsoluteCoveragePaths_MatchesRelativeChangedFiles()
+    {
+        var files = new List<FileCoverage>
+        {
+            new("/home/runner/work/repo/src/frontend/src/components/SqlEditor.tsx", 80.0, []),
+            new("/home/runner/work/repo/src/frontend/src/routes/index.tsx", 70.0, [5]),
+        };
+
+        var changed = new List<string>
+        {
+            "src/frontend/src/components/SqlEditor.tsx",
+            "src/frontend/src/routes/index.tsx",
+        };
+
+        var result = CoverageCalculator.ComputeChangeCoverage(files, changed, "src/frontend/");
+
+        Assert.Equal(75.0, result.ChangeRate);
+        Assert.Equal(2, result.MatchedFiles.Count);
+    }
+
     [Theory]
     [InlineData("./src/foo.cs", "src/foo.cs")]
     [InlineData("src/foo.cs", "src/foo.cs")]

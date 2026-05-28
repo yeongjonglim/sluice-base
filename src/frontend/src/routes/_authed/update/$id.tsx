@@ -1,7 +1,6 @@
 import {
   Alert,
   Badge,
-  Box,
   Button,
   Group,
   Modal,
@@ -11,16 +10,13 @@ import {
   Textarea,
   Timeline,
   Title,
-  useComputedColorScheme,
 } from "@mantine/core";
 import { IconBan, IconCheck, IconPlayerPlay, IconSend, IconX } from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import React, { useState } from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import { sql } from "@codemirror/lang-sql";
-import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
+import { SqlEditor } from "@/components/SqlEditor";
 import {
   meQueryOptions,
   useApproveUpdate,
@@ -61,7 +57,6 @@ function UpdateDetailPage() {
   const reject = useRejectUpdate();
   const cancel = useCancelUpdate();
   const execute = useExecuteUpdate();
-  const computedColorScheme = useComputedColorScheme();
 
   const [approveModalOpen, { open: openApprove, close: closeApprove }] = useDisclosure(false);
   const [rejectModalOpen, { open: openReject, close: closeReject }] = useDisclosure(false);
@@ -179,25 +174,7 @@ function UpdateDetailPage() {
       )}
 
       {/* SQL */}
-      <Box
-        style={{
-          border: "1px solid var(--mantine-color-default-border)",
-          borderRadius: "var(--mantine-radius-sm)",
-          overflow: "hidden",
-        }}
-      >
-        <CodeMirror
-          value={r.sqlText}
-          extensions={[sql()]}
-          theme={computedColorScheme === "dark" ? githubDark : githubLight}
-          basicSetup={{
-            lineNumbers: true,
-            foldGutter: false,
-            defaultKeymap: false,
-          }}
-          editable={false}
-        />
-      </Box>
+      <SqlEditor value={r.sqlText} editable={false} />
 
       {/* Timeline */}
       {(() => {

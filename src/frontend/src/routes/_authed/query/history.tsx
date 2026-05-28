@@ -12,19 +12,15 @@ import {
   TextInput,
   Title,
   Tooltip,
-  useComputedColorScheme,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
 import { IconCopy, IconShieldLock } from "@tabler/icons-react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import { sql } from "@codemirror/lang-sql";
-import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
-import { EditorView } from "@codemirror/view";
 import type { QueryHistoryFilters, QueryHistoryItem } from "@/api/hooks";
 import { meQueryOptions, useCatalogServer, useQueryHistory } from "@/api/hooks";
+import { SqlEditor } from "@/components/SqlEditor";
 import { useHasPermission } from "@/auth/permission";
 
 type HistorySearch = {
@@ -236,8 +232,6 @@ function QueryHistoryPage() {
 }
 
 function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: boolean }) {
-  const colorScheme = useComputedColorScheme();
-
   function copySql() {
     void navigator.clipboard.writeText(item.queryText).then(() => {
       notifications.show({ message: "SQL copied to clipboard", color: "teal" });
@@ -264,18 +258,15 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
       {canAudit && <Table.Td>{item.userName ?? "—"}</Table.Td>}
       <Table.Td>
         <Group gap="xs" align="flex-start" wrap="nowrap">
-          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
-            <CodeMirror
-              value={item.queryText}
-              readOnly
-              editable={false}
-              extensions={[sql(), EditorView.lineWrapping]}
-              theme={colorScheme === "dark" ? githubDark : githubLight}
-              height="auto"
-              maxHeight="120px"
-              basicSetup={{ lineNumbers: false, foldGutter: false }}
-            />
-          </div>
+          <SqlEditor
+            value={item.queryText}
+            readOnly
+            editable={false}
+            lineNumbers={false}
+            height="auto"
+            maxHeight="120px"
+            style={{ flex: 1, minWidth: 0 }}
+          />
           <ActionIcon size="sm" variant="subtle" onClick={copySql} aria-label="Copy SQL">
             <IconCopy size={14} />
           </ActionIcon>

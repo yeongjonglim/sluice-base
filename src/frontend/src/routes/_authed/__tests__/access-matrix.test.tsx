@@ -31,6 +31,7 @@ vi.mock("@/api/hooks", () => ({
   useAssignUserRole: () => ({ mutate: mockAssignUserRole }),
   useAssignDatabaseRole: () => ({ mutate: mockAssignDatabaseRole }),
   useRemoveDatabaseRole: () => ({ mutate: mockRemoveRole }),
+  useSchemaCompletions: () => ({ data: undefined }),
 }));
 
 afterEach(cleanup);

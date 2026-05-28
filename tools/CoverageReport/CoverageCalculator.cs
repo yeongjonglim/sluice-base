@@ -6,14 +6,34 @@ public static class CoverageCalculator
 {
     public static ChangeCoverageResult ComputeChangeCoverage(
         List<FileCoverage> fileCoverage,
-        List<string> changedFiles)
+        List<string> changedFiles,
+        string? sourcePrefix = null)
     {
+        var normalizedPrefix = sourcePrefix is not null
+            ? NormalizePath(sourcePrefix).TrimEnd('/') + "/"
+            : null;
+
         var changedSet = changedFiles
-            .Select(NormalizePath)
+            .Select(f =>
+            {
+                var normalized = NormalizePath(f);
+                if (normalizedPrefix is not null &&
+                    normalized.StartsWith(normalizedPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    normalized = normalized[normalizedPrefix.Length..];
+                }
+                return normalized;
+            })
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var matched = fileCoverage
-            .Where(f => changedSet.Contains(NormalizePath(f.Filename)))
+            .Where(f =>
+            {
+                var normalized = NormalizePath(f.Filename);
+                return changedSet.Any(changed =>
+                    string.Equals(normalized, changed, StringComparison.OrdinalIgnoreCase) ||
+                    normalized.EndsWith("/" + changed, StringComparison.OrdinalIgnoreCase));
+            })
             .ToList();
 
         if (matched.Count == 0)

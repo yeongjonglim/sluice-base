@@ -24,6 +24,7 @@ static void RunReport(string[] args)
     var overallThreshold = 70.0;
     var changeThreshold = 80.0;
     string? prNumber = null;
+    string? sourcePrefix = null;
     var lowestCount = 5;
 
     for (var i = 0; i < args.Length; i++)
@@ -36,6 +37,7 @@ static void RunReport(string[] args)
             case "--change-threshold": changeThreshold = double.Parse(args[++i], CultureInfo.InvariantCulture); break;
             case "--pr-number": prNumber = args[++i]; break;
             case "--lowest-files-count": lowestCount = int.Parse(args[++i], CultureInfo.InvariantCulture); break;
+            case "--source-prefix": sourcePrefix = args[++i]; break;
         }
     }
 
@@ -47,7 +49,7 @@ static void RunReport(string[] args)
 
     var data = CoverageParser.Parse(coberturaPath);
     var changedFiles = GitHubCommentPoster.GetChangedFiles(prNumber);
-    var changeCoverage = CoverageCalculator.ComputeChangeCoverage(data.Files, changedFiles);
+    var changeCoverage = CoverageCalculator.ComputeChangeCoverage(data.Files, changedFiles, sourcePrefix);
 
     var result = MarkdownRenderer.Render(
         label: label,

@@ -1,4 +1,5 @@
 import {
+  ActionIcon,
   Alert,
   Box,
   Button,
@@ -7,6 +8,7 @@ import {
   Group,
   Kbd,
   NavLink,
+  Popover,
   ScrollArea,
   Select,
   Skeleton,
@@ -14,8 +16,8 @@ import {
   Table,
   Text,
   Tooltip,
-  useComputedColorScheme,
 } from "@mantine/core";
+import { useOs } from "@mantine/hooks";
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
 import {
   IconChevronDown,
@@ -25,38 +27,39 @@ import {
   IconLock,
   IconPlayerPlay,
   IconPlaylistAdd,
+  IconQuestionMark,
   IconShieldLock,
   IconTable,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
-import CodeMirror from "@uiw/react-codemirror";
-import { PostgreSQL, sql } from "@codemirror/lang-sql";
-import { githubDark, githubLight } from "@uiw/codemirror-themes-all";
-import { EditorView, keymap } from "@codemirror/view";
+import React, { useCallback, useMemo, useRef } from "react";
+import { keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
 import { ApiError } from "@/api/client";
 import { exportToCsv } from "@/utils/csv.ts";
+import { SqlEditor } from "@/components/SqlEditor";
 import { useSessionState } from "@/utils/useSessionState";
-import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema, useSchemaCompletions } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema } from "@/api/hooks";
 
-const noIndentKeymap = keymap.of([
-  {
-    key: "Enter",
-    run: (view) => {
-      const { from, to } = view.state.selection.main;
+const noIndentKeymap = Prec.highest(
+  keymap.of([
+    {
+      key: "Enter",
+      run: (view) => {
+        const { from, to } = view.state.selection.main;
 
-      view.dispatch({
-        changes: { from, to, insert: "\n" },
-        selection: { anchor: from + 1 },
-      });
+        view.dispatch({
+          changes: { from, to, insert: "\n" },
+          selection: { anchor: from + 1 },
+        });
 
-      return true;
+        return true;
+      },
     },
-  },
-]);
+  ]),
+);
 
 export const Route = createFileRoute("/_authed/query/")({
   beforeLoad: ({ context }) => {
@@ -87,21 +90,16 @@ function resizeHandleStyle(orientation: "horizontal" | "vertical"): React.CSSPro
 }
 
 function QueryPage() {
+  const isMac = useOs({ getValueInEffect: false }) === "macos";
   const servers = useCatalogServer();
   const [selectedDatabaseId, setSelectedDatabaseId] = useSessionState<string | null>(
     "sluice:query:db",
     null,
   );
   const schema = useSchema(selectedDatabaseId);
-  const completions = useSchemaCompletions(selectedDatabaseId);
-  const sqlExtension = useMemo(
-    () => sql({ dialect: PostgreSQL, schema: completions.data }),
-    [completions.data],
-  );
   const [editorContent, setEditorContent] = useSessionState("sluice:query:editor", "");
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const executeQuery = useExecuteQuery();
-  const computedColorScheme = useComputedColorScheme();
 
   const databaseOptions = (servers.data?.servers ?? []).flatMap((s) =>
     s.databases.map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
@@ -122,7 +120,7 @@ function QueryPage() {
 
   const handleRun = useCallback(() => {
     if (selectedDatabaseId && editorContent.trim()) {
-      executeQuery.mutate({ databaseId: selectedDatabaseId, sql: editorContent });
+      executeQuery.mutate({ databaseId: selectedDatabaseId, sql: editorContent.trim() });
     }
   }, [selectedDatabaseId, editorContent, executeQuery]);
 
@@ -136,26 +134,13 @@ function QueryPage() {
           return true;
         },
       },
-      {
-        key: "F5",
-        run: () => {
-          handleRun();
-          return true;
-        },
-      },
     ]),
   );
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "F5") {
-        e.preventDefault();
-        handleRun();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [handleRun]);
+  const editorExtensions = useMemo(
+    () => [runKeymap, noIndentKeymap],
+    [runKeymap],
+  );
 
   return (
     <PanelGroup
@@ -197,35 +182,21 @@ function QueryPage() {
                 height: "100%",
               }}
             >
-              <Box
-                style={{
-                  border: "1px solid var(--mantine-color-default-border)",
-                  borderRadius: "var(--mantine-radius-sm)",
-                  overflow: "hidden",
-                  flex: 1,
-                  minHeight: 0,
-                }}
-              >
-                <CodeMirror
-                  ref={editorRef}
-                  value={editorContent}
-                  onChange={setEditorContent}
-                  extensions={[sqlExtension, runKeymap, noIndentKeymap, EditorView.lineWrapping]}
-                  theme={computedColorScheme === "dark" ? githubDark : githubLight}
-                  height="100%"
-                  style={{ height: "100%" }}
-                  basicSetup={{
-                    lineNumbers: true,
-                    foldGutter: false,
-                    defaultKeymap: false,
-                  }}
-                />
-              </Box>
+              <SqlEditor
+                ref={editorRef}
+                value={editorContent}
+                onChange={setEditorContent}
+                databaseId={selectedDatabaseId}
+                extensions={editorExtensions}
+                minLines={20}
+                height="100%"
+                style={{ flex: 1, minHeight: 0 }}
+              />
 
               <Group mt="xs" gap="xs" style={{ flexShrink: 0 }}>
                 <Button
                   leftSection={<IconPlayerPlay size={14} />}
-                  rightSection={<Kbd size="xs">F5</Kbd>}
+                  rightSection={<Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Enter</Kbd>}
                   size="sm"
                   onClick={handleRun}
                   loading={executeQuery.isPending}
@@ -233,6 +204,25 @@ function QueryPage() {
                 >
                   Run
                 </Button>
+                <Popover position="bottom-start" withArrow shadow="md">
+                  <Popover.Target>
+                    <ActionIcon variant="subtle" size="sm" color="gray" aria-label="Keyboard shortcuts">
+                      <IconQuestionMark size={14} />
+                    </ActionIcon>
+                  </Popover.Target>
+                  <Popover.Dropdown>
+                    <Stack gap={4}>
+                      <Text size="sm" fw={600} mb={2}>Keyboard shortcuts</Text>
+                      <Group gap="xs" justify="space-between"><Text size="xs">Run query</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Enter</Kbd></Group>
+                      <Group gap="xs" justify="space-between"><Text size="xs">Toggle comment</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+/</Kbd></Group>
+                      <Group gap="xs" justify="space-between"><Text size="xs">Move line up/down</Text><Kbd size="xs">Alt+↑/↓</Kbd></Group>
+                      <Group gap="xs" justify="space-between"><Text size="xs">Copy line up/down</Text><Kbd size="xs">Shift+Alt+↑/↓</Kbd></Group>
+                      <Group gap="xs" justify="space-between"><Text size="xs">Select line</Text><Kbd size="xs">{isMac ? "Ctrl" : "Alt"}+L</Kbd></Group>
+                      <Group gap="xs" justify="space-between"><Text size="xs">Indent / Outdent</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+] / [</Kbd></Group>
+                      <Group gap="xs" justify="space-between"><Text size="xs">Delete line</Text><Kbd size="xs">Shift+{isMac ? "⌘" : "Ctrl"}+K</Kbd></Group>
+                    </Stack>
+                  </Popover.Dropdown>
+                </Popover>
                 {!selectedDatabaseId && (
                   <Text size="xs" c="dimmed">
                     Select a database to run queries
