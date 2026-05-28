@@ -3,11 +3,31 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.OpenApi;
+using SluiceBase.Api.Endpoints;
 
 namespace SluiceBase.Api.Extensions;
 
 public static class OpenApiOptionsExtensions
 {
+    // https://github.com/dotnet/aspnetcore/issues/60803
+    public static OpenApiOptions AddNullableArrayItemsSchemaTransformer(this OpenApiOptions options)
+    {
+        options.AddSchemaTransformer((schema, context, ct) =>
+        {
+            if (context.JsonPropertyInfo is { Name: "rows", DeclaringType: var dt }
+                && dt == typeof(QueryEndpoints.QueryResponse)
+                && schema.Items is OpenApiSchema innerArray
+                && innerArray.Items is OpenApiSchema elementSchema)
+            {
+                elementSchema.Type |= JsonSchemaType.Null;
+            }
+
+            return Task.CompletedTask;
+        });
+
+        return options;
+    }
+
     public static OpenApiOptions AddStringEnumSchemaTransformer(this OpenApiOptions options)
     {
         options.AddSchemaTransformer((schema, context, ct) =>
