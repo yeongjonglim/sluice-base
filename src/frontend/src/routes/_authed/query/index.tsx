@@ -188,6 +188,7 @@ function QueryPage() {
                 onChange={setEditorContent}
                 databaseId={selectedDatabaseId}
                 extensions={editorExtensions}
+                minLines={20}
                 height="100%"
                 style={{ flex: 1, minHeight: 0 }}
               />

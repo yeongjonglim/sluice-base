@@ -109,6 +109,7 @@ export function NewUpdateForm({ initialDatabaseId, initialSqlText, sourceRequest
           value={sqlText}
           onChange={setSqlText}
           databaseId={databaseId}
+          minLines={15}
           minHeight="300px"
         />
       </Box>
