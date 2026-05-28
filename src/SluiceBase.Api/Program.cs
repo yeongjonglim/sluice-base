@@ -39,6 +39,7 @@ builder.Services.AddOpenApi(x =>
 {
     x.MapVogenTypesInOpenApiTransformers();
     x.AddStringEnumSchemaTransformer();
+    x.AddNullableArrayItemsSchemaTransformer();
 });
 
 builder.Services.AddSingleton<ITargetEngine, PostgresTargetEngine>();

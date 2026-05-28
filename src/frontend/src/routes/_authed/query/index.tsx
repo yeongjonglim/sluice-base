@@ -367,7 +367,7 @@ function QueryResults({
               <Table.Tr key={i}>
                 {row.map((cell, j) => (
                   <Table.Td key={j}>
-                    {!cell ? (
+                    {cell === null ? (
                       <Text size="xs" c="dimmed" fs="italic">NULL</Text>
                     ) : cell}
                   </Table.Td>

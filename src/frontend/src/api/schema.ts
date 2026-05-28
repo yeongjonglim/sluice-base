@@ -762,7 +762,7 @@ export interface components {
         };
         QueryResponse: {
             columns: null | string[];
-            rows: null | string[][];
+            rows: null | (null | string)[][];
             /** Format: int32 */
             rowCount: number | string;
             /** Format: int32 */
