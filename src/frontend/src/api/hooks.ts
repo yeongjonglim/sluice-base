@@ -568,10 +568,12 @@ export function useAssignDatabaseRole() {
     mutationFn: ({
       databaseId,
       userId,
+      groupId,
       permission,
     }: {
       databaseId: string;
-      userId: string;
+      userId?: string;
+      groupId?: string;
       permission: string;
     }) =>
       apiRequest<
@@ -579,11 +581,13 @@ export function useAssignDatabaseRole() {
         void
       >(`/api/admin/database/${databaseId}/role`, {
         method: "POST",
-        body: { userId, permission },
+        body: { userId: userId ?? null, groupId: groupId ?? null, permission },
       }),
     onSuccess: (_data, { databaseId, userId }) => {
       void qc.invalidateQueries({ queryKey: ["admin", "database", databaseId, "role"] });
-      void qc.invalidateQueries({ queryKey: ["admin", "user", userId, "role"] });
+      if (userId) {
+        void qc.invalidateQueries({ queryKey: ["admin", "user", userId, "role"] });
+      }
     },
     onError: (error) => {
       notifications.show({
@@ -778,17 +782,19 @@ export function useGrantColumnBypass() {
       databaseId,
       sensitiveColumnId,
       userId,
+      groupId,
     }: {
       databaseId: string;
       sensitiveColumnId: string;
-      userId: string;
+      userId?: string;
+      groupId?: string;
     }) =>
       apiRequest<
         paths["/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}/bypass"]["post"]["requestBody"]["content"]["application/json"],
         void
       >(
         `/api/admin/database/${databaseId}/sensitive-column/${sensitiveColumnId}/bypass`,
-        { method: "POST", body: { userId } },
+        { method: "POST", body: { userId: userId ?? null, groupId: groupId ?? null } },
       ),
     onSuccess: (_, { databaseId }) => {
       void qc.invalidateQueries({
@@ -949,7 +955,7 @@ export function useAddGroupMember() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
-      apiRequest<{ userId: string }, void>(`/api/admin/group/${groupId}/member`, {
+      apiRequest<{ userId?: string }, void>(`/api/admin/group/${groupId}/member`, {
         method: "POST",
         body: { userId },
       }),
