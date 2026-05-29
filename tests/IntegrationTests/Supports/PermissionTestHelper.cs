@@ -63,7 +63,7 @@ internal static class PermissionTestHelper
         {
             using var req = MutationRequest(
                 HttpMethod.Delete,
-                $"/api/admin/database/{role.DatabaseId}/role/{user.Id}/{role.Permission}",
+                $"/api/admin/database/{role.DatabaseId}/role/user/{user.Id}/{role.Permission}",
                 xsrf);
             await adminSession.Client.SendAsync(req, ct);
         }

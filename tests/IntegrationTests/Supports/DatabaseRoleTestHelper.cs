@@ -29,7 +29,7 @@ internal static class DatabaseRoleTestHelper
         CancellationToken ct)
     {
         using var req = new HttpRequestMessage(
-            HttpMethod.Delete, $"/api/admin/database/{databaseId}/role/{userId}/{permission}");
+            HttpMethod.Delete, $"/api/admin/database/{databaseId}/role/user/{userId}/{permission}");
         req.Headers.Add("X-XSRF-TOKEN", xsrf);
         var resp = await adminSession.Client.SendAsync(req, ct);
         resp.EnsureSuccessStatusCode();
