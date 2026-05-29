@@ -51,8 +51,14 @@ internal static class UpdateEndpoints
             return TypedResults.NotFound();
         }
 
+        var userGroupIds = db.GroupMembers
+            .Where(gm => gm.UserId == user.Id)
+            .Select(gm => gm.GroupId);
+
         var hasSubmitRole = await db.UserDatabaseRoles.AnyAsync(
-            r => r.UserId == user.Id && r.Permission == Permissions.UpdateSubmit && r.DatabaseId == database.Id, ct);
+            r => r.UserId == user.Id && r.Permission == Permissions.UpdateSubmit && r.DatabaseId == database.Id, ct)
+            || await db.GroupDatabaseRoles.AnyAsync(
+                r => userGroupIds.Contains(r.GroupId) && r.Permission == Permissions.UpdateSubmit && r.DatabaseId == database.Id, ct);
         if (!hasSubmitRole)
         {
             return TypedResults.Forbid();
@@ -95,12 +101,23 @@ internal static class UpdateEndpoints
     {
         var user = await currentUser.GetAsync(ct);
 
+        var userGroupIds = db.GroupMembers
+            .Where(gm => gm.UserId == user!.Id)
+            .Select(gm => gm.GroupId);
+
         var allowedDatabaseIds = await db.UserDatabaseRoles
             .Where(r => r.UserId == user!.Id &&
                         (r.Permission == Permissions.UpdateSubmit ||
                          r.Permission == Permissions.UpdateApprove ||
                          r.Permission == Permissions.UpdateExecute))
             .Select(r => r.DatabaseId)
+            .Union(
+                db.GroupDatabaseRoles
+                    .Where(gr => userGroupIds.Contains(gr.GroupId) &&
+                                 (gr.Permission == Permissions.UpdateSubmit ||
+                                  gr.Permission == Permissions.UpdateApprove ||
+                                  gr.Permission == Permissions.UpdateExecute))
+                    .Select(gr => gr.DatabaseId))
             .Distinct()
             .ToListAsync(ct);
 
@@ -157,11 +174,20 @@ internal static class UpdateEndpoints
 
         if (request.DatabaseId is not null)
         {
+            var userGroupIds = db.GroupMembers
+                .Where(gm => gm.UserId == user!.Id)
+                .Select(gm => gm.GroupId);
+
             var hasRole = await db.UserDatabaseRoles.AnyAsync(
                 r => r.UserId == user!.Id && r.DatabaseId == request.DatabaseId &&
                      (r.Permission == Permissions.UpdateSubmit ||
                       r.Permission == Permissions.UpdateApprove ||
-                      r.Permission == Permissions.UpdateExecute), ct);
+                      r.Permission == Permissions.UpdateExecute), ct)
+                || await db.GroupDatabaseRoles.AnyAsync(
+                    r => userGroupIds.Contains(r.GroupId) && r.DatabaseId == request.DatabaseId &&
+                         (r.Permission == Permissions.UpdateSubmit ||
+                          r.Permission == Permissions.UpdateApprove ||
+                          r.Permission == Permissions.UpdateExecute), ct);
             if (!hasRole)
             {
                 return TypedResults.NotFound();
