@@ -21,6 +21,11 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<UserDatabaseRole> UserDatabaseRoles => Set<UserDatabaseRole>();
     public DbSet<SensitiveColumn> SensitiveColumns => Set<SensitiveColumn>();
     public DbSet<UserColumnBypass> UserColumnBypasses => Set<UserColumnBypass>();
+    public DbSet<Group> Groups => Set<Group>();
+    public DbSet<GroupMember> GroupMembers => Set<GroupMember>();
+    public DbSet<GroupPermissionMap> GroupPermissions => Set<GroupPermissionMap>();
+    public DbSet<GroupDatabaseRole> GroupDatabaseRoles => Set<GroupDatabaseRole>();
+    public DbSet<GroupColumnBypass> GroupColumnBypasses => Set<GroupColumnBypass>();
     public DbSet<Server> Servers => Set<Server>();
     public DbSet<Credential> Credentials => Set<Credential>();
     public DbSet<Database> Databases => Set<Database>();
