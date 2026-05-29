@@ -205,7 +205,7 @@ public class DatabaseRoleEndpointTests(SluiceBaseStackFactory factory)
         (await alice.Client.SendAsync(assignReq, ct)).EnsureSuccessStatusCode();
 
         using var removeReq = MutationRequest(
-            HttpMethod.Delete, $"/api/admin/database/{databaseId}/role/{aliceUser.Id}/{Permissions.UpdateSubmit}", xsrf);
+            HttpMethod.Delete, $"/api/admin/database/{databaseId}/role/user/{aliceUser.Id}/{Permissions.UpdateSubmit}", xsrf);
         var removeResp = await alice.Client.SendAsync(removeReq, ct);
         Assert.Equal(HttpStatusCode.NoContent, removeResp.StatusCode);
 
@@ -224,7 +224,7 @@ public class DatabaseRoleEndpointTests(SluiceBaseStackFactory factory)
 
         using var req = MutationRequest(
             HttpMethod.Delete,
-            $"/api/admin/database/{Guid.NewGuid()}/role/{Guid.NewGuid()}/{Permissions.QueryExecute}",
+            $"/api/admin/database/{Guid.NewGuid()}/role/user/{Guid.NewGuid()}/{Permissions.QueryExecute}",
             xsrf);
         var resp = await alice.Client.SendAsync(req, ct);
         Assert.Equal(HttpStatusCode.NoContent, resp.StatusCode);
