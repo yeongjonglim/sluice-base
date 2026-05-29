@@ -508,12 +508,12 @@
         }
       }
     },
-    "/api/admin/database/{databaseId}/role/{userId}/{permission}": {
+    "/api/admin/database/{databaseId}/role/user/{userId}/{permission}": {
       "delete": {
         "tags": [
           "DatabaseRoleEndpoints"
         ],
-        "operationId": "RemoveDatabaseRole",
+        "operationId": "RemoveUserDatabaseRole",
         "parameters": [
           {
             "name": "databaseId",
@@ -525,6 +525,45 @@
           },
           {
             "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "permission",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/admin/database/{databaseId}/role/group/{groupId}/{permission}": {
+      "delete": {
+        "tags": [
+          "DatabaseRoleEndpoints"
+        ],
+        "operationId": "RemoveGroupDatabaseRole",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupId",
             "in": "path",
             "required": true,
             "schema": {
@@ -767,6 +806,16 @@
           "required": true
         },
         "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not Found"
           },
@@ -779,12 +828,12 @@
         }
       }
     },
-    "/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}/bypass/{userId}": {
+    "/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}/bypass/user/{userId}": {
       "delete": {
         "tags": [
           "SensitiveColumnEndpoints"
         ],
-        "operationId": "RevokeColumnBypass",
+        "operationId": "RevokeUserColumnBypass",
         "parameters": [
           {
             "name": "databaseId",
@@ -804,6 +853,389 @@
           },
           {
             "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/admin/database/{databaseId}/sensitive-column/{sensitiveColumnId}/bypass/group/{groupId}": {
+      "delete": {
+        "tags": [
+          "SensitiveColumnEndpoints"
+        ],
+        "operationId": "RevokeGroupColumnBypass",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "sensitiveColumnId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/admin/group": {
+      "get": {
+        "tags": [
+          "GroupEndpoints"
+        ],
+        "operationId": "ListGroups",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "GroupEndpoints"
+        ],
+        "operationId": "CreateGroup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupItem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/group/{groupId}": {
+      "put": {
+        "tags": [
+          "GroupEndpoints"
+        ],
+        "operationId": "UpdateGroup",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupItem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "GroupEndpoints"
+        ],
+        "operationId": "DeleteGroup",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/admin/group/{groupId}/member": {
+      "get": {
+        "tags": [
+          "GroupEndpoints"
+        ],
+        "operationId": "ListGroupMembers",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupMemberListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "GroupEndpoints"
+        ],
+        "operationId": "AddGroupMember",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddGroupMemberRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK"
+          },
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/api/admin/group/{groupId}/member/{userId}": {
+      "delete": {
+        "tags": [
+          "GroupEndpoints"
+        ],
+        "operationId": "RemoveGroupMember",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          }
+        }
+      }
+    },
+    "/api/admin/group/{groupId}/permission": {
+      "get": {
+        "tags": [
+          "GroupEndpoints"
+        ],
+        "operationId": "ListGroupPermissions",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroupPermissionListResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "GroupEndpoints"
+        ],
+        "operationId": "GrantGroupPermission",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantGroupPermissionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK"
+          },
+          "201": {
+            "description": "Created"
+          }
+        }
+      }
+    },
+    "/api/admin/group/{groupId}/permission/{permission}": {
+      "delete": {
+        "tags": [
+          "GroupEndpoints"
+        ],
+        "operationId": "RevokeGroupPermission",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "permission",
             "in": "path",
             "required": true,
             "schema": {
@@ -1632,6 +2064,17 @@
           }
         }
       },
+      "AddGroupMemberRequest": {
+        "required": [
+          "userId"
+        ],
+        "type": "object",
+        "properties": {
+          "userId": {
+            "$ref": "#/components/schemas/UserId"
+          }
+        }
+      },
       "AdminDatabaseItem": {
         "required": [
           "id",
@@ -1708,12 +2151,30 @@
       "AssignDatabaseRoleRequest": {
         "required": [
           "userId",
+          "groupId",
           "permission"
         ],
         "type": "object",
         "properties": {
           "userId": {
-            "$ref": "#/components/schemas/UserId"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          },
+          "groupId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GroupId"
+              }
+            ]
           },
           "permission": {
             "type": "string"
@@ -1891,6 +2352,24 @@
           }
         }
       },
+      "CreateGroupRequest": {
+        "required": [
+          "name",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "CreateServerRequest": {
         "required": [
           "name",
@@ -2010,29 +2489,47 @@
       },
       "DatabaseRoleItem": {
         "required": [
-          "id",
+          "type",
           "userId",
-          "userEmail",
-          "userName",
+          "groupId",
+          "displayName",
+          "secondaryName",
           "permission",
           "grantedAt",
           "grantedById"
         ],
         "type": "object",
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/UserDatabaseRoleId"
+          "type": {
+            "type": "string"
           },
           "userId": {
-            "$ref": "#/components/schemas/UserId"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
           },
-          "userEmail": {
+          "groupId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GroupId"
+              }
+            ]
+          },
+          "displayName": {
             "type": [
               "null",
               "string"
             ]
           },
-          "userName": {
+          "secondaryName": {
             "type": [
               "null",
               "string"
@@ -2073,12 +2570,41 @@
       },
       "GrantBypassRequest": {
         "required": [
-          "userId"
+          "userId",
+          "groupId"
         ],
         "type": "object",
         "properties": {
           "userId": {
-            "$ref": "#/components/schemas/UserId"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          },
+          "groupId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GroupId"
+              }
+            ]
+          }
+        }
+      },
+      "GrantGroupPermissionRequest": {
+        "required": [
+          "permission"
+        ],
+        "type": "object",
+        "properties": {
+          "permission": {
+            "type": "string"
           }
         }
       },
@@ -2090,6 +2616,214 @@
         "properties": {
           "permission": {
             "type": "string"
+          }
+        }
+      },
+      "GroupBypassItem": {
+        "required": [
+          "id",
+          "groupId",
+          "groupName",
+          "grantedAt",
+          "grantedById"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/GroupColumnBypassId"
+          },
+          "groupId": {
+            "$ref": "#/components/schemas/GroupId"
+          },
+          "groupName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "grantedById": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          }
+        }
+      },
+      "GroupColumnBypassId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "GroupId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "GroupItem": {
+        "required": [
+          "id",
+          "name",
+          "description",
+          "createdAt",
+          "memberCount"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/GroupId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "memberCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          }
+        }
+      },
+      "GroupListResponse": {
+        "required": [
+          "groups"
+        ],
+        "type": "object",
+        "properties": {
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupItem"
+            }
+          }
+        }
+      },
+      "GroupMemberId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "GroupMemberItem": {
+        "required": [
+          "id",
+          "userId",
+          "userEmail",
+          "userName",
+          "addedAt",
+          "addedById"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/GroupMemberId"
+          },
+          "userId": {
+            "$ref": "#/components/schemas/UserId"
+          },
+          "userEmail": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "userName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "addedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "addedById": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          }
+        }
+      },
+      "GroupMemberListResponse": {
+        "required": [
+          "members"
+        ],
+        "type": "object",
+        "properties": {
+          "members": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupMemberItem"
+            }
+          }
+        }
+      },
+      "GroupPermissionId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "GroupPermissionItem": {
+        "required": [
+          "id",
+          "permission",
+          "grantedAt",
+          "grantedById"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/GroupPermissionId"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "grantedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "grantedById": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          }
+        }
+      },
+      "GroupPermissionListResponse": {
+        "required": [
+          "permissions"
+        ],
+        "type": "object",
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupPermissionItem"
+            }
           }
         }
       },
@@ -2506,7 +3240,8 @@
           "columnName",
           "markedAt",
           "markedById",
-          "bypasses"
+          "bypasses",
+          "groupBypasses"
         ],
         "type": "object",
         "properties": {
@@ -2540,6 +3275,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/BypassItem"
+            }
+          },
+          "groupBypasses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupBypassItem"
             }
           }
         }
@@ -2744,6 +3485,24 @@
           },
           "isDisabled": {
             "type": "boolean"
+          }
+        }
+      },
+      "UpdateGroupRequest": {
+        "required": [
+          "name",
+          "description"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -3040,9 +3799,20 @@
         }
       },
       "UserColumnBypassId": { },
-      "UserDatabaseRoleId": {
-        "type": "string",
-        "format": "uuid"
+      "UserGroupMembership": {
+        "required": [
+          "groupId",
+          "groupName"
+        ],
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "$ref": "#/components/schemas/GroupId"
+          },
+          "groupName": {
+            "type": "string"
+          }
+        }
       },
       "UserId": {
         "type": "string",
@@ -3050,18 +3820,16 @@
       },
       "UserRoleItem": {
         "required": [
-          "id",
           "databaseId",
           "databaseDisplayName",
           "serverName",
           "permission",
-          "grantedAt"
+          "grantedAt",
+          "source",
+          "groupName"
         ],
         "type": "object",
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/UserDatabaseRoleId"
-          },
           "databaseId": {
             "$ref": "#/components/schemas/DatabaseId"
           },
@@ -3077,6 +3845,15 @@
           "grantedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "source": {
+            "type": "string"
+          },
+          "groupName": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -3100,7 +3877,8 @@
           "email",
           "name",
           "lastLoginAt",
-          "permissions"
+          "permissions",
+          "groups"
         ],
         "type": "object",
         "properties": {
@@ -3131,6 +3909,12 @@
             "items": {
               "type": "string"
             }
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserGroupMembership"
+            }
           }
         }
       }
@@ -3157,6 +3941,9 @@
     },
     {
       "name": "SensitiveColumnEndpoints"
+    },
+    {
+      "name": "GroupEndpoints"
     },
     {
       "name": "ServerEndpoints"
