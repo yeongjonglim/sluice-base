@@ -665,7 +665,7 @@ export function useRemoveDatabaseRole() {
       userId: string;
       permission: string;
     }) =>
-      apiRequest(`/api/admin/database/${databaseId}/role/${userId}/${permission}`, {
+      apiRequest(`/api/admin/database/${databaseId}/role/user/${userId}/${permission}`, {
         method: "DELETE",
       }),
     onSuccess: (_data, { databaseId, userId }) => {
@@ -836,7 +836,267 @@ export function useRevokeColumnBypass() {
       userId: string;
     }) =>
       apiRequest<void, void>(
-        `/api/admin/database/${databaseId}/sensitive-column/${sensitiveColumnId}/bypass/${userId}`,
+        `/api/admin/database/${databaseId}/sensitive-column/${sensitiveColumnId}/bypass/user/${userId}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: (_, { databaseId }) => {
+      void qc.invalidateQueries({
+        queryKey: ["admin", "database", databaseId, "sensitive-column"],
+      });
+    },
+  });
+}
+
+// ── Groups ───────────────────────────────────────────────────────────────
+
+export interface GroupItem {
+  id: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+  memberCount: number;
+}
+
+export interface GroupMemberItem {
+  id: string;
+  userId: string;
+  userEmail: string | null;
+  userName: string | null;
+  addedAt: string;
+  addedById: string | null;
+}
+
+export interface GroupPermissionItem {
+  id: string;
+  permission: string;
+  grantedAt: string;
+  grantedById: string | null;
+}
+
+export function useGroups() {
+  return useQuery({
+    queryKey: ["admin", "group"] as const,
+    queryFn: () => apiRequest<void, { groups: Array<GroupItem> }>("/api/admin/group"),
+  });
+}
+
+export function useGroupMembers(groupId: string | null) {
+  return useQuery({
+    queryKey: ["admin", "group", groupId, "member"] as const,
+    enabled: groupId !== null,
+    queryFn: () =>
+      apiRequest<void, { members: Array<GroupMemberItem> }>(
+        `/api/admin/group/${groupId}/member`,
+      ),
+  });
+}
+
+export function useGroupPermissions(groupId: string | null) {
+  return useQuery({
+    queryKey: ["admin", "group", groupId, "permission"] as const,
+    enabled: groupId !== null,
+    queryFn: () =>
+      apiRequest<void, { permissions: Array<GroupPermissionItem> }>(
+        `/api/admin/group/${groupId}/permission`,
+      ),
+  });
+}
+
+export function useCreateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ name, description }: { name: string; description?: string }) =>
+      apiRequest<{ name: string; description?: string }, GroupItem>("/api/admin/group", {
+        method: "POST",
+        body: { name, description },
+      }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Create group failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useUpdateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      name,
+      description,
+    }: {
+      groupId: string;
+      name: string;
+      description?: string;
+    }) =>
+      apiRequest<{ name: string; description?: string }, GroupItem>(
+        `/api/admin/group/${groupId}`,
+        { method: "PUT", body: { name, description } },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Update group failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useDeleteGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId }: { groupId: string }) =>
+      apiRequest<void, void>(`/api/admin/group/${groupId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Delete group failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useAddGroupMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
+      apiRequest<{ userId: string }, void>(`/api/admin/group/${groupId}/member`, {
+        method: "POST",
+        body: { userId },
+      }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId, "member"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "group"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Add member failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useRemoveGroupMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
+      apiRequest<void, void>(`/api/admin/group/${groupId}/member/${userId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId, "member"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "group"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Remove member failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useGrantGroupPermission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, permission }: { groupId: string; permission: string }) =>
+      apiRequest<{ permission: string }, void>(`/api/admin/group/${groupId}/permission`, {
+        method: "POST",
+        body: { permission },
+      }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId, "permission"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Grant permission failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useRevokeGroupPermission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, permission }: { groupId: string; permission: string }) =>
+      apiRequest<void, void>(`/api/admin/group/${groupId}/permission/${permission}`, {
+        method: "DELETE",
+      }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId, "permission"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Revoke permission failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useRemoveGroupDatabaseRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      databaseId,
+      groupId,
+      permission,
+    }: {
+      databaseId: string;
+      groupId: string;
+      permission: string;
+    }) =>
+      apiRequest(
+        `/api/admin/database/${databaseId}/role/group/${groupId}/${permission}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: (_data, { databaseId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "database", databaseId, "role"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Remove group role failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useRevokeGroupColumnBypass() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      databaseId,
+      sensitiveColumnId,
+      groupId,
+    }: {
+      databaseId: string;
+      sensitiveColumnId: string;
+      groupId: string;
+    }) =>
+      apiRequest<void, void>(
+        `/api/admin/database/${databaseId}/sensitive-column/${sensitiveColumnId}/bypass/group/${groupId}`,
         { method: "DELETE" },
       ),
     onSuccess: (_, { databaseId }) => {
