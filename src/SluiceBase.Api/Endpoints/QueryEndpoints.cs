@@ -47,8 +47,14 @@ internal static class QueryEndpoints
         }
 
         // Enforce database role: user must have query:execute on this specific database
+        var userGroupIds = db.GroupMembers
+            .Where(gm => gm.UserId == user!.Id)
+            .Select(gm => gm.GroupId);
+
         var hasRole = await db.UserDatabaseRoles.AnyAsync(
-            r => r.UserId == user!.Id && r.Permission == Permissions.QueryExecute && r.DatabaseId == database.Id, ct);
+            r => r.UserId == user!.Id && r.Permission == Permissions.QueryExecute && r.DatabaseId == database.Id, ct)
+            || await db.GroupDatabaseRoles.AnyAsync(
+                r => userGroupIds.Contains(r.GroupId) && r.Permission == Permissions.QueryExecute && r.DatabaseId == database.Id, ct);
         if (!hasRole)
         {
             return TypedResults.Forbid();
@@ -80,6 +86,10 @@ internal static class QueryEndpoints
                     .AsNoTracking()
                     .Where(b => b.UserId == user!.Id && sensitiveColumnIds.Contains(b.SensitiveColumnId))
                     .Select(b => b.SensitiveColumnId)
+                    .Union(
+                        db.GroupColumnBypasses
+                            .Where(gb => userGroupIds.Contains(gb.GroupId) && sensitiveColumnIds.Contains(gb.SensitiveColumnId))
+                            .Select(gb => gb.SensitiveColumnId))
                     .ToListAsync(ct);
 
                 var blockedColumns = sensitiveColumns
@@ -179,16 +189,28 @@ internal static class QueryEndpoints
 
         var user = await currentUser.GetAsync(ct);
 
+        var userGroupIds = db.GroupMembers
+            .Where(gm => gm.UserId == user!.Id)
+            .Select(gm => gm.GroupId);
+
         // databases where user has query:audit (can see all queries)
         var auditDatabaseIds = await db.UserDatabaseRoles
             .Where(r => r.UserId == user!.Id && r.Permission == Permissions.QueryAudit)
             .Select(r => r.DatabaseId)
+            .Union(
+                db.GroupDatabaseRoles
+                    .Where(gr => userGroupIds.Contains(gr.GroupId) && gr.Permission == Permissions.QueryAudit)
+                    .Select(gr => gr.DatabaseId))
             .ToListAsync(ct);
 
         // databases where user has any role (can see own queries)
         var anyRoleDatabaseIds = await db.UserDatabaseRoles
             .Where(r => r.UserId == user!.Id)
             .Select(r => r.DatabaseId)
+            .Union(
+                db.GroupDatabaseRoles
+                    .Where(gr => userGroupIds.Contains(gr.GroupId))
+                    .Select(gr => gr.DatabaseId))
             .Distinct()
             .ToListAsync(ct);
 
