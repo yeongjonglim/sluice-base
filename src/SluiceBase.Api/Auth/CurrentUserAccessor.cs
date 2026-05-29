@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Data;
+using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Users;
 
 namespace SluiceBase.Api.Auth;
