@@ -12,6 +12,11 @@ namespace SluiceBase.Api.Extensions;
 [OpenApiMarker<CredentialId>] // TODO: Think about this again
 [OpenApiMarker<UpdateRequestId>]
 [OpenApiMarker<UserDatabaseRoleId>]
+[OpenApiMarker<GroupId>]
+[OpenApiMarker<GroupMemberId>]
+[OpenApiMarker<GroupPermissionId>]
+[OpenApiMarker<GroupDatabaseRoleId>]
+[OpenApiMarker<GroupColumnBypassId>]
 // Used as a marker to generate OpenApi schema
 // ReSharper disable once UnusedType.Global
 internal class OpenApiTransformers;
