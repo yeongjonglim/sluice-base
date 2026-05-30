@@ -13,13 +13,14 @@ import {
 } from "@/api/hooks";
 
 const PERMISSION_LABELS: Record<string, { short: string; full: string }> = {
+  "group:manage": { short: "Group", full: "Manage groups" },
   "permission:manage": { short: "Permission", full: "Manage permissions" },
-  "server:manage": { short: "Server", full: "Manage servers" },
-  "query:execute": { short: "Query", full: "Run read queries" },
   "query:audit": { short: "Audit", full: "Audit read queries" },
-  "update:submit": { short: "Submit", full: "Submit update requests" },
+  "query:execute": { short: "Query", full: "Run read queries" },
+  "server:manage": { short: "Server", full: "Manage servers" },
   "update:approve": { short: "Approve", full: "Approve update requests" },
   "update:execute": { short: "Execute", full: "Execute approved updates" },
+  "update:submit": { short: "Submit", full: "Submit update requests" },
 };
 
 type UserSummary = paths["/api/admin/user"]["get"]["responses"][200]["content"]["application/json"]["users"][0];

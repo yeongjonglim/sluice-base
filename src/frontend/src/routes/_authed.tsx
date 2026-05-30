@@ -24,6 +24,7 @@ import {
   IconSparkles,
   IconSun,
   IconTerminal2,
+  IconUsers,
 } from "@tabler/icons-react";
 import { Link, Outlet, createFileRoute, useLocation } from "@tanstack/react-router";
 import { useState } from "react";
@@ -44,6 +45,7 @@ function AuthedLayout() {
   const { colorScheme, toggleColorScheme } = useMantineColorScheme();
   const location = useLocation();
   const isAdmin = useHasPermission("permission:manage");
+  const isGroupAdmin = useHasPermission("group:manage");
   const isServerAdmin = useHasPermission("server:manage");
   const canQuery = useHasPermission("query:execute");
   const canSubmitUpdates = useHasPermission("update:submit");
@@ -190,6 +192,16 @@ function AuthedLayout() {
               component={Link}
               to="/server"
               active={location.pathname === "/server"}
+              onClick={closeMobileNav}
+            />
+          )}
+          {isGroupAdmin && (
+            <NavLink
+              label="Groups"
+              leftSection={<IconUsers size={16} />}
+              component={Link}
+              to="/group"
+              active={location.pathname === "/group"}
               onClick={closeMobileNav}
             />
           )}
