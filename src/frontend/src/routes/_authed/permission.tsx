@@ -3,6 +3,7 @@ import { modals } from "@mantine/modals";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import type { paths } from "@/api/schema.ts";
+import { permissionLabel } from "@/auth/permission.ts";
 import {
   meQueryOptions,
   useGrantPermission,
@@ -11,17 +12,6 @@ import {
   useRevokePermission,
   useUsers,
 } from "@/api/hooks";
-
-const PERMISSION_LABELS: Record<string, { short: string; full: string }> = {
-  "group:manage": { short: "Group", full: "Manage groups" },
-  "permission:manage": { short: "Permission", full: "Manage permissions" },
-  "query:audit": { short: "Audit", full: "Audit read queries" },
-  "query:execute": { short: "Query", full: "Run read queries" },
-  "server:manage": { short: "Server", full: "Manage servers" },
-  "update:approve": { short: "Approve", full: "Approve update requests" },
-  "update:execute": { short: "Execute", full: "Execute approved updates" },
-  "update:submit": { short: "Submit", full: "Submit update requests" },
-};
 
 type UserSummary = paths["/api/admin/user"]["get"]["responses"][200]["content"]["application/json"]["users"][0];
 
@@ -116,7 +106,7 @@ function PermissionsAdminPage() {
               <Table.Th>User</Table.Th>
               <Table.Th>Last login</Table.Th>
               {permissions.map((p) => (
-                <Table.Th key={p}>{PERMISSION_LABELS[p].short}</Table.Th>
+                <Table.Th key={p}>{permissionLabel(p).short}</Table.Th>
               ))}
             </Table.Tr>
           </Table.Thead>
@@ -157,7 +147,7 @@ function PermissionsAdminPage() {
                     <Switch
                       checked={user.permissions.includes(permission)}
                       disabled={isMutating(user.id)}
-                      aria-label={PERMISSION_LABELS[permission].full}
+                      aria-label={permissionLabel(permission).full}
                       onChange={(e) => void handleToggle(user, permission, e.currentTarget.checked)}
                     />
                   </Table.Td>

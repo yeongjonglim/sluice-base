@@ -1,18 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { PERMISSION_LABELS, permissionLabel } from "@/auth/permission.ts";
 
 describe("PERMISSION_LABELS", () => {
   it("should have labels for all global permissions from the API", () => {
-    const PERMISSION_LABELS: Record<string, { short: string; full: string }> = {
-      "group:manage": { short: "Group", full: "Manage groups" },
-      "permission:manage": { short: "Permission", full: "Manage permissions" },
-      "query:audit": { short: "Audit", full: "Audit read queries" },
-      "query:execute": { short: "Query", full: "Run read queries" },
-      "server:manage": { short: "Server", full: "Manage servers" },
-      "update:approve": { short: "Approve", full: "Approve update requests" },
-      "update:execute": { short: "Execute", full: "Execute approved updates" },
-      "update:submit": { short: "Submit", full: "Submit update requests" },
-    };
-
     const globalPermissions = [
       "permission:manage",
       "server:manage",
@@ -20,18 +10,27 @@ describe("PERMISSION_LABELS", () => {
     ];
 
     for (const permission of globalPermissions) {
+      const label = permissionLabel(permission);
       expect(
-        PERMISSION_LABELS[permission],
-        `Permission "${permission}" must have a label in PERMISSION_LABELS`,
-      ).toBeDefined();
-      expect(
-        PERMISSION_LABELS[permission].short,
+        label.short,
         `Permission "${permission}" must have a short label`,
       ).toBeTruthy();
       expect(
-        PERMISSION_LABELS[permission].full,
+        label.full,
         `Permission "${permission}" must have a full label`,
       ).toBeTruthy();
+      // Falling back to the raw name means no real label was defined.
+      expect(
+        label.short,
+        `Permission "${permission}" is missing a real entry in PERMISSION_LABELS`,
+      ).not.toBe(permission);
+    }
+  });
+
+  it("every label has non-empty short and full text", () => {
+    for (const [permission, label] of Object.entries(PERMISSION_LABELS)) {
+      expect(label.short, `${permission} short`).toBeTruthy();
+      expect(label.full, `${permission} full`).toBeTruthy();
     }
   });
 });
