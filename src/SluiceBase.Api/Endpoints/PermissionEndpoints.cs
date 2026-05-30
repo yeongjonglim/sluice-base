@@ -33,14 +33,37 @@ internal static class PermissionEndpoints
             .ThenInclude(u => u.Permissions)
             .AsNoTracking()
             .OrderBy(u => u.Email)
-            .Select(u => new UserSummaryResponse(
+            .Select(u => new
+            {
                 u.UserId,
                 u.Email,
                 u.Name,
                 u.LastLoginAt,
-                u.User.Permissions.Select(p => p.Permission).ToArray()))
+                Permissions = u.User.Permissions.Select(p => p.Permission).ToArray(),
+            })
             .ToListAsync(ct);
-        return TypedResults.Ok(new ListUsersResponse(users));
+
+        var allMemberships = await db.GroupMembers
+            .AsNoTracking()
+            .Join(db.Groups,
+                m => m.GroupId,
+                g => g.Id,
+                (m, g) => new { m.UserId, g.Id, g.Name })
+            .ToListAsync(ct);
+
+        var membershipsByUser = allMemberships
+            .GroupBy(m => m.UserId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<UserGroupMembership>)g
+                    .Select(m => new UserGroupMembership(GroupId.From(m.Id.Value), m.Name))
+                    .ToList());
+
+        var response = users.Select(u => new UserSummaryResponse(
+            u.UserId, u.Email, u.Name, u.LastLoginAt, u.Permissions,
+            membershipsByUser.TryGetValue(u.UserId, out var groups) ? groups : []));
+
+        return TypedResults.Ok(new ListUsersResponse([.. response]));
     }
 
     private static async Task<Results<ValidationProblem, NotFound, Ok, Created>> GrantPermission(
@@ -106,11 +129,14 @@ internal sealed record PermissionCatalogResponse(string[] Permissions);
 
 internal sealed record GrantPermissionRequest(string Permission);
 
+internal sealed record UserGroupMembership(GroupId GroupId, string GroupName);
+
 internal sealed record UserSummaryResponse(
     UserId Id,
     string? Email,
     string? Name,
     DateTimeOffset? LastLoginAt,
-    string[] Permissions);
+    string[] Permissions,
+    IReadOnlyList<UserGroupMembership> Groups);
 
 internal sealed record ListUsersResponse(IReadOnlyList<UserSummaryResponse> Users);

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Data;
+using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Users;
 
 namespace SluiceBase.Api.Auth;
@@ -35,10 +36,30 @@ internal sealed class CurrentUserAccessor(
             return null;
         }
 
-        _cached = await db.Users
+        var user = await db.Users
             .Include(u => u.Permissions)
             .AsNoTracking()
             .SingleOrDefaultAsync(u => u.Id == userId, ct);
+
+        if (user is not null)
+        {
+            var groupPermissions = await db.GroupPermissions
+                .AsNoTracking()
+                .Where(gp => db.GroupMembers.Any(
+                    gm => gm.GroupId == gp.GroupId && gm.UserId == userId))
+                .ToListAsync(ct);
+
+            foreach (var gp in groupPermissions)
+            {
+                if (!user.HasPermission(gp.Permission))
+                {
+                    user.Permissions.Add(UserPermissionMap.Grant(
+                        userId, gp.Permission, gp.GrantedById, gp.GrantedAt));
+                }
+            }
+        }
+
+        _cached = user;
         return _cached;
     }
 }

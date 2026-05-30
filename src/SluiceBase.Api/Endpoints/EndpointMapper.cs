@@ -9,6 +9,7 @@ internal static class EndpointMapper
         PermissionEndpoints.Map(app);
         DatabaseRoleEndpoints.Map(app);
         SensitiveColumnEndpoints.Map(app);
+        GroupEndpoints.Map(app);
         CatalogEndpoints.Map(app);
         ServerEndpoints.Map(app);
         CredentialEndpoints.Map(app);

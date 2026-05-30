@@ -51,10 +51,18 @@ internal static class AuthEndpoints
                         return TypedResults.Unauthorized();
                     }
 
+                    var userGroupIds = db.GroupMembers
+                        .Where(gm => gm.UserId == user.Id)
+                        .Select(gm => gm.GroupId);
+
                     var databaseRolePermissions = await db.UserDatabaseRoles
                         .AsNoTracking()
                         .Where(r => r.UserId == user.Id)
                         .Select(r => r.Permission)
+                        .Union(
+                            db.GroupDatabaseRoles
+                                .Where(gr => userGroupIds.Contains(gr.GroupId))
+                                .Select(gr => gr.Permission))
                         .Distinct()
                         .ToListAsync(ct);
 

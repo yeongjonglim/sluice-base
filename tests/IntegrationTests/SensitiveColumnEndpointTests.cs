@@ -156,7 +156,7 @@ public class SensitiveColumnEndpointTests(SluiceBaseStackFactory factory)
 
         using var revokeReq = MutationRequest(
             HttpMethod.Delete,
-            $"/api/admin/database/{databaseId}/sensitive-column/{columnId}/bypass/{aliceId}", xsrf);
+            $"/api/admin/database/{databaseId}/sensitive-column/{columnId}/bypass/user/{aliceId}", xsrf);
         (await session.Client.SendAsync(revokeReq, ct)).EnsureSuccessStatusCode();
 
         var listAfter = await session.Client.GetFromJsonAsync<FullSensitiveColumnListBody>(

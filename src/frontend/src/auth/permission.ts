@@ -8,6 +8,7 @@ export function useHasPermission(permission: Permission): boolean {
 export type Permission =
   | "permission:manage"
   | "server:manage"
+  | "group:manage"
   | "query:execute"
   | "query:audit"
   | "update:submit"

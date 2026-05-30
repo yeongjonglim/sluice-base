@@ -14,6 +14,7 @@ import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedServerRouteImport } from './routes/_authed/server'
 import { Route as AuthedPermissionRouteImport } from './routes/_authed/permission'
 import { Route as AuthedHealthRouteImport } from './routes/_authed/health'
+import { Route as AuthedGroupRouteImport } from './routes/_authed/group'
 import { Route as AuthedAccessRouteImport } from './routes/_authed/access'
 import { Route as AuthedUpdateIndexRouteImport } from './routes/_authed/update/index'
 import { Route as AuthedQueryIndexRouteImport } from './routes/_authed/query/index'
@@ -43,6 +44,11 @@ const AuthedPermissionRoute = AuthedPermissionRouteImport.update({
 const AuthedHealthRoute = AuthedHealthRouteImport.update({
   id: '/health',
   path: '/health',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedGroupRoute = AuthedGroupRouteImport.update({
+  id: '/group',
+  path: '/group',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedAccessRoute = AuthedAccessRouteImport.update({
@@ -79,6 +85,7 @@ const AuthedQueryHistoryRoute = AuthedQueryHistoryRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/access': typeof AuthedAccessRoute
+  '/group': typeof AuthedGroupRoute
   '/health': typeof AuthedHealthRoute
   '/permission': typeof AuthedPermissionRoute
   '/server': typeof AuthedServerRoute
@@ -90,6 +97,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/access': typeof AuthedAccessRoute
+  '/group': typeof AuthedGroupRoute
   '/health': typeof AuthedHealthRoute
   '/permission': typeof AuthedPermissionRoute
   '/server': typeof AuthedServerRoute
@@ -104,6 +112,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authed': typeof AuthedRouteWithChildren
   '/_authed/access': typeof AuthedAccessRoute
+  '/_authed/group': typeof AuthedGroupRoute
   '/_authed/health': typeof AuthedHealthRoute
   '/_authed/permission': typeof AuthedPermissionRoute
   '/_authed/server': typeof AuthedServerRoute
@@ -119,6 +128,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/access'
+    | '/group'
     | '/health'
     | '/permission'
     | '/server'
@@ -130,6 +140,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/access'
+    | '/group'
     | '/health'
     | '/permission'
     | '/server'
@@ -143,6 +154,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authed'
     | '/_authed/access'
+    | '/_authed/group'
     | '/_authed/health'
     | '/_authed/permission'
     | '/_authed/server'
@@ -195,6 +207,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedHealthRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/group': {
+      id: '/_authed/group'
+      path: '/group'
+      fullPath: '/group'
+      preLoaderRoute: typeof AuthedGroupRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/access': {
       id: '/_authed/access'
       path: '/access'
@@ -242,6 +261,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthedRouteChildren {
   AuthedAccessRoute: typeof AuthedAccessRoute
+  AuthedGroupRoute: typeof AuthedGroupRoute
   AuthedHealthRoute: typeof AuthedHealthRoute
   AuthedPermissionRoute: typeof AuthedPermissionRoute
   AuthedServerRoute: typeof AuthedServerRoute
@@ -255,6 +275,7 @@ interface AuthedRouteChildren {
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedAccessRoute: AuthedAccessRoute,
+  AuthedGroupRoute: AuthedGroupRoute,
   AuthedHealthRoute: AuthedHealthRoute,
   AuthedPermissionRoute: AuthedPermissionRoute,
   AuthedServerRoute: AuthedServerRoute,
