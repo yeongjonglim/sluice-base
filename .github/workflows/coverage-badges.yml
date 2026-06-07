@@ -52,6 +52,10 @@ jobs:
           # Save badges to a temp location before switching branches
           cp -r badges /tmp/coverage-badges
 
+          # Remove the untracked working-tree copy so it can't block the
+          # checkout of gh-pages, which already tracks badges/*.svg
+          rm -rf badges
+
           # Set up gh-pages branch
           if git fetch origin gh-pages:gh-pages 2>/dev/null; then
             git checkout gh-pages
