@@ -48,6 +48,17 @@ public static class DistributedApplicationTestingBuilderExtensions
                         resource.Annotations.Remove(containerLifetimeAnnotation);
                     }
                 }
+
+#pragma warning disable ASPIREPERSISTENCE001
+                if (resource.TryGetAnnotationsOfType<PersistenceAnnotation>(out var persistenceAnnotations))
+#pragma warning restore ASPIREPERSISTENCE001
+                {
+                    // remove container lifetime annotation for tests
+                    foreach (var persistenceAnnotation in persistenceAnnotations)
+                    {
+                        resource.Annotations.Remove(persistenceAnnotation);
+                    }
+                }
             }
 
             var pg = appHost.Resources.OfType<PgAdminContainerResource>().FirstOrDefault();
