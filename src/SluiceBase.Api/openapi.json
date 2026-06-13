@@ -444,6 +444,39 @@
         }
       }
     },
+    "/api/admin/user/{userId}/effective": {
+      "get": {
+        "tags": [
+          "PermissionEndpoints"
+        ],
+        "operationId": "GetEffectiveUserPermissions",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Not Found"
+          },
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EffectiveUserPermissionsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/admin/server": {
       "get": {
         "tags": [
@@ -2634,6 +2667,146 @@
           }
         }
       },
+      "EffectiveColumnBypassItem": {
+        "required": [
+          "databaseId",
+          "databaseName",
+          "sensitiveColumnId",
+          "schema",
+          "table",
+          "column",
+          "sources"
+        ],
+        "type": "object",
+        "properties": {
+          "databaseId": {
+            "$ref": "#/components/schemas/DatabaseId"
+          },
+          "databaseName": {
+            "type": "string"
+          },
+          "sensitiveColumnId": {
+            "$ref": "#/components/schemas/SensitiveColumnId"
+          },
+          "schema": {
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          },
+          "column": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectivePermissionSource"
+            }
+          }
+        }
+      },
+      "EffectiveDbRoleItem": {
+        "required": [
+          "databaseId",
+          "databaseName",
+          "serverName",
+          "permission",
+          "sources"
+        ],
+        "type": "object",
+        "properties": {
+          "databaseId": {
+            "$ref": "#/components/schemas/DatabaseId"
+          },
+          "databaseName": {
+            "type": "string"
+          },
+          "serverName": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectivePermissionSource"
+            }
+          }
+        }
+      },
+      "EffectivePermissionItem": {
+        "required": [
+          "permission",
+          "sources"
+        ],
+        "type": "object",
+        "properties": {
+          "permission": {
+            "type": "string"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectivePermissionSource"
+            }
+          }
+        }
+      },
+      "EffectivePermissionSource": {
+        "type": "object",
+        "properties": {
+          "direct": {
+            "type": "boolean",
+            "default": false
+          },
+          "group": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/GroupInfo"
+              }
+            ]
+          }
+        }
+      },
+      "EffectiveUserPermissionsResponse": {
+        "required": [
+          "global",
+          "databaseRoles",
+          "columnBypasses",
+          "memberships"
+        ],
+        "type": "object",
+        "properties": {
+          "global": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectivePermissionItem"
+            }
+          },
+          "databaseRoles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectiveDbRoleItem"
+            }
+          },
+          "columnBypasses": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectiveColumnBypassItem"
+            }
+          },
+          "memberships": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserGroupMembership"
+            }
+          }
+        }
+      },
       "GrantBypassRequest": {
         "required": [
           "userId",
@@ -2730,6 +2903,21 @@
       "GroupId": {
         "type": "string",
         "format": "uuid"
+      },
+      "GroupInfo": {
+        "required": [
+          "id",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/GroupId"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
       },
       "GroupItem": {
         "required": [
