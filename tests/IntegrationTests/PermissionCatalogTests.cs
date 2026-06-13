@@ -33,10 +33,9 @@ public class PermissionCatalogTests(SluiceBaseStackFactory factory)
         var body = await response.Content.ReadFromJsonAsync<CatalogBody>(
             TestContext.Current.CancellationToken);
         Assert.NotNull(body);
-        Assert.Equal(3, body.Permissions.Length);
+        Assert.Equal(2, body.Permissions.Length);
         Assert.Contains(Permissions.PermissionManage, body.Permissions);
         Assert.Contains(Permissions.ServerManage, body.Permissions);
-        Assert.Contains(Permissions.GroupManage, body.Permissions);
     }
 
     private sealed record CatalogBody(string[] Permissions);

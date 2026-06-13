@@ -23,7 +23,7 @@ public class GroupEndpointTests(SluiceBaseStackFactory factory)
     }
 
     private async Task<(AuthenticatedSession Session, string Xsrf)>
-        AliceWithGroupManageAsync(CancellationToken ct)
+        AliceWithPermissionManageAsync(CancellationToken ct)
     {
         var session = await LoginHelper.SignInAsync("alice", "dev", ct);
         var xsrf = await session.FetchXsrfTokenAsync(ct);
@@ -33,7 +33,7 @@ public class GroupEndpointTests(SluiceBaseStackFactory factory)
 
         using var grantReq = MutationRequest(HttpMethod.Post,
             $"/api/admin/user/{alice.Id}/permission", xsrf,
-            new { permission = Permissions.GroupManage });
+            new { permission = Permissions.PermissionManage });
         (await session.Client.SendAsync(grantReq, ct)).EnsureSuccessStatusCode();
 
         // Re-login to pick up new permission
@@ -68,7 +68,7 @@ public class GroupEndpointTests(SluiceBaseStackFactory factory)
     public async Task CreateGroup_HappyPath_Returns201()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (alice, xsrf) = await AliceWithGroupManageAsync(ct);
+        var (alice, xsrf) = await AliceWithPermissionManageAsync(ct);
         using var _ = alice;
 
         var groupName = $"test-{Guid.NewGuid():N}"[..20];
@@ -87,7 +87,7 @@ public class GroupEndpointTests(SluiceBaseStackFactory factory)
     public async Task CreateGroup_DuplicateName_Returns400()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (alice, xsrf) = await AliceWithGroupManageAsync(ct);
+        var (alice, xsrf) = await AliceWithPermissionManageAsync(ct);
         using var _ = alice;
 
         var groupName = $"dup-{Guid.NewGuid():N}"[..20];
@@ -105,7 +105,7 @@ public class GroupEndpointTests(SluiceBaseStackFactory factory)
     public async Task DeleteGroup_HappyPath_Returns204()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (alice, xsrf) = await AliceWithGroupManageAsync(ct);
+        var (alice, xsrf) = await AliceWithPermissionManageAsync(ct);
         using var _ = alice;
 
         var groupId = await GroupTestHelper.CreateGroupAsync(alice, $"del-{Guid.NewGuid():N}"[..20], xsrf, ct);
@@ -121,7 +121,7 @@ public class GroupEndpointTests(SluiceBaseStackFactory factory)
     public async Task AddMember_HappyPath_Returns201AndAppearsInList()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (alice, xsrf) = await AliceWithGroupManageAsync(ct);
+        var (alice, xsrf) = await AliceWithPermissionManageAsync(ct);
         using var _ = alice;
 
         using var bob = await LoginHelper.SignInAsync("bob", "dev", ct);
@@ -147,7 +147,7 @@ public class GroupEndpointTests(SluiceBaseStackFactory factory)
     public async Task GroupPermission_FlowsThroughToMe()
     {
         var ct = TestContext.Current.CancellationToken;
-        var (alice, xsrf) = await AliceWithGroupManageAsync(ct);
+        var (alice, xsrf) = await AliceWithPermissionManageAsync(ct);
         using var _ = alice;
 
         using var bob = await LoginHelper.SignInAsync("bob", "dev", ct);
