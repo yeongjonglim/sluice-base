@@ -93,6 +93,41 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
     }
 
     [Fact]
+    public async Task GetSchema_IncludesPrimaryKeys_ForBlueDatabase()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var tree = await session.Client.GetFromJsonAsync<SchemaTree>($"/api/schema/{databaseId}", ct);
+
+        Assert.NotNull(tree);
+        var usersPk = Assert.Single(
+            tree.PrimaryKeys,
+            pk => pk.Schema == "public" && pk.Table == "users");
+        Assert.Equal(["id"], usersPk.Columns);
+    }
+
+    [Fact]
+    public async Task GetSchema_IncludesForeignKeys_ForBlueDatabase()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var tree = await session.Client.GetFromJsonAsync<SchemaTree>($"/api/schema/{databaseId}", ct);
+
+        Assert.NotNull(tree);
+        var ordersFk = Assert.Single(
+            tree.ForeignKeys,
+            fk => fk.Schema == "public" && fk.Table == "orders"
+                  && fk.Columns.Contains("user_id"));
+        Assert.Equal("public", ordersFk.ReferencedSchema);
+        Assert.Equal("users", ordersFk.ReferencedTable);
+        Assert.Equal(["id"], ordersFk.ReferencedColumns);
+    }
+
+    [Fact]
     public async Task GetSchema_Returns401_ForAnonymous()
     {
         using var client = factory.InitialisedApp.CreateHttpClient("api", "https");

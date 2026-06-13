@@ -34,32 +34,91 @@ internal sealed class PostgresTargetEngine : ITargetEngine
 
     public async Task<SchemaTree> GetSchemaAsync(string connectionString, CancellationToken ct)
     {
-        const string sql = """
+        const string columnsSql = """
                            SELECT table_schema, table_name, column_name, data_type, is_nullable
                            FROM information_schema.columns
                            WHERE table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
                            ORDER BY table_schema, table_name, ordinal_position;
                            """;
 
+        const string primaryKeysSql = """
+                           SELECT tc.table_schema, tc.table_name, kcu.column_name
+                           FROM information_schema.table_constraints tc
+                           JOIN information_schema.key_column_usage kcu
+                             ON tc.constraint_name = kcu.constraint_name
+                            AND tc.table_schema = kcu.table_schema
+                           WHERE tc.constraint_type = 'PRIMARY KEY'
+                             AND tc.table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position;
+                           """;
+
+        // The referenced side is joined via a second key_column_usage (ccu), not
+        // constraint_column_usage, and aligned on position_in_unique_constraint. This pairs
+        // each FK column with its referenced column by ordinal position so composite foreign
+        // keys map correctly; constraint_column_usage would produce a cartesian cross-join.
+        const string foreignKeysSql = """
+                           SELECT
+                               rc.constraint_name,
+                               kcu.table_schema, kcu.table_name, kcu.column_name,
+                               ccu.table_schema AS ref_schema,
+                               ccu.table_name   AS ref_table,
+                               ccu.column_name  AS ref_column
+                           FROM information_schema.referential_constraints rc
+                           JOIN information_schema.key_column_usage kcu
+                             ON kcu.constraint_name = rc.constraint_name
+                            AND kcu.constraint_schema = rc.constraint_schema
+                           JOIN information_schema.key_column_usage ccu
+                             ON ccu.constraint_name = rc.unique_constraint_name
+                            AND ccu.constraint_schema = rc.unique_constraint_schema
+                            AND ccu.ordinal_position = kcu.position_in_unique_constraint
+                           WHERE kcu.table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY rc.constraint_name, kcu.ordinal_position;
+                           """;
+
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
         await using var connection = await dataSource.OpenConnectionAsync(ct);
 
-        await using var command = new NpgsqlCommand(sql, connection);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var rows = new List<(string Schema, string Table, string Column, string DataType, bool IsNullable)>();
-        while (await reader.ReadAsync(ct))
+        // Columns
+        var columnRows = new List<(string Schema, string Table, string Column, string DataType, bool IsNullable)>();
+        await using (var command = new NpgsqlCommand(columnsSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
         {
-            rows.Add((
-                reader.GetString(0),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetString(4) == "YES"
-            ));
+            while (await reader.ReadAsync(ct))
+            {
+                columnRows.Add((
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetString(4) == "YES"));
+            }
         }
 
-        var schemas = rows
+        // Primary keys
+        var pkRows = new List<(string Schema, string Table, string Column)>();
+        await using (var command = new NpgsqlCommand(primaryKeysSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                pkRows.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+            }
+        }
+
+        // Foreign keys
+        var fkRows = new List<(string Constraint, string Schema, string Table, string Column, string RefSchema, string RefTable, string RefColumn)>();
+        await using (var command = new NpgsqlCommand(foreignKeysSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                fkRows.Add((
+                    reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
+                    reader.GetString(4), reader.GetString(5), reader.GetString(6)));
+            }
+        }
+
+        var schemas = columnRows
             .GroupBy(r => r.Schema)
             .Select(sg => new SchemaInfo(
                 sg.Key,
@@ -71,7 +130,24 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                 ]))
             .ToList();
 
-        return new SchemaTree(schemas, [], []);
+        var primaryKeys = pkRows
+            .GroupBy(r => (r.Schema, r.Table))
+            .Select(g => new PrimaryKey(g.Key.Schema, g.Key.Table, [.. g.Select(r => r.Column)]))
+            .ToList();
+
+        var foreignKeys = fkRows
+            .GroupBy(r => r.Constraint)
+            .Select(g => new ForeignKey(
+                g.Key,
+                g.First().Schema,
+                g.First().Table,
+                [.. g.Select(r => r.Column)],
+                g.First().RefSchema,
+                g.First().RefTable,
+                [.. g.Select(r => r.RefColumn)]))
+            .ToList();
+
+        return new SchemaTree(schemas, primaryKeys, foreignKeys);
     }
 
     public async Task<QueryData> ExecuteQueryAsync(string connectionString, string sql, CancellationToken ct)
