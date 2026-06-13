@@ -244,6 +244,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/user/{userId}/effective": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetEffectiveUserPermissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/server": {
         parameters: {
             query?: never;
@@ -849,6 +865,37 @@ export interface components {
             referencedTable: string;
             referencedColumns: string[];
         };
+        EffectiveColumnBypassItem: {
+            databaseId: components["schemas"]["DatabaseId"];
+            databaseName: string;
+            sensitiveColumnId: components["schemas"]["SensitiveColumnId"];
+            schema: string;
+            table: string;
+            column: string;
+            sources: components["schemas"]["EffectivePermissionSource"][];
+        };
+        EffectiveDbRoleItem: {
+            databaseId: components["schemas"]["DatabaseId"];
+            databaseName: string;
+            serverName: string;
+            permission: string;
+            sources: components["schemas"]["EffectivePermissionSource"][];
+        };
+        EffectivePermissionItem: {
+            permission: string;
+            sources: components["schemas"]["EffectivePermissionSource"][];
+        };
+        EffectivePermissionSource: {
+            /** @default false */
+            direct: boolean;
+            group?: null | components["schemas"]["GroupInfo"];
+        };
+        EffectiveUserPermissionsResponse: {
+            global: components["schemas"]["EffectivePermissionItem"][];
+            databaseRoles: components["schemas"]["EffectiveDbRoleItem"][];
+            columnBypasses: components["schemas"]["EffectiveColumnBypassItem"][];
+            memberships: components["schemas"]["UserGroupMembership"][];
+        };
         GrantBypassRequest: {
             userId: null | components["schemas"]["UserId"];
             groupId: null | components["schemas"]["GroupId"];
@@ -871,6 +918,10 @@ export interface components {
         GroupColumnBypassId: string;
         /** Format: uuid */
         GroupId: string;
+        GroupInfo: {
+            id: components["schemas"]["GroupId"];
+            name: string;
+        };
         GroupItem: {
             id: components["schemas"]["GroupId"];
             name: string;
@@ -1534,6 +1585,35 @@ export interface operations {
         responses: {
             /** @description No Content */
             204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetEffectiveUserPermissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EffectiveUserPermissionsResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

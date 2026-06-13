@@ -1112,3 +1112,17 @@ export function useRevokeGroupColumnBypass() {
     },
   });
 }
+
+export type EffectiveUserPermissions =
+  paths["/api/admin/user/{userId}/effective"]["get"]["responses"][200]["content"]["application/json"];
+
+export function useEffectiveUserPermissions(userId: string | null) {
+  return useQuery({
+    queryKey: ["admin", "user", userId, "effective"] as const,
+    enabled: userId !== null,
+    queryFn: () =>
+      apiRequest<void, EffectiveUserPermissions>(
+        `/api/admin/user/${userId}/effective`,
+      ),
+  });
+}
