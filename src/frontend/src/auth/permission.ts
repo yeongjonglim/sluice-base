@@ -8,7 +8,6 @@ export function useHasPermission(permission: Permission): boolean {
 export type Permission =
   | "permission:manage"
   | "server:manage"
-  | "group:manage"
   | "query:execute"
   | "query:audit"
   | "update:submit"
@@ -17,7 +16,6 @@ export type Permission =
 
 // Record<Permission, …> forces a label for every known permission at compile time.
 export const PERMISSION_LABELS: Record<Permission, { short: string; full: string }> = {
-  "group:manage": { short: "Group", full: "Manage groups" },
   "permission:manage": { short: "Permission", full: "Manage permissions" },
   "query:audit": { short: "Audit", full: "Audit read queries" },
   "query:execute": { short: "Query", full: "Run read queries" },

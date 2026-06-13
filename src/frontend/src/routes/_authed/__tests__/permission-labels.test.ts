@@ -6,7 +6,6 @@ describe("PERMISSION_LABELS", () => {
     const globalPermissions = [
       "permission:manage",
       "server:manage",
-      "group:manage",
     ];
 
     for (const permission of globalPermissions) {
