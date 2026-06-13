@@ -1,7 +1,7 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { paths } from "@/api/schema";
 
-type SchemaTree =
+export type SchemaTree =
   paths["/api/schema/{databaseId}"]["get"]["responses"][200]["content"]["application/json"];
 
 export interface ErdColumn {
