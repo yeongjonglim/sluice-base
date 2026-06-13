@@ -12,7 +12,7 @@
     <PackageReference Include="Aspire.Hosting.Yarp" Version="13.4.3" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.Keycloak.Extensions" Version="13.4.0-preview.1.260602-0230" />
     <!-- Override vulnerable transitive MessagePack (pulled via StreamJsonRpc 2.22.23); see GHSA-hv8m-jj95-wg3x -->
-    <PackageReference Include="MessagePack" Version="2.5.302" />
+    <PackageReference Include="MessagePack" Version="3.1.7" />
   </ItemGroup>
 
   <ItemGroup>
