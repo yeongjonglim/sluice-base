@@ -4,7 +4,6 @@ public static class Permissions
 {
     public const string PermissionManage = "permission:manage";
     public const string ServerManage = "server:manage";
-    public const string GroupManage = "group:manage";
     public const string QueryExecute = "query:execute";
     public const string QueryAudit = "query:audit";
     public const string UpdateSubmit = "update:submit";
@@ -16,7 +15,6 @@ public static class Permissions
     {
         PermissionManage,
         ServerManage,
-        GroupManage,
     };
 
     // Operational permissions managed in user_database_role — grantable per database from the Access admin page.

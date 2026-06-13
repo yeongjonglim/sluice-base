@@ -41,7 +41,7 @@ internal static class DatabaseRoleEndpoints
         CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct);
-        if (user is null || (!user.HasPermission(Permissions.PermissionManage) && !user.HasPermission(Permissions.GroupManage)))
+        if (user is null || !user.HasPermission(Permissions.PermissionManage))
         {
             return TypedResults.Forbid();
         }
@@ -73,7 +73,7 @@ internal static class DatabaseRoleEndpoints
         CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct);
-        if (user is null || (!user.HasPermission(Permissions.PermissionManage) && !user.HasPermission(Permissions.GroupManage)))
+        if (user is null || !user.HasPermission(Permissions.PermissionManage))
         {
             return TypedResults.Forbid();
         }
@@ -132,7 +132,7 @@ internal static class DatabaseRoleEndpoints
         }
 
         var actor = await currentUser.GetAsync(ct);
-        if (actor is null || !actor.HasPermission(req.UserId is not null ? Permissions.PermissionManage : Permissions.GroupManage))
+        if (actor is null || !actor.HasPermission(Permissions.PermissionManage))
         {
             return TypedResults.Forbid();
         }

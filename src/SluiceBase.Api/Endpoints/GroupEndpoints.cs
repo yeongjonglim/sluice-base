@@ -12,7 +12,7 @@ internal static class GroupEndpoints
     public static void Map(IEndpointRouteBuilder app)
     {
         var admin = app.MapGroup("/api/admin/group")
-            .RequireAuthorization(Permissions.GroupManage);
+            .RequireAuthorization(Permissions.PermissionManage);
 
         admin.MapGet("/", ListGroups).WithName("ListGroups");
         admin.MapPost("/", CreateGroup).WithName("CreateGroup");

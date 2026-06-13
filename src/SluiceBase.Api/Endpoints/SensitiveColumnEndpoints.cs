@@ -39,7 +39,7 @@ internal static class SensitiveColumnEndpoints
         CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct);
-        if (user is null || (!user.HasPermission(Permissions.PermissionManage) && !user.HasPermission(Permissions.GroupManage)))
+        if (user is null || !user.HasPermission(Permissions.PermissionManage))
         {
             return TypedResults.Forbid();
         }
@@ -182,7 +182,7 @@ internal static class SensitiveColumnEndpoints
             return TypedResults.Forbid();
         }
 
-        if (req.GroupId is not null && !user.HasPermission(Permissions.GroupManage))
+        if (req.GroupId is not null && !user.HasPermission(Permissions.PermissionManage))
         {
             return TypedResults.Forbid();
         }
@@ -272,7 +272,7 @@ internal static class SensitiveColumnEndpoints
         CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct);
-        if (user is null || !user.HasPermission(Permissions.GroupManage))
+        if (user is null || !user.HasPermission(Permissions.PermissionManage))
         {
             return TypedResults.Forbid();
         }
