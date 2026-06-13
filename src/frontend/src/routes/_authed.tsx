@@ -20,6 +20,7 @@ import {
   IconMoon,
   IconServer,
   IconShieldLock,
+  IconSitemap,
   IconSparkles,
   IconSun,
   IconTerminal2,
@@ -158,6 +159,15 @@ function AuthedLayout() {
                 component={Link}
                 to="/query/history"
                 active={location.pathname === "/query/history"}
+                pl="md"
+                onClick={closeMobileNav}
+              />
+              <NavLink
+                label="Diagram"
+                leftSection={<IconSitemap size={16} />}
+                component={Link}
+                to="/query/diagram"
+                active={location.pathname === "/query/diagram"}
                 pl="md"
                 onClick={closeMobileNav}
               />
