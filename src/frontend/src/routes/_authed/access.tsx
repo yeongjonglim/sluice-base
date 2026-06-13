@@ -17,6 +17,7 @@ import { notifications } from "@mantine/notifications";
 import { IconDatabase, IconShieldLock, IconUser } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useRef, useState } from "react";
+import ByPrincipalTab from "./access/ByPrincipalTab";
 import type { AdminDatabaseItem } from "@/api/hooks";
 import {
   meQueryOptions,
@@ -43,7 +44,18 @@ const SCOPEABLE_PERMISSIONS = [
   { value: "update:execute", label: "Update Execute" },
 ];
 
+type AccessSearch = {
+  tab?: "principal" | "resource" | "columns";
+  segment?: "users" | "groups";
+};
+
 export const Route = createFileRoute("/_authed/access")({
+  validateSearch: (search: Record<string, unknown>): AccessSearch => ({
+    tab: (["principal", "resource", "columns"] as const).find(
+      (t) => t === search.tab,
+    ),
+    segment: (["users", "groups"] as const).find((s) => s === search.segment),
+  }),
   beforeLoad: ({ context }) => {
     const me = context.queryClient.getQueryData(meQueryOptions.queryKey);
     if (!me?.permissions.includes("permission:manage")) {
@@ -54,28 +66,41 @@ export const Route = createFileRoute("/_authed/access")({
 });
 
 function AccessPage() {
+  const { tab, segment } = Route.useSearch();
+  const navigate = Route.useNavigate();
+
   return (
     <Stack gap="md">
       <Title order={2}>Access control</Title>
-      <Tabs defaultValue="database">
+      <Tabs
+        value={tab ?? "principal"}
+        onChange={(value) =>
+          navigate({
+            search: (s) => ({
+              ...s,
+              tab: (value ?? undefined) as AccessSearch["tab"],
+            }),
+          })
+        }
+      >
         <Tabs.List>
-          <Tabs.Tab value="database" leftSection={<IconDatabase size={14} />}>
-            By Database
+          <Tabs.Tab value="principal" leftSection={<IconUser size={14} />}>
+            By Principal
           </Tabs.Tab>
-          <Tabs.Tab value="user" leftSection={<IconUser size={14} />}>
-            By User
+          <Tabs.Tab value="resource" leftSection={<IconDatabase size={14} />}>
+            By Resource
           </Tabs.Tab>
-          <Tabs.Tab value="sensitive" leftSection={<IconShieldLock size={14} />}>
+          <Tabs.Tab value="columns" leftSection={<IconShieldLock size={14} />}>
             Sensitive Columns
           </Tabs.Tab>
         </Tabs.List>
-        <Tabs.Panel value="database" pt="md">
+        <Tabs.Panel value="principal" pt="md">
+          <ByPrincipalTab initialSegment={segment ?? "users"} />
+        </Tabs.Panel>
+        <Tabs.Panel value="resource" pt="md">
           <ByDatabaseTab />
         </Tabs.Panel>
-        <Tabs.Panel value="user" pt="md">
-          <ByUserTab />
-        </Tabs.Panel>
-        <Tabs.Panel value="sensitive" pt="md">
+        <Tabs.Panel value="columns" pt="md">
           <SensitiveColumnsTab />
         </Tabs.Panel>
       </Tabs>
@@ -119,39 +144,6 @@ function ByDatabaseTab() {
           <DatabaseRolePanel key={selectedDb.id} database={selectedDb} />
         ) : (
           <Text c="dimmed" size="sm">Select a database to manage its access assignments.</Text>
-        )}
-      </Stack>
-    </Group>
-  );
-}
-
-function ByUserTab() {
-  const users = useUsers();
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const selectedUser = (users.data?.users ?? []).find((u) => u.id === selectedUserId);
-
-  return (
-    <Group align="flex-start" gap="md">
-      <Stack gap={4} style={{ minWidth: 220, maxWidth: 280 }}>
-        <Text size="xs" fw={600} c="dimmed" tt="uppercase">Users</Text>
-        {(users.data?.users ?? []).map((u) => (
-          <Button
-            key={u.id}
-            variant={selectedUserId === u.id ? "filled" : "subtle"}
-            size="xs"
-            justify="left"
-            leftSection={<IconUser size={12} />}
-            onClick={() => setSelectedUserId(u.id)}
-          >
-            {u.email ?? u.name ?? u.id}
-          </Button>
-        ))}
-      </Stack>
-      <Stack flex={1} gap="md">
-        {selectedUser ? (
-          <UserRolePanel key={selectedUser.id} user={selectedUser} />
-        ) : (
-          <Text c="dimmed" size="sm">Select a user to manage their database access.</Text>
         )}
       </Stack>
     </Group>
