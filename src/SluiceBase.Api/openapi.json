@@ -2071,6 +2071,47 @@
           }
         }
       },
+      "ForeignKey": {
+        "required": [
+          "constraintName",
+          "schema",
+          "table",
+          "columns",
+          "referencedSchema",
+          "referencedTable",
+          "referencedColumns"
+        ],
+        "type": "object",
+        "properties": {
+          "constraintName": {
+            "type": "string"
+          },
+          "schema": {
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "referencedSchema": {
+            "type": "string"
+          },
+          "referencedTable": {
+            "type": "string"
+          },
+          "referencedColumns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "GrantBypassRequest": {
         "required": [
           "userId"
@@ -2258,6 +2299,28 @@
         "type": "object",
         "properties": {
           "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PrimaryKey": {
+        "required": [
+          "schema",
+          "table",
+          "columns"
+        ],
+        "type": "object",
+        "properties": {
+          "schema": {
+            "type": "string"
+          },
+          "table": {
+            "type": "string"
+          },
+          "columns": {
             "type": "array",
             "items": {
               "type": "string"
@@ -2488,7 +2551,9 @@
       },
       "SchemaTree": {
         "required": [
-          "schemas"
+          "schemas",
+          "primaryKeys",
+          "foreignKeys"
         ],
         "type": "object",
         "properties": {
@@ -2496,6 +2561,18 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SchemaInfo"
+            }
+          },
+          "primaryKeys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PrimaryKey"
+            }
+          },
+          "foreignKeys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForeignKey"
             }
           }
         }

@@ -689,6 +689,15 @@ export interface components {
         DatabaseRoleListResponse: {
             roles: components["schemas"]["DatabaseRoleItem"][];
         };
+        ForeignKey: {
+            constraintName: string;
+            schema: string;
+            table: string;
+            columns: string[];
+            referencedSchema: string;
+            referencedTable: string;
+            referencedColumns: string[];
+        };
         GrantBypassRequest: {
             userId: components["schemas"]["UserId"];
         };
@@ -732,6 +741,11 @@ export interface components {
         };
         PermissionCatalogResponse: {
             permissions: string[];
+        };
+        PrimaryKey: {
+            schema: string;
+            table: string;
+            columns: string[];
         };
         QueryHistoryItem: {
             id: components["schemas"]["QueryLogId"];
@@ -778,6 +792,8 @@ export interface components {
         };
         SchemaTree: {
             schemas: components["schemas"]["SchemaInfo"][];
+            primaryKeys: components["schemas"]["PrimaryKey"][];
+            foreignKeys: components["schemas"]["ForeignKey"][];
         };
         SensitiveColumnId: unknown;
         SensitiveColumnItem: {
