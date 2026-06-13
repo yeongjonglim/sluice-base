@@ -89,7 +89,7 @@ internal static class SchemaEndpoints
                         )).ToList()
                 )).ToList();
 
-            return TypedResults.Ok(new SchemaTree(annotatedSchemas));
+            return TypedResults.Ok(new SchemaTree(annotatedSchemas, tree.PrimaryKeys, tree.ForeignKeys));
         }
         catch (InvalidOperationException ex)
         {

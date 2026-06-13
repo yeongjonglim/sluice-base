@@ -71,7 +71,7 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                 ]))
             .ToList();
 
-        return new SchemaTree(schemas);
+        return new SchemaTree(schemas, [], []);
     }
 
     public async Task<QueryData> ExecuteQueryAsync(string connectionString, string sql, CancellationToken ct)
