@@ -10,7 +10,6 @@ import {
   NavLink,
   Popover,
   ScrollArea,
-  Select,
   Skeleton,
   Stack,
   Table,
@@ -41,7 +40,8 @@ import { ApiError } from "@/api/client";
 import { exportToCsv } from "@/utils/csv.ts";
 import { SqlEditor } from "@/components/SqlEditor";
 import { useSessionState } from "@/utils/useSessionState";
-import { meQueryOptions, useCatalogServer, useExecuteQuery, useSchema } from "@/api/hooks";
+import { meQueryOptions, useExecuteQuery, useSchema } from "@/api/hooks";
+import { DatabaseSelect } from "@/components/DatabaseSelect";
 
 const noIndentKeymap = Prec.highest(
   keymap.of([
@@ -91,7 +91,6 @@ function resizeHandleStyle(orientation: "horizontal" | "vertical"): React.CSSPro
 
 function QueryPage() {
   const isMac = useOs({ getValueInEffect: false }) === "macos";
-  const servers = useCatalogServer();
   const [selectedDatabaseId, setSelectedDatabaseId] = useSessionState<string | null>(
     "sluice:query:db",
     null,
@@ -100,10 +99,6 @@ function QueryPage() {
   const [editorContent, setEditorContent] = useSessionState("sluice:query:editor", "");
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const executeQuery = useExecuteQuery();
-
-  const databaseOptions = (servers.data?.servers ?? []).flatMap((s) =>
-    s.databases.map((d) => ({ value: d.id, label: `${s.name} — ${d.displayName}` })),
-  );
 
   const handleTableClick = useCallback(
     (schemaName: string, tableName: string, columns: Array<{ name: string; isSensitive: boolean; isRestricted: boolean }>) => {
@@ -152,14 +147,9 @@ function QueryPage() {
     >
       <Panel defaultSize="20%" minSize="12%" style={{ overflow: "auto" }}>
         <Stack gap={0} p="xs">
-          <Select
-            placeholder="Select a database"
-            data={databaseOptions}
-            value={selectedDatabaseId}
-            onChange={setSelectedDatabaseId}
-            mb="xs"
-            size="sm"
-          />
+          <Box mb="xs">
+            <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
+          </Box>
           <SchemaSidebar schema={schema} onTableClick={handleTableClick} />
         </Stack>
       </Panel>
