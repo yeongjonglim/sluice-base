@@ -10,10 +10,14 @@ Users with `query:execute` on a database can already browse its schema (tree on 
 
 The exported DDL must match what an operator would get from pgAdmin's schema export — pgAdmin invokes `pg_dump` under the hood, so the only faithful approach is to invoke the **real `pg_dump --schema-only`** against the target database. A hand-rolled DDL emitter built from our introspected `SchemaTree` would never be byte-identical and would miss sequences, ownership, comments, and exact constraint/index syntax, so it is explicitly rejected.
 
+### Data-protection invariant (non-negotiable)
+
+`pg_dump` connects with the raw read credential and bypasses **every** SluiceBase protection layer — sensitive-column masking, query authorization, and any future row-based security. Therefore this feature must make it **structurally impossible to emit table data**: `--schema-only` is hard-coded server-side, is never a user-toggleable option, and the engine/endpoint accept no input that could cause data to be dumped (`--data-only`, `-a`, `--inserts`, `--column-inserts`, etc. are not representable). Because no row ever leaves, sensitive-column and row-based protections are out of scope for this feature *by construction* — the guarantee does not depend on any UI being correct.
+
 ### In scope
 
 - New method `ExportSchemaDdlAsync(connectionString, ct)` on `ITargetEngine` (Core), returning the DDL as a `string`.
-- `PostgresTargetEngine` (Api) implementation that shells out to `pg_dump --schema-only`.
+- `PostgresTargetEngine` (Api) implementation that shells out to `pg_dump` with a **fixed** flag set: `--schema-only --no-owner --no-privileges` (chosen for clean migration diffs).
 - New endpoint `GET /api/schema/{databaseId}/ddl` returning the DDL as a downloadable file, reusing the existing `GetSchema` authorization flow (per-database `query:execute` role, **read** credential).
 - An **"Export DDL"** button on the `/query/diagram` page header, next to the database selector.
 - `postgres-client` added to the Dockerfile runtime image so `pg_dump` is on `PATH`, with its major version matched to the provisioned Postgres server.
@@ -26,7 +30,7 @@ The exported DDL must match what an operator would get from pgAdmin's schema exp
 - A dedicated `schema:export` permission — v1 reuses `query:execute` (see §6).
 - Streaming very large dumps — the DDL is buffered as a `string`/byte array in v1 (see §7 risks).
 - Non-Postgres engines — no other `ITargetEngine` implementation exists in v1; each future engine implements its own dump.
-- Configurable `pg_dump` flags in the UI (e.g. `--no-owner`, `--no-privileges`) — v1 uses plain `--schema-only` to match pgAdmin defaults.
+- A pgAdmin-style **options modal** — v1 ships one button with the fixed flag set above. A later iteration may add an engine-neutral `SchemaExportOptions` record (e.g. `IncludeOwners`, `IncludePrivileges`, `Clean`, schema/table scoping) mapped to flags via a per-engine **allowlist** (never free-text flags), surfaced as a modal. Any such options must remain inside the data-protection invariant — no option can ever cause data to be emitted (see §1).
 - Additional object filtering — `pg_dump --schema-only` already emits views, functions, triggers, and sequences; the user explicitly wants these "additional definitions" included now rather than as a later add-on.
 
 ### Success criteria
@@ -51,9 +55,11 @@ Task<string> ExportSchemaDdlAsync(string connectionString, CancellationToken ct)
 
 1. Parse the read connection string with `NpgsqlConnectionStringBuilder` to extract `Host`, `Port`, `Database`, `Username`, `Password`.
 2. Start `pg_dump` via `System.Diagnostics.Process` with an **argument list** (`ProcessStartInfo.ArgumentList`), never a composed shell string:
-   - `--schema-only`
+   - `--schema-only --no-owner --no-privileges` (a fixed, hard-coded set in v1 — not derived from any caller input)
    - `-h <host> -p <port> -U <username> -d <database>`
    - `RedirectStandardOutput = true`, `RedirectStandardError = true`, `UseShellExecute = false`.
+
+   `--schema-only` is hard-coded here and is the enforcement point for the data-protection invariant (§1): the method exposes no parameter that could omit it or request data, so no `PostgresTargetEngine` caller — present or future — can cause table data to be dumped.
 3. Pass the password through `ProcessStartInfo.Environment["PGPASSWORD"]` — never as a command-line argument and never logged.
 4. Read stdout and stderr **asynchronously** (to avoid the pipe-buffer deadlock), and register the `CancellationToken` to kill the process on cancellation.
 5. On exit code `0`, return captured stdout. On non-zero exit, throw `InvalidOperationException(stderr)`.
@@ -112,6 +118,7 @@ v1 gates the export behind the **same** `query:execute` per-database role as vie
 
 - **Integration tests** (`tests/IntegrationTests`, real Postgres via Aspire — pass in CI per the local-OIDC caveat):
   - Authorized user exports the seeded DB; assert the body contains expected `CREATE TABLE` statements (and at least one non-table object, e.g. a sequence/view, to prove `--schema-only` fidelity).
+  - **Data-protection invariant:** assert the output contains **no** data statements (no `COPY ... FROM stdin`, no `INSERT INTO`) even for a seeded table that has rows — proving structure-only output.
   - User without `query:execute` on the target DB → `403`.
   - Unknown database id → `404`.
 - **Frontend (Vitest):** the "Export DDL" button is disabled with no DB selected; clicking with a DB selected calls the export function and triggers a download; the error path surfaces a message (API client mocked, download helper spied).
