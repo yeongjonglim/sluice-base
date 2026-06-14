@@ -131,7 +131,7 @@ function QueryPage() {
       }}
     >
       <Splitter.Pane defaultSize={20} min={12} style={{ overflow: "auto" }}>
-        <Stack gap={0} p="xs" miw={220}>
+        <Stack gap={0} p="xs" w="100%" miw="max-content">
           <Box mb="xs">
             <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
           </Box>
