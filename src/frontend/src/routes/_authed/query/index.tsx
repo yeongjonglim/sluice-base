@@ -123,12 +123,15 @@ function QueryPage() {
     <Splitter
       orientation="horizontal"
       h="calc(100vh - 44px)"
+      withHandle={false}
+      handleColor="var(--mantine-color-default-border)"
+      lineSize={4}
       style={{
         margin: "calc(-1 * var(--mantine-spacing-sm))",
       }}
     >
       <Splitter.Pane defaultSize={20} min={12} style={{ overflow: "auto" }}>
-        <Stack gap={0} p="xs">
+        <Stack gap={0} p="xs" miw={220}>
           <Box mb="xs">
             <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
           </Box>
@@ -137,7 +140,14 @@ function QueryPage() {
       </Splitter.Pane>
 
       <Splitter.Pane defaultSize={80} min={30} style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <Splitter orientation="vertical" h="100%" style={{ flex: 1 }}>
+        <Splitter
+          orientation="vertical"
+          h="100%"
+          withHandle={false}
+          handleColor="var(--mantine-color-default-border)"
+          lineSize={4}
+          style={{ flex: 1 }}
+        >
           <Splitter.Pane
             defaultSize={35}
             min={15}
@@ -423,6 +433,7 @@ function SchemaSidebar({
               }
               onClick={() => toggleSchema(s.name)}
               active={false}
+              styles={{ label: { whiteSpace: "nowrap" } }}
             />
             {schemaExpanded &&
               s.tables.map((t) => {
@@ -444,6 +455,7 @@ function SchemaSidebar({
                         onClick={() => toggleTable(tableKey)}
                         pl="lg"
                         active={false}
+                        styles={{ label: { whiteSpace: "nowrap" } }}
                       />
                       <Tooltip label="Append SELECT query" position="right" withArrow>
                         <Button
