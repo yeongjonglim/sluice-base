@@ -11,13 +11,13 @@ import {
   Popover,
   ScrollArea,
   Skeleton,
+  Splitter,
   Stack,
   Table,
   Text,
   Tooltip,
 } from "@mantine/core";
 import { useOs } from "@mantine/hooks";
-import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from "react-resizable-panels";
 import {
   IconChevronDown,
   IconChevronRight,
@@ -31,7 +31,7 @@ import {
   IconTable,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import React, { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
@@ -70,24 +70,6 @@ export const Route = createFileRoute("/_authed/query/")({
   },
   component: QueryPage,
 });
-
-function resizeHandleStyle(orientation: "horizontal" | "vertical"): React.CSSProperties {
-  return {
-    position: "relative",
-    background: "transparent",
-    ...(orientation === "vertical"
-      ? {
-          width: 4,
-          cursor: "col-resize",
-          borderLeft: "1px solid var(--mantine-color-default-border)",
-        }
-      : {
-          height: 4,
-          cursor: "row-resize",
-          borderTop: "1px solid var(--mantine-color-default-border)",
-        }),
-  };
-}
 
 function QueryPage() {
   const isMac = useOs({ getValueInEffect: false }) === "macos";
@@ -138,29 +120,27 @@ function QueryPage() {
   );
 
   return (
-    <PanelGroup
+    <Splitter
       orientation="horizontal"
+      h="calc(100vh - 44px)"
       style={{
         margin: "calc(-1 * var(--mantine-spacing-sm))",
-        height: "calc(100vh - 44px)",
       }}
     >
-      <Panel defaultSize="20%" minSize="12%" style={{ overflow: "auto" }}>
+      <Splitter.Pane defaultSize={20} min={12} style={{ overflow: "auto" }}>
         <Stack gap={0} p="xs">
           <Box mb="xs">
             <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
           </Box>
           <SchemaSidebar schema={schema} onTableClick={handleTableClick} />
         </Stack>
-      </Panel>
+      </Splitter.Pane>
 
-      <PanelResizeHandle style={resizeHandleStyle("vertical")} />
-
-      <Panel minSize="30%" style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-        <PanelGroup orientation="vertical">
-          <Panel
-            defaultSize="35%"
-            minSize="15%"
+      <Splitter.Pane defaultSize={80} min={30} style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+        <Splitter orientation="vertical" h="100%" style={{ flex: 1 }}>
+          <Splitter.Pane
+            defaultSize={35}
+            min={15}
             style={{ display: "flex", flexDirection: "column" }}
           >
             <Box
@@ -220,21 +200,19 @@ function QueryPage() {
                 )}
               </Group>
             </Box>
-          </Panel>
+          </Splitter.Pane>
 
-          <PanelResizeHandle style={resizeHandleStyle("horizontal")} />
-
-          <Panel minSize="15%" style={{ overflow: "hidden" }}>
+          <Splitter.Pane defaultSize={65} min={15} style={{ overflow: "hidden" }}>
             <QueryResults
               result={executeQuery.data ?? null}
               isPending={executeQuery.isPending}
               isError={executeQuery.isError}
               error={executeQuery.error}
             />
-          </Panel>
-        </PanelGroup>
-      </Panel>
-    </PanelGroup>
+          </Splitter.Pane>
+        </Splitter>
+      </Splitter.Pane>
+    </Splitter>
   );
 }
 
