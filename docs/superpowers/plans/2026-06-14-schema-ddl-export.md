@@ -17,74 +17,23 @@
 ## Background notes for the implementer
 
 - **`pg_dump` must be on PATH wherever the API process runs** (the runtime container, the CI test runner, and the local dev machine). Integration tests in `tests/IntegrationTests` invoke `pg_dump` on the *test host*, not in a container.
-- **Version rule:** `pg_dump` refuses to dump from a server whose major version is **newer** than the client; a client equal-or-newer than the server always works. Task 1 pins the target Postgres containers to major **17**; Tasks 2 install a `pg_dump` ≥ 17 in the Dockerfile and CI.
+- **`pg_dump` is forward-compatible:** a given `pg_dump` can dump from its own version and **all older** servers, but **not** a server newer than itself. The strategy is therefore "install the newest client available" — never pin/match to a server version. On the Alpine runtime image, newest = the latest major in that base image's repo (use the `postgresql-client` meta package); in CI we pull the truly-latest from PGDG. Both are forward-compatible with the Aspire-provisioned test Postgres, so they need not agree. If a user ever registers a target DB newer than the image's client, `pg_dump` exits non-zero with a clear message that the endpoint surfaces as `400` (graceful) — the fix is to keep the image's client current, not to coordinate versions in code.
 - **Per the project's local-OIDC caveat,** the full integration-test suite may not run on a local macOS/podman machine. Where a step says "run integration tests", verify the code **compiles** locally (`dotnet build`) and rely on CI for green tests. Do not block the plan on local integration-test execution.
 - **OpenAPI is generated at build:** `dotnet build src/SluiceBase.Api/SluiceBase.Api.csproj` regenerates `src/SluiceBase.Api/openapi.json` (via `Microsoft.Extensions.ApiDescription.Server`). CI fails if it is out of date. The frontend `npm run gen:api` regenerates `src/frontend/src/api/schema.ts` from that file.
 
 ---
 
-## Task 1: Pin target Postgres image tags
+## Task 1: Provide pg_dump in the Docker runtime image and CI
 
-Deterministically fix the dumped servers' major version so the `pg_dump` client version can be matched.
-
-**Files:**
-- Modify: `src/AppHost/Program.cs`
-
-- [ ] **Step 1: Pin the blue target Postgres image tag**
-
-In `src/AppHost/Program.cs`, find the `target-blue-pg` registration and add `.WithImageTag("17")`. The block becomes:
-
-```csharp
-var blueDbInstance = builder.AddPostgres("target-blue-pg")
-    .WithImageTag("17")
-    // Set the name of the default database to auto-create on container startup.
-    .WithEnvironment("POSTGRES_DB", appDbName)
-    // Mount the SQL scripts directory into the container so that the init scripts run.
-    .WithBindMount("seed/blue", "/docker-entrypoint-initdb.d")
-    .WithHostPort(55532)
-    .WithDataVolume();
-```
-
-- [ ] **Step 2: Pin the green target Postgres image tag**
-
-Apply the same `.WithImageTag("17")` to the `target-green-pg` registration:
-
-```csharp
-var greenDbInstance = builder.AddPostgres("target-green-pg")
-    .WithImageTag("17")
-    // Set the name of the default database to auto-create on container startup.
-    .WithEnvironment("POSTGRES_DB", appDbName)
-    // Mount the SQL scripts directory into the container so that the init scripts run.
-    .WithBindMount("seed/green", "/docker-entrypoint-initdb.d")
-    .WithHostPort(55533)
-    .WithDataVolume();
-```
-
-- [ ] **Step 3: Build the AppHost to verify it compiles**
-
-Run: `dotnet build src/AppHost/AppHost.csproj --configuration Debug`
-Expected: Build succeeded, 0 errors.
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add src/AppHost/Program.cs
-git commit -m "chore: pin target postgres images to major 17"
-```
-
----
-
-## Task 2: Provide pg_dump in the Docker runtime image and CI
-
-Install a `pg_dump` (≥ major 17) wherever the API and the integration tests run.
+Install the latest available `pg_dump` wherever the API and the integration tests run.
 
 **Files:**
 - Modify: `Dockerfile`
 - Modify: `.github/workflows/pr-checks.yml`
 
-- [ ] **Step 1: Add postgresql-client to the runtime image**
+- [ ] **Step 1: Add the Postgres client to the runtime image**
 
-In `Dockerfile`, change the runtime stage's `apk add` line to also install the Postgres client (Alpine's `postgresql17-client` package matches major 17). Replace:
+In `Dockerfile`, change the runtime stage's `apk add` line to also install the Postgres client. Use the `postgresql-client` meta package so the image always gets the newest major the Alpine base provides (no version pin to maintain). Replace:
 
 ```dockerfile
 RUN apk add --no-cache krb5-libs
@@ -93,24 +42,25 @@ RUN apk add --no-cache krb5-libs
 with:
 
 ```dockerfile
-# postgresql17-client provides pg_dump for the schema DDL export feature.
-# Keep the major version >= the Postgres servers being dumped (see AppHost image tags).
-RUN apk add --no-cache krb5-libs postgresql17-client
+# postgresql-client provides pg_dump for the schema DDL export feature.
+# The meta package tracks the newest major in the base image's repo; pg_dump is
+# forward-compatible, so a newer client can always dump older target servers.
+RUN apk add --no-cache krb5-libs postgresql-client
 ```
 
 - [ ] **Step 2: Verify the Docker image builds and pg_dump is present**
 
 Run: `docker build -t sluicebase-ddl-check . && docker run --rm --entrypoint pg_dump sluicebase-ddl-check --version`
-Expected: Image builds; prints `pg_dump (PostgreSQL) 17.x`.
+Expected: Image builds; prints `pg_dump (PostgreSQL) <version>`.
 
 (If Docker is unavailable locally, skip execution — CI's image build covers it. Do not block.)
 
-- [ ] **Step 3: Install pg_dump 17 in the CI backend job**
+- [ ] **Step 3: Install the latest pg_dump in the CI backend job**
 
-In `.github/workflows/pr-checks.yml`, in the `backend` job, add a step that installs the PostgreSQL 17 client from the PGDG apt repo **before** the "Run integration tests" step. Insert it immediately after the "Build" step:
+The `ubuntu-latest` runner ships an older `pg_dump` than the Aspire-provisioned Postgres, so the integration tests would fail to dump it. Install the latest client from PGDG. In `.github/workflows/pr-checks.yml`, in the `backend` job, add this step immediately after the "Build" step (it must run **before** "Run integration tests"):
 
 ```yaml
-      - name: Install PostgreSQL 17 client (pg_dump)
+      - name: Install latest PostgreSQL client (pg_dump)
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
           sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
@@ -119,21 +69,22 @@ In `.github/workflows/pr-checks.yml`, in the `backend` job, add a step that inst
           echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
             | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update
-          sudo apt-get install -y postgresql-client-17
-          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
-          /usr/lib/postgresql/17/bin/pg_dump --version
+          sudo apt-get install -y postgresql-client
+          pg_dump --version
 ```
+
+(The PGDG `postgresql-client` meta installs the newest `postgresql-client-NN`; `postgresql-client-common` provides the `/usr/bin/pg_dump` wrapper that selects the highest installed version, so no PATH edits are needed.)
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add Dockerfile .github/workflows/pr-checks.yml
-git commit -m "build: install pg_dump 17 in runtime image and CI"
+git commit -m "build: install latest pg_dump in runtime image and CI"
 ```
 
 ---
 
-## Task 3: Add `ExportSchemaDdlAsync` to the target engine
+## Task 2: Add `ExportSchemaDdlAsync` to the target engine
 
 **Files:**
 - Modify: `src/SluiceBase.Core/Targets/ITargetEngine.cs`
@@ -250,7 +201,7 @@ git commit -m "feat: add pg_dump-based schema DDL export to target engine"
 
 ---
 
-## Task 4: Add the `GET /api/schema/{databaseId}/ddl` endpoint
+## Task 3: Add the `GET /api/schema/{databaseId}/ddl` endpoint
 
 **Files:**
 - Modify: `src/SluiceBase.Api/Endpoints/SchemaEndpoint.cs`
@@ -407,7 +358,7 @@ git commit -m "feat: add schema DDL export endpoint"
 
 ---
 
-## Task 5: Frontend — download helper, export hook, and Diagram button
+## Task 4: Frontend — download helper, export hook, and Diagram button
 
 **Files:**
 - Create: `src/frontend/src/utils/download.ts`
@@ -420,7 +371,7 @@ git commit -m "feat: add schema DDL export endpoint"
 - [ ] **Step 1: Regenerate the frontend API types**
 
 Run: `cd src/frontend && npm run gen:api`
-Expected: `src/frontend/src/api/schema.ts` updates to include the `/api/schema/{databaseId}/ddl` path. (This must run after Task 4's `openapi.json` regeneration.)
+Expected: `src/frontend/src/api/schema.ts` updates to include the `/api/schema/{databaseId}/ddl` path. (This must run after Task 3's `openapi.json` regeneration.)
 
 - [ ] **Step 2: Write the failing download-helper test**
 
@@ -671,7 +622,7 @@ git commit -m "feat: add Export DDL button to schema diagram page"
 
 ---
 
-## Task 6: Final verification
+## Task 5: Final verification
 
 - [ ] **Step 1: Full backend build**
 
@@ -681,12 +632,12 @@ Expected: Build succeeded, 0 warnings/errors.
 - [ ] **Step 2: Confirm OpenAPI is current (mirrors the CI gate)**
 
 Run: `dotnet build src/SluiceBase.Api/SluiceBase.Api.csproj --configuration Debug && git diff --exit-code -- src/SluiceBase.Api/openapi.json`
-Expected: exit code 0 (no diff) — `openapi.json` was already committed in Task 4.
+Expected: exit code 0 (no diff) — `openapi.json` was already committed in Task 3.
 
 - [ ] **Step 3: Confirm the frontend generated types are current**
 
 Run: `cd src/frontend && npm run gen:api && git diff --exit-code -- src/api/schema.ts`
-Expected: exit code 0 (no diff) — already committed in Task 5.
+Expected: exit code 0 (no diff) — already committed in Task 4.
 
 - [ ] **Step 4: Push and open the PR**
 
@@ -698,7 +649,7 @@ gh pr create --title "Schema DDL export" --body "$(cat <<'EOF'
 - Add `GET /api/schema/{databaseId}/ddl` endpoint, reusing the schema-view `query:execute` authorization and read credential
 - Add an "Export DDL" button to the `/query/diagram` page
 - Hard-enforce `--schema-only` server-side so no table data can ever be exported (sensitive-column / row-based protections out of scope by construction)
-- Pin target Postgres images to major 17; install `pg_dump` 17 in the Docker runtime image and CI
+- Install the latest `pg_dump` in the Docker runtime image and CI (forward-compatible with older target servers; no version pinning)
 EOF
 )"
 ```
@@ -708,15 +659,15 @@ EOF
 ## Self-Review
 
 **Spec coverage:**
-- DDL via real `pg_dump` (spec §1, §2) → Task 3.
-- Fixed `--schema-only --no-owner --no-privileges` (spec §2) → Task 3, Step 4.
-- Data-protection invariant, structurally enforced + tested (spec §1, §8) → Task 3 (hard-coded flag) + Tasks 3/4 tests asserting no `COPY`/`INSERT`.
-- Endpoint with `query:execute` auth, read credential, `404`/`403`/`400`, file response (spec §3, §6) → Task 4.
-- Diagram-page "Export DDL" button, disabled with no DB, loading state, error surfaced, filename from display name (spec §4, success criteria) → Task 5.
-- `postgres-client` in Dockerfile + version matching (spec §5) → Tasks 1 & 2.
-- Integration tests (export content, `403`, `404`) + frontend tests (spec §8) → Tasks 3, 4, 5. Note: frontend coverage is at hook + util level (matching the repo's existing test style) rather than a full route render; the disabled/loading wiring is covered by TypeScript + lint/build. This is a deliberate, minor deviation from spec §8's phrasing.
-- `401` for anonymous is also covered (Task 4) for parity with existing schema tests.
+- DDL via real `pg_dump` (spec §1, §2) → Task 2.
+- Fixed `--schema-only --no-owner --no-privileges` (spec §2) → Task 2, Step 4.
+- Data-protection invariant, structurally enforced + tested (spec §1, §8) → Task 2 (hard-coded flag) + Tasks 2/3 tests asserting no `COPY`/`INSERT`.
+- Endpoint with `query:execute` auth, read credential, `404`/`403`/`400`, file response (spec §3, §6) → Task 3.
+- Diagram-page "Export DDL" button, disabled with no DB, loading state, error surfaced, filename from display name (spec §4, success criteria) → Task 4.
+- `pg_dump` available in Dockerfile + CI (spec §5) → Task 1. Note: the spec's version-pinning/version-matching language (§5) is superseded — `pg_dump` is forward-compatible, so the plan installs the latest available client and does **not** pin the server. See §"Background notes".
+- Integration tests (export content, `403`, `404`) + frontend tests (spec §8) → Tasks 2, 3, 4. Note: frontend coverage is at hook + util level (matching the repo's existing test style) rather than a full route render; the disabled/loading wiring is covered by TypeScript + lint/build. This is a deliberate, minor deviation from spec §8's phrasing.
+- `401` for anonymous is also covered (Task 3) for parity with existing schema tests.
 
 **Placeholder scan:** No TBD/TODO/"handle errors"/"similar to" placeholders; every code and command step contains concrete content.
 
-**Type consistency:** `ExportSchemaDdlAsync(string, CancellationToken) → Task<string>` is identical across the interface (Task 3 Step 3), the implementation (Step 4), and both callers (engine test Step 1, endpoint Step 3). The hook mutation variables `{ databaseId, filename }` match between the hook (Task 5 Step 8), its test (Step 6), and the page caller (Step 10). `downloadTextFile(content, filename, mimeType)` is identical across helper (Step 4), its test (Step 2), hook (Step 8), and hook test (Step 6).
+**Type consistency:** `ExportSchemaDdlAsync(string, CancellationToken) → Task<string>` is identical across the interface (Task 2 Step 3), the implementation (Step 4), and both callers (engine test Step 1, endpoint Step 3). The hook mutation variables `{ databaseId, filename }` match between the hook (Task 4 Step 8), its test (Step 6), and the page caller (Step 10). `downloadTextFile(content, filename, mimeType)` is identical across helper (Step 4), its test (Step 2), hook (Step 8), and hook test (Step 6).

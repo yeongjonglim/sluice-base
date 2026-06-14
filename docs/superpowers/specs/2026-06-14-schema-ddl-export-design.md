@@ -100,7 +100,9 @@ The API client/`hooks.ts` gains an `exportSchemaDdl(databaseId)` function return
 ## 5. Deployment
 
 - Add `postgres-client` to the runtime stage of the **Dockerfile** so `pg_dump` is available on `PATH`.
-- **Version constraint:** `pg_dump` refuses to dump from a server whose major version is newer than the client. The installed `postgres-client` major version **must be ≥** the Postgres major version the Aspire AppHost provisions. The implementation plan will read the provisioned version from the AppHost and pin the client package to match (or a known-compatible newer major).
+- **Always install the latest available client; do not pin or version-match.** `pg_dump` is forward-compatible: a given client dumps its own version and **all older** servers, but not a server newer than itself. Installing the newest client therefore maximizes the range of target databases supported with zero version-coordination overhead. On the Alpine runtime image, "latest" is the newest major the base image's repo provides (the `postgres-client` meta package); in CI, the latest from PGDG. They need not agree — both are forward-compatible with the (older) servers being dumped.
+- **No server pinning required.** Earlier drafts proposed pinning the Aspire target Postgres images and matching the client major to them; that is unnecessary given forward-compatibility and has been dropped.
+- **Newer-server caveat:** if an operator registers a target database **newer** than the image's `pg_dump`, the dump fails cleanly — `pg_dump` exits non-zero and the endpoint returns `400` with the message. The remedy is to keep the image's client current (rebuild on a newer base), not to change code.
 - **Local dev:** running the feature locally requires `pg_dump` on the developer's `PATH` (e.g. via Homebrew `libpq`/`postgresql`). This is a documented dev prerequisite, not a code dependency.
 
 ## 6. Authorization decision
@@ -109,10 +111,10 @@ v1 gates the export behind the **same** `query:execute` per-database role as vie
 
 ## 7. Risks & mitigations
 
-- **`pg_dump` not installed / wrong version.** Mitigated by the Dockerfile install and version-matching (§5); a missing binary surfaces as a `400` with the process error, and a documented dev prerequisite covers local runs.
+- **`pg_dump` not installed.** Mitigated by the Dockerfile install (§5); a missing binary surfaces as an error, and a documented dev prerequisite covers local runs.
 - **Large schemas / slow dumps.** v1 buffers the whole dump in memory and has no explicit timeout beyond request cancellation. Acceptable for the expected schema sizes; streaming and timeouts are deferred.
 - **Credential handling.** The password is passed only via `PGPASSWORD` in the child process environment and is never logged or placed on the command line, eliminating the shell-injection and process-listing exposure.
-- **Server version drift over time.** If the managed Postgres major version is later bumped, the `postgres-client` pin must be bumped in lockstep; called out in §5 and to be noted near the Dockerfile install.
+- **Target server newer than the client.** Because the client is the latest available and not pinned, this is rare; when it happens the dump fails cleanly with a `400` (§5). Remedy: rebuild the image on a base with a newer `pg_dump`.
 
 ## 8. Testing
 
