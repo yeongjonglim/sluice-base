@@ -689,6 +689,13 @@ export interface components {
         DatabaseRoleListResponse: {
             roles: components["schemas"]["DatabaseRoleItem"][];
         };
+        ForeignKey: {
+            constraintName: string;
+            columns: string[];
+            referencedSchema: string;
+            referencedTable: string;
+            referencedColumns: string[];
+        };
         GrantBypassRequest: {
             userId: components["schemas"]["UserId"];
         };
@@ -732,6 +739,9 @@ export interface components {
         };
         PermissionCatalogResponse: {
             permissions: string[];
+        };
+        PrimaryKey: {
+            columns: string[];
         };
         QueryHistoryItem: {
             id: components["schemas"]["QueryLogId"];
@@ -820,6 +830,8 @@ export interface components {
         TableInfo: {
             name: string;
             columns: components["schemas"]["ColumnInfo"][];
+            primaryKey: null | components["schemas"]["PrimaryKey"];
+            foreignKeys: components["schemas"]["ForeignKey"][];
         };
         TestConnectionResponse: {
             read: components["schemas"]["ConnectivityResult"];

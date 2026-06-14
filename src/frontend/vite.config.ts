@@ -34,6 +34,7 @@ export default defineConfig({
             if (id.includes("@codemirror")) return "vendor/codemirror";
             if (id.includes("@uiw")) return "vendor/codemirror-ui";
             if (id.includes("@tabler")) return "vendor/icons";
+            if (id.includes("@xyflow") || id.includes("dagre")) return "vendor/erd";
           }
         },
       },

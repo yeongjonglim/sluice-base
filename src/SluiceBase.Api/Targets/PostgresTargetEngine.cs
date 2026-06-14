@@ -34,32 +34,113 @@ internal sealed class PostgresTargetEngine : ITargetEngine
 
     public async Task<SchemaTree> GetSchemaAsync(string connectionString, CancellationToken ct)
     {
-        const string sql = """
+        const string columnsSql = """
                            SELECT table_schema, table_name, column_name, data_type, is_nullable
                            FROM information_schema.columns
                            WHERE table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
                            ORDER BY table_schema, table_name, ordinal_position;
                            """;
 
+        // Constraints are read from pg_catalog, not information_schema: information_schema's
+        // table_constraints / referential_constraints views only expose constraints on tables
+        // where the current role has a privilege OTHER THAN SELECT, so the read-only credential
+        // used for introspection sees none of them. pg_catalog is not privilege-gated this way.
+        const string primaryKeysSql = """
+                           SELECT n.nspname, c.relname, a.attname
+                           FROM pg_constraint con
+                           JOIN pg_class c ON c.oid = con.conrelid
+                           JOIN pg_namespace n ON n.oid = c.relnamespace
+                           JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY (con.conkey)
+                           WHERE con.contype = 'p'
+                             AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY n.nspname, c.relname, array_position(con.conkey, a.attnum);
+                           """;
+
+        // unnest(conkey, confkey) WITH ORDINALITY pairs each FK column with its referenced
+        // column by position, so composite foreign keys map correctly.
+        const string foreignKeysSql = """
+                           SELECT
+                               con.conname,
+                               n.nspname, c.relname, att.attname,
+                               rn.nspname AS ref_schema,
+                               rc.relname AS ref_table,
+                               ratt.attname AS ref_column
+                           FROM pg_constraint con
+                           JOIN pg_class c ON c.oid = con.conrelid
+                           JOIN pg_namespace n ON n.oid = c.relnamespace
+                           JOIN pg_class rc ON rc.oid = con.confrelid
+                           JOIN pg_namespace rn ON rn.oid = rc.relnamespace
+                           JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(conkey, confkey, ord) ON true
+                           JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = k.conkey
+                           JOIN pg_attribute ratt ON ratt.attrelid = con.confrelid AND ratt.attnum = k.confkey
+                           WHERE con.contype = 'f'
+                             AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY con.conname, k.ord;
+                           """;
+
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
         await using var connection = await dataSource.OpenConnectionAsync(ct);
 
-        await using var command = new NpgsqlCommand(sql, connection);
-        await using var reader = await command.ExecuteReaderAsync(ct);
-
-        var rows = new List<(string Schema, string Table, string Column, string DataType, bool IsNullable)>();
-        while (await reader.ReadAsync(ct))
+        // Columns
+        var columnRows = new List<(string Schema, string Table, string Column, string DataType, bool IsNullable)>();
+        await using (var command = new NpgsqlCommand(columnsSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
         {
-            rows.Add((
-                reader.GetString(0),
-                reader.GetString(1),
-                reader.GetString(2),
-                reader.GetString(3),
-                reader.GetString(4) == "YES"
-            ));
+            while (await reader.ReadAsync(ct))
+            {
+                columnRows.Add((
+                    reader.GetString(0),
+                    reader.GetString(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetString(4) == "YES"));
+            }
         }
 
-        var schemas = rows
+        // Primary keys
+        var pkRows = new List<(string Schema, string Table, string Column)>();
+        await using (var command = new NpgsqlCommand(primaryKeysSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                pkRows.Add((reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+            }
+        }
+
+        // Foreign keys
+        var fkRows = new List<(string Constraint, string Schema, string Table, string Column, string RefSchema, string RefTable, string RefColumn)>();
+        await using (var command = new NpgsqlCommand(foreignKeysSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                fkRows.Add((
+                    reader.GetString(0), reader.GetString(1), reader.GetString(2), reader.GetString(3),
+                    reader.GetString(4), reader.GetString(5), reader.GetString(6)));
+            }
+        }
+
+        var primaryKeyByTable = pkRows
+            .GroupBy(r => (r.Schema, r.Table))
+            .ToDictionary(g => g.Key, g => new PrimaryKey([.. g.Select(r => r.Column)]));
+
+        var foreignKeysByTable = fkRows
+            .GroupBy(r => r.Constraint)
+            .Select(g => (
+                Owner: (g.First().Schema, g.First().Table),
+                ForeignKey: new ForeignKey(
+                    g.Key,
+                    [.. g.Select(r => r.Column)],
+                    g.First().RefSchema,
+                    g.First().RefTable,
+                    [.. g.Select(r => r.RefColumn)])))
+            .GroupBy(x => x.Owner)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<ForeignKey>)[.. g.Select(x => x.ForeignKey)]);
+
+        var schemas = columnRows
             .GroupBy(r => r.Schema)
             .Select(sg => new SchemaInfo(
                 sg.Key,
@@ -67,7 +148,9 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                     .. sg.GroupBy(r => r.Table)
                         .Select(tg => new TableInfo(
                             tg.Key,
-                            [.. tg.Select(c => new ColumnInfo(c.Column, c.DataType, c.IsNullable))]))
+                            [.. tg.Select(c => new ColumnInfo(c.Column, c.DataType, c.IsNullable))],
+                            primaryKeyByTable.GetValueOrDefault((sg.Key, tg.Key)),
+                            foreignKeysByTable.GetValueOrDefault((sg.Key, tg.Key), [])))
                 ]))
             .ToList();
 

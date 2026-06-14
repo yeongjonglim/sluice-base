@@ -27,7 +27,17 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         return req;
     }
 
-    private async Task<(AuthenticatedSession session, string xsrf, DatabaseId databaseId)> AuthorizedSessionWithBlueServerAsync(
+    private Task<(AuthenticatedSession session, string xsrf, DatabaseId databaseId)> AuthorizedSessionWithBlueServerAsync(
+        CancellationToken ct)
+        => AuthorizedSessionForServerAsync("blue-appdb", "reader_blue", ct);
+
+    private Task<(AuthenticatedSession session, string xsrf, DatabaseId databaseId)> AuthorizedSessionWithGreenServerAsync(
+        CancellationToken ct)
+        => AuthorizedSessionForServerAsync("green-appdb", "reader_green", ct);
+
+    private async Task<(AuthenticatedSession session, string xsrf, DatabaseId databaseId)> AuthorizedSessionForServerAsync(
+        string connectionResource,
+        string readerRole,
         CancellationToken ct)
     {
         var session = await LoginHelper.SignInAsync("alice", "dev", ct);
@@ -41,19 +51,19 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
             new { permission = Permissions.ServerManage });
         (await session.Client.SendAsync(grantServer, ct)).EnsureSuccessStatusCode();
 
-        var blueConnStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
-        var blueBuilder = new NpgsqlConnectionStringBuilder(blueConnStr!);
+        var targetConnStr = await factory.InitialisedApp.GetConnectionStringAsync(connectionResource, ct);
+        var targetBuilder = new NpgsqlConnectionStringBuilder(targetConnStr!);
 
         var serverName = $"sch-{Guid.NewGuid():N}"[..24];
         using var sReq = MutationRequest(HttpMethod.Post, "/api/server", xsrf,
-            new ServerEndpoints.CreateServerRequest(serverName, "postgres", blueBuilder.Host!, blueBuilder.Port));
+            new ServerEndpoints.CreateServerRequest(serverName, "postgres", targetBuilder.Host!, targetBuilder.Port));
         var sResp = await session.Client.SendAsync(sReq, ct);
         sResp.EnsureSuccessStatusCode();
         var server = (await sResp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct))!;
 
         using var rcReq = MutationRequest(HttpMethod.Post,
             $"/api/server/{server.Id}/credential", xsrf,
-            new CredentialEndpoints.AddCredentialRequest("Read-only role", "reader_blue", "reader_blue"));
+            new CredentialEndpoints.AddCredentialRequest("Read-only role", readerRole, readerRole));
         var rcResp = await session.Client.SendAsync(rcReq, ct);
         rcResp.EnsureSuccessStatusCode();
         var readCred = (await rcResp.Content.ReadFromJsonAsync<CredentialEndpoints.CredentialResponse>(ct))!;
@@ -90,6 +100,100 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         var usersTable = publicSchema.Tables.Single(t => t.Name == "users");
         Assert.NotEmpty(usersTable.Columns);
         Assert.All(usersTable.Columns, c => Assert.NotEmpty(c.DataType));
+    }
+
+    [Fact]
+    public async Task GetSchema_IncludesPrimaryKeys_ForBlueDatabase()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var tree = await session.Client.GetFromJsonAsync<SchemaTree>($"/api/schema/{databaseId}", ct);
+
+        Assert.NotNull(tree);
+        var usersTable = tree.Schemas
+            .Single(s => s.Name == "public").Tables
+            .Single(t => t.Name == "users");
+        Assert.NotNull(usersTable.PrimaryKey);
+        Assert.Equal(["id"], usersTable.PrimaryKey.Columns);
+    }
+
+    [Fact]
+    public async Task GetSchema_IncludesForeignKeys_ForBlueDatabase()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var tree = await session.Client.GetFromJsonAsync<SchemaTree>($"/api/schema/{databaseId}", ct);
+
+        Assert.NotNull(tree);
+        var ordersTable = tree.Schemas
+            .Single(s => s.Name == "public").Tables
+            .Single(t => t.Name == "orders");
+        var ordersFk = Assert.Single(
+            ordersTable.ForeignKeys,
+            fk => fk.Columns.Contains("user_id"));
+        Assert.Equal("public", ordersFk.ReferencedSchema);
+        Assert.Equal("users", ordersFk.ReferencedTable);
+        Assert.Equal(["id"], ordersFk.ReferencedColumns);
+    }
+
+    [Fact]
+    public async Task GetSchema_IncludesMultipleForeignKeys_ForTransactionsTable()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var tree = await session.Client.GetFromJsonAsync<SchemaTree>($"/api/schema/{databaseId}", ct);
+
+        Assert.NotNull(tree);
+        var transactions = tree.Schemas
+            .Single(s => s.Name == "public").Tables
+            .Single(t => t.Name == "transactions");
+        Assert.Equal(2, transactions.ForeignKeys.Count);
+        Assert.Contains(transactions.ForeignKeys,
+            fk => fk.Columns.SequenceEqual(["user_id"]) && fk.ReferencedTable == "users");
+        Assert.Contains(transactions.ForeignKeys,
+            fk => fk.Columns.SequenceEqual(["product_id"]) && fk.ReferencedTable == "products");
+    }
+
+    [Fact]
+    public async Task GetSchema_IncludesCompositePrimaryKey_ForGreenDatabase()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, _, databaseId) = await AuthorizedSessionWithGreenServerAsync(ct);
+        using var _ = session;
+
+        var tree = await session.Client.GetFromJsonAsync<SchemaTree>($"/api/schema/{databaseId}", ct);
+
+        Assert.NotNull(tree);
+        var phases = tree.Schemas
+            .Single(s => s.Name == "public").Tables
+            .Single(t => t.Name == "project_phases");
+        Assert.NotNull(phases.PrimaryKey);
+        Assert.Equal(["project_id", "phase_no"], phases.PrimaryKey.Columns);
+    }
+
+    [Fact]
+    public async Task GetSchema_IncludesCompositeForeignKey_ForGreenDatabase()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, _, databaseId) = await AuthorizedSessionWithGreenServerAsync(ct);
+        using var _ = session;
+
+        var tree = await session.Client.GetFromJsonAsync<SchemaTree>($"/api/schema/{databaseId}", ct);
+
+        Assert.NotNull(tree);
+        var tasks = tree.Schemas
+            .Single(s => s.Name == "public").Tables
+            .Single(t => t.Name == "phase_tasks");
+        var fk = Assert.Single(tasks.ForeignKeys);
+        Assert.Equal(["project_id", "phase_no"], fk.Columns);
+        Assert.Equal("project_phases", fk.ReferencedTable);
+        Assert.Equal(["project_id", "phase_no"], fk.ReferencedColumns);
     }
 
     [Fact]

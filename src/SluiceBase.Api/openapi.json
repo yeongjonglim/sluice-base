@@ -2071,6 +2071,39 @@
           }
         }
       },
+      "ForeignKey": {
+        "required": [
+          "constraintName",
+          "columns",
+          "referencedSchema",
+          "referencedTable",
+          "referencedColumns"
+        ],
+        "type": "object",
+        "properties": {
+          "constraintName": {
+            "type": "string"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "referencedSchema": {
+            "type": "string"
+          },
+          "referencedTable": {
+            "type": "string"
+          },
+          "referencedColumns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "GrantBypassRequest": {
         "required": [
           "userId"
@@ -2258,6 +2291,20 @@
         "type": "object",
         "properties": {
           "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "PrimaryKey": {
+        "required": [
+          "columns"
+        ],
+        "type": "object",
+        "properties": {
+          "columns": {
             "type": "array",
             "items": {
               "type": "string"
@@ -2658,7 +2705,9 @@
       "TableInfo": {
         "required": [
           "name",
-          "columns"
+          "columns",
+          "primaryKey",
+          "foreignKeys"
         ],
         "type": "object",
         "properties": {
@@ -2669,6 +2718,22 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ColumnInfo"
+            }
+          },
+          "primaryKey": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PrimaryKey"
+              }
+            ]
+          },
+          "foreignKeys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForeignKey"
             }
           }
         }

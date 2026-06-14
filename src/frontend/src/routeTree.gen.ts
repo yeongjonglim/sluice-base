@@ -20,6 +20,7 @@ import { Route as AuthedQueryIndexRouteImport } from './routes/_authed/query/ind
 import { Route as AuthedUpdateNewRouteImport } from './routes/_authed/update/new'
 import { Route as AuthedUpdateIdRouteImport } from './routes/_authed/update/$id'
 import { Route as AuthedQueryHistoryRouteImport } from './routes/_authed/query/history'
+import { Route as AuthedQueryDiagramRouteImport } from './routes/_authed/query/diagram'
 
 const AuthedRoute = AuthedRouteImport.update({
   id: '/_authed',
@@ -75,6 +76,11 @@ const AuthedQueryHistoryRoute = AuthedQueryHistoryRouteImport.update({
   path: '/query/history',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedQueryDiagramRoute = AuthedQueryDiagramRouteImport.update({
+  id: '/query/diagram',
+  path: '/query/diagram',
+  getParentRoute: () => AuthedRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
@@ -82,6 +88,7 @@ export interface FileRoutesByFullPath {
   '/health': typeof AuthedHealthRoute
   '/permission': typeof AuthedPermissionRoute
   '/server': typeof AuthedServerRoute
+  '/query/diagram': typeof AuthedQueryDiagramRoute
   '/query/history': typeof AuthedQueryHistoryRoute
   '/update/$id': typeof AuthedUpdateIdRoute
   '/update/new': typeof AuthedUpdateNewRoute
@@ -94,6 +101,7 @@ export interface FileRoutesByTo {
   '/permission': typeof AuthedPermissionRoute
   '/server': typeof AuthedServerRoute
   '/': typeof AuthedIndexRoute
+  '/query/diagram': typeof AuthedQueryDiagramRoute
   '/query/history': typeof AuthedQueryHistoryRoute
   '/update/$id': typeof AuthedUpdateIdRoute
   '/update/new': typeof AuthedUpdateNewRoute
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   '/_authed/permission': typeof AuthedPermissionRoute
   '/_authed/server': typeof AuthedServerRoute
   '/_authed/': typeof AuthedIndexRoute
+  '/_authed/query/diagram': typeof AuthedQueryDiagramRoute
   '/_authed/query/history': typeof AuthedQueryHistoryRoute
   '/_authed/update/$id': typeof AuthedUpdateIdRoute
   '/_authed/update/new': typeof AuthedUpdateNewRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | '/health'
     | '/permission'
     | '/server'
+    | '/query/diagram'
     | '/query/history'
     | '/update/$id'
     | '/update/new'
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
     | '/permission'
     | '/server'
     | '/'
+    | '/query/diagram'
     | '/query/history'
     | '/update/$id'
     | '/update/new'
@@ -147,6 +158,7 @@ export interface FileRouteTypes {
     | '/_authed/permission'
     | '/_authed/server'
     | '/_authed/'
+    | '/_authed/query/diagram'
     | '/_authed/query/history'
     | '/_authed/update/$id'
     | '/_authed/update/new'
@@ -237,6 +249,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedQueryHistoryRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/query/diagram': {
+      id: '/_authed/query/diagram'
+      path: '/query/diagram'
+      fullPath: '/query/diagram'
+      preLoaderRoute: typeof AuthedQueryDiagramRouteImport
+      parentRoute: typeof AuthedRoute
+    }
   }
 }
 
@@ -246,6 +265,7 @@ interface AuthedRouteChildren {
   AuthedPermissionRoute: typeof AuthedPermissionRoute
   AuthedServerRoute: typeof AuthedServerRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
+  AuthedQueryDiagramRoute: typeof AuthedQueryDiagramRoute
   AuthedQueryHistoryRoute: typeof AuthedQueryHistoryRoute
   AuthedUpdateIdRoute: typeof AuthedUpdateIdRoute
   AuthedUpdateNewRoute: typeof AuthedUpdateNewRoute
@@ -259,6 +279,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedPermissionRoute: AuthedPermissionRoute,
   AuthedServerRoute: AuthedServerRoute,
   AuthedIndexRoute: AuthedIndexRoute,
+  AuthedQueryDiagramRoute: AuthedQueryDiagramRoute,
   AuthedQueryHistoryRoute: AuthedQueryHistoryRoute,
   AuthedUpdateIdRoute: AuthedUpdateIdRoute,
   AuthedUpdateNewRoute: AuthedUpdateNewRoute,

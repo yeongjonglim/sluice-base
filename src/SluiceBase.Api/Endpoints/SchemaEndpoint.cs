@@ -85,7 +85,9 @@ internal static class SchemaEndpoints
                                     c.Name, c.DataType, c.IsNullable,
                                     sensitiveKeys.Contains(key),
                                     restrictedKeys.Contains(key));
-                            }).ToList()
+                            }).ToList(),
+                            t.PrimaryKey,
+                            t.ForeignKeys
                         )).ToList()
                 )).ToList();
 
