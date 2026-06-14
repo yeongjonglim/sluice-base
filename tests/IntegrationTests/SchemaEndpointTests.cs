@@ -102,10 +102,11 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         var tree = await session.Client.GetFromJsonAsync<SchemaTree>($"/api/schema/{databaseId}", ct);
 
         Assert.NotNull(tree);
-        var usersPk = Assert.Single(
-            tree.PrimaryKeys,
-            pk => pk.Schema == "public" && pk.Table == "users");
-        Assert.Equal(["id"], usersPk.Columns);
+        var usersTable = tree.Schemas
+            .Single(s => s.Name == "public").Tables
+            .Single(t => t.Name == "users");
+        Assert.NotNull(usersTable.PrimaryKey);
+        Assert.Equal(["id"], usersTable.PrimaryKey.Columns);
     }
 
     [Fact]
@@ -118,10 +119,12 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         var tree = await session.Client.GetFromJsonAsync<SchemaTree>($"/api/schema/{databaseId}", ct);
 
         Assert.NotNull(tree);
+        var ordersTable = tree.Schemas
+            .Single(s => s.Name == "public").Tables
+            .Single(t => t.Name == "orders");
         var ordersFk = Assert.Single(
-            tree.ForeignKeys,
-            fk => fk.Schema == "public" && fk.Table == "orders"
-                  && fk.Columns.Contains("user_id"));
+            ordersTable.ForeignKeys,
+            fk => fk.Columns.Contains("user_id"));
         Assert.Equal("public", ordersFk.ReferencedSchema);
         Assert.Equal("users", ordersFk.ReferencedTable);
         Assert.Equal(["id"], ordersFk.ReferencedColumns);

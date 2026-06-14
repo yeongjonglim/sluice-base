@@ -2074,8 +2074,6 @@
       "ForeignKey": {
         "required": [
           "constraintName",
-          "schema",
-          "table",
           "columns",
           "referencedSchema",
           "referencedTable",
@@ -2084,12 +2082,6 @@
         "type": "object",
         "properties": {
           "constraintName": {
-            "type": "string"
-          },
-          "schema": {
-            "type": "string"
-          },
-          "table": {
             "type": "string"
           },
           "columns": {
@@ -2308,18 +2300,10 @@
       },
       "PrimaryKey": {
         "required": [
-          "schema",
-          "table",
           "columns"
         ],
         "type": "object",
         "properties": {
-          "schema": {
-            "type": "string"
-          },
-          "table": {
-            "type": "string"
-          },
           "columns": {
             "type": "array",
             "items": {
@@ -2551,9 +2535,7 @@
       },
       "SchemaTree": {
         "required": [
-          "schemas",
-          "primaryKeys",
-          "foreignKeys"
+          "schemas"
         ],
         "type": "object",
         "properties": {
@@ -2561,18 +2543,6 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SchemaInfo"
-            }
-          },
-          "primaryKeys": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PrimaryKey"
-            }
-          },
-          "foreignKeys": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ForeignKey"
             }
           }
         }
@@ -2735,7 +2705,9 @@
       "TableInfo": {
         "required": [
           "name",
-          "columns"
+          "columns",
+          "primaryKey",
+          "foreignKeys"
         ],
         "type": "object",
         "properties": {
@@ -2746,6 +2718,22 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ColumnInfo"
+            }
+          },
+          "primaryKey": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/PrimaryKey"
+              }
+            ]
+          },
+          "foreignKeys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ForeignKey"
             }
           }
         }

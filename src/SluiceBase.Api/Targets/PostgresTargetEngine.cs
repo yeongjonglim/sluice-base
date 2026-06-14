@@ -118,6 +118,25 @@ internal sealed class PostgresTargetEngine : ITargetEngine
             }
         }
 
+        var primaryKeyByTable = pkRows
+            .GroupBy(r => (r.Schema, r.Table))
+            .ToDictionary(g => g.Key, g => new PrimaryKey([.. g.Select(r => r.Column)]));
+
+        var foreignKeysByTable = fkRows
+            .GroupBy(r => r.Constraint)
+            .Select(g => (
+                Owner: (g.First().Schema, g.First().Table),
+                ForeignKey: new ForeignKey(
+                    g.Key,
+                    [.. g.Select(r => r.Column)],
+                    g.First().RefSchema,
+                    g.First().RefTable,
+                    [.. g.Select(r => r.RefColumn)])))
+            .GroupBy(x => x.Owner)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<ForeignKey>)[.. g.Select(x => x.ForeignKey)]);
+
         var schemas = columnRows
             .GroupBy(r => r.Schema)
             .Select(sg => new SchemaInfo(
@@ -126,28 +145,13 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                     .. sg.GroupBy(r => r.Table)
                         .Select(tg => new TableInfo(
                             tg.Key,
-                            [.. tg.Select(c => new ColumnInfo(c.Column, c.DataType, c.IsNullable))]))
+                            [.. tg.Select(c => new ColumnInfo(c.Column, c.DataType, c.IsNullable))],
+                            primaryKeyByTable.GetValueOrDefault((sg.Key, tg.Key)),
+                            foreignKeysByTable.GetValueOrDefault((sg.Key, tg.Key), [])))
                 ]))
             .ToList();
 
-        var primaryKeys = pkRows
-            .GroupBy(r => (r.Schema, r.Table))
-            .Select(g => new PrimaryKey(g.Key.Schema, g.Key.Table, [.. g.Select(r => r.Column)]))
-            .ToList();
-
-        var foreignKeys = fkRows
-            .GroupBy(r => r.Constraint)
-            .Select(g => new ForeignKey(
-                g.Key,
-                g.First().Schema,
-                g.First().Table,
-                [.. g.Select(r => r.Column)],
-                g.First().RefSchema,
-                g.First().RefTable,
-                [.. g.Select(r => r.RefColumn)]))
-            .ToList();
-
-        return new SchemaTree(schemas, primaryKeys, foreignKeys);
+        return new SchemaTree(schemas);
     }
 
     public async Task<QueryData> ExecuteQueryAsync(string connectionString, string sql, CancellationToken ct)

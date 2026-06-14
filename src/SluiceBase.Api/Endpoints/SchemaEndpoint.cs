@@ -85,11 +85,13 @@ internal static class SchemaEndpoints
                                     c.Name, c.DataType, c.IsNullable,
                                     sensitiveKeys.Contains(key),
                                     restrictedKeys.Contains(key));
-                            }).ToList()
+                            }).ToList(),
+                            t.PrimaryKey,
+                            t.ForeignKeys
                         )).ToList()
                 )).ToList();
 
-            return TypedResults.Ok(new SchemaTree(annotatedSchemas, tree.PrimaryKeys, tree.ForeignKeys));
+            return TypedResults.Ok(new SchemaTree(annotatedSchemas));
         }
         catch (InvalidOperationException ex)
         {

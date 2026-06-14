@@ -28,27 +28,17 @@ export interface ErdModel {
 }
 
 export function buildErdModel(tree: SchemaTree): ErdModel {
-  const pkColumns = new Map<string, Set<string>>();
-  for (const pk of tree.primaryKeys) {
-    pkColumns.set(`${pk.schema}.${pk.table}`, new Set(pk.columns));
-  }
-
-  const fkColumns = new Map<string, Set<string>>();
-  for (const fk of tree.foreignKeys) {
-    const key = `${fk.schema}.${fk.table}`;
-    const set = fkColumns.get(key) ?? new Set<string>();
-    for (const c of fk.columns) set.add(c);
-    fkColumns.set(key, set);
-  }
-
   const nodes: Array<TableNode> = [];
+  const edges: Array<Edge> = [];
+
   for (const schema of tree.schemas) {
     for (const table of schema.tables) {
-      const tableKey = `${schema.name}.${table.name}`;
-      const pks = pkColumns.get(tableKey) ?? new Set<string>();
-      const fks = fkColumns.get(tableKey) ?? new Set<string>();
+      const tableId = `${schema.name}.${table.name}`;
+      const pkColumns = new Set(table.primaryKey?.columns ?? []);
+      const fkColumns = new Set(table.foreignKeys.flatMap((fk) => fk.columns));
+
       nodes.push({
-        id: tableKey,
+        id: tableId,
         type: "table",
         position: { x: 0, y: 0 },
         data: {
@@ -60,21 +50,23 @@ export function buildErdModel(tree: SchemaTree): ErdModel {
             isNullable: c.isNullable,
             isSensitive: c.isSensitive,
             isRestricted: c.isRestricted,
-            isPrimaryKey: pks.has(c.name),
-            isForeignKey: fks.has(c.name),
+            isPrimaryKey: pkColumns.has(c.name),
+            isForeignKey: fkColumns.has(c.name),
           })),
         },
       });
+
+      for (const fk of table.foreignKeys) {
+        edges.push({
+          // constraintName is unique within the database — safe to use as the React Flow edge id.
+          id: fk.constraintName,
+          source: tableId,
+          target: `${fk.referencedSchema}.${fk.referencedTable}`,
+          label: fk.constraintName,
+        });
+      }
     }
   }
-
-  const edges: Array<Edge> = tree.foreignKeys.map((fk) => ({
-    // constraintName is unique within the database — safe to use as the React Flow edge id.
-    id: fk.constraintName,
-    source: `${fk.schema}.${fk.table}`,
-    target: `${fk.referencedSchema}.${fk.referencedTable}`,
-    label: fk.constraintName,
-  }));
 
   return { nodes, edges };
 }

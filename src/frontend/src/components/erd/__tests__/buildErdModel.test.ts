@@ -12,6 +12,8 @@ const tree = {
             { name: "id", dataType: "integer", isNullable: false, isSensitive: false, isRestricted: false },
             { name: "email", dataType: "text", isNullable: false, isSensitive: true, isRestricted: true },
           ],
+          primaryKey: { columns: ["id"] },
+          foreignKeys: [],
         },
         {
           name: "orders",
@@ -19,23 +21,18 @@ const tree = {
             { name: "id", dataType: "integer", isNullable: false, isSensitive: false, isRestricted: false },
             { name: "user_id", dataType: "integer", isNullable: false, isSensitive: false, isRestricted: false },
           ],
+          primaryKey: { columns: ["id"] },
+          foreignKeys: [
+            {
+              constraintName: "orders_user_id_fkey",
+              columns: ["user_id"],
+              referencedSchema: "public",
+              referencedTable: "users",
+              referencedColumns: ["id"],
+            },
+          ],
         },
       ],
-    },
-  ],
-  primaryKeys: [
-    { schema: "public", table: "users", columns: ["id"] },
-    { schema: "public", table: "orders", columns: ["id"] },
-  ],
-  foreignKeys: [
-    {
-      constraintName: "orders_user_id_fkey",
-      schema: "public",
-      table: "orders",
-      columns: ["user_id"],
-      referencedSchema: "public",
-      referencedTable: "users",
-      referencedColumns: ["id"],
     },
   ],
 };

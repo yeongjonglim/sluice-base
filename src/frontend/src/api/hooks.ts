@@ -329,7 +329,15 @@ export function useTestDatabaseConnection(serverId: string) {
 type SchemaTreeResponse = paths["/api/schema/{databaseId}"]["get"]["responses"][200]["content"]["application/json"];
 
 export function schemaToCompletions(
-  tree: Pick<SchemaTreeResponse, "schemas">,
+  tree: {
+    schemas: Array<{
+      name: string;
+      tables: Array<{
+        name: string;
+        columns: Array<{ name: string; isRestricted: boolean }>;
+      }>;
+    }>;
+  },
 ): Record<string, Array<string>> {
   const result: Record<string, Array<string>> = {};
   for (const schema of tree.schemas) {

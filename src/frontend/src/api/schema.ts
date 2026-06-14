@@ -691,8 +691,6 @@ export interface components {
         };
         ForeignKey: {
             constraintName: string;
-            schema: string;
-            table: string;
             columns: string[];
             referencedSchema: string;
             referencedTable: string;
@@ -743,8 +741,6 @@ export interface components {
             permissions: string[];
         };
         PrimaryKey: {
-            schema: string;
-            table: string;
             columns: string[];
         };
         QueryHistoryItem: {
@@ -792,8 +788,6 @@ export interface components {
         };
         SchemaTree: {
             schemas: components["schemas"]["SchemaInfo"][];
-            primaryKeys: components["schemas"]["PrimaryKey"][];
-            foreignKeys: components["schemas"]["ForeignKey"][];
         };
         SensitiveColumnId: unknown;
         SensitiveColumnItem: {
@@ -836,6 +830,8 @@ export interface components {
         TableInfo: {
             name: string;
             columns: components["schemas"]["ColumnInfo"][];
+            primaryKey: null | components["schemas"]["PrimaryKey"];
+            foreignKeys: components["schemas"]["ForeignKey"][];
         };
         TestConnectionResponse: {
             read: components["schemas"]["ConnectivityResult"];

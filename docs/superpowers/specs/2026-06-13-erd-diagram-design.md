@@ -59,30 +59,32 @@ With Aspire running:
 
 ## 3. Domain model
 
-Extend the existing `SluiceBase.Core/Schemas/SchemaTree.cs` to carry relationships alongside the schema list, and add two new records in the same file:
+Extend `SluiceBase.Core/Schemas/SchemaTree.cs` so each `TableInfo` carries its own primary key and outbound foreign keys — modelling the table as it actually is, rather than bolting flat relationship lists onto `SchemaTree`. The keys' schema/table identity is implied by their owning `TableInfo`, so those fields are not repeated.
 
 ```csharp
-public sealed record SchemaTree(
-    IReadOnlyList<SchemaInfo> Schemas,
-    IReadOnlyList<PrimaryKey> PrimaryKeys,
+public sealed record SchemaTree(IReadOnlyList<SchemaInfo> Schemas);
+
+public sealed record SchemaInfo(string Name, IReadOnlyList<TableInfo> Tables);
+
+public sealed record TableInfo(
+    string Name,
+    IReadOnlyList<ColumnInfo> Columns,
+    PrimaryKey? PrimaryKey,
     IReadOnlyList<ForeignKey> ForeignKeys);
 
-public sealed record PrimaryKey(
-    string Schema,
-    string Table,
-    IReadOnlyList<string> Columns);
+public sealed record ColumnInfo(string Name, string DataType, bool IsNullable, bool IsSensitive = false, bool IsRestricted = false);
+
+public sealed record PrimaryKey(IReadOnlyList<string> Columns);
 
 public sealed record ForeignKey(
     string ConstraintName,
-    string Schema,
-    string Table,
     IReadOnlyList<string> Columns,
     string ReferencedSchema,
     string ReferencedTable,
     IReadOnlyList<string> ReferencedColumns);
 ```
 
-`SchemaInfo` / `TableInfo` / `ColumnInfo` are unchanged — PK/FK membership is derived on the client from the top-level lists (`buildErdModel`, §6.5), keeping column annotation logic untouched. `Columns`/`ReferencedColumns` are ordered lists to support composite keys. Adding two parameters to `SchemaTree`'s constructor is a deliberate contract change; the openapi schema and `schema.ts` regenerate to match.
+`PrimaryKey` is nullable (a table may lack one). `ForeignKeys` is empty when the table has none. `Columns`/`ReferencedColumns` are ordered lists to support composite keys. PK/FK column membership is derived on the client per table (`buildErdModel`, §6.5) — no `schema.table` string correlation needed. The endpoint's sensitive-column rebuild reconstructs `TableInfo` and must carry `PrimaryKey`/`ForeignKeys` through unchanged. The openapi schema and `schema.ts` regenerate to match.
 
 ## 4. `ITargetEngine` extension
 
