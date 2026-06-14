@@ -52,6 +52,42 @@ SELECT 'Project ' || i,
        CASE WHEN random() > 0.5 THEN CURRENT_DATE + (random() * 180)::int ELSE NULL END
 FROM generate_series(1, 30) AS i;
 
+-- Composite-key tables: exercise composite PRIMARY KEY and composite FOREIGN KEY introspection.
+-- project_phases has a composite PK (project_id, phase_no) plus a single-column FK to projects.
+-- phase_tasks has a single-column PK plus a composite FK referencing project_phases.
+CREATE TABLE project_phases
+(
+    project_id int  NOT NULL REFERENCES projects (id),
+    phase_no   int  NOT NULL,
+    name       text NOT NULL,
+    PRIMARY KEY (project_id, phase_no)
+);
+
+CREATE TABLE phase_tasks
+(
+    id          serial  PRIMARY KEY,
+    project_id  int     NOT NULL,
+    phase_no    int     NOT NULL,
+    description text     NOT NULL,
+    done        boolean NOT NULL DEFAULT false,
+    FOREIGN KEY (project_id, phase_no) REFERENCES project_phases (project_id, phase_no)
+);
+
+INSERT INTO project_phases (project_id, phase_no, name)
+SELECT p.id,
+       ph.phase_no,
+       (ARRAY ['Discovery','Design','Build','Launch'])[ph.phase_no]
+FROM projects p
+         CROSS JOIN generate_series(1, 4) AS ph(phase_no);
+
+INSERT INTO phase_tasks (project_id, phase_no, description, done)
+SELECT pp.project_id,
+       pp.phase_no,
+       'Task ' || t || ' for phase ' || pp.phase_no,
+       random() > 0.5
+FROM project_phases pp
+         CROSS JOIN generate_series(1, 3) AS t;
+
 -- Grant permissions
 GRANT USAGE ON SCHEMA public TO reader_green;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO reader_green;
