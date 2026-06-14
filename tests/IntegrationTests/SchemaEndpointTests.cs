@@ -299,6 +299,65 @@ public class SchemaEndpointTests(SluiceBaseStackFactory factory)
         Assert.False(col.IsRestricted);
     }
 
+    [Fact]
+    public async Task ExportDdl_ReturnsSchemaOnlyDdl_ForBlueDatabase()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var resp = await session.Client.GetAsync($"/api/schema/{databaseId}/ddl", ct);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        Assert.Equal("application/sql", resp.Content.Headers.ContentType?.MediaType);
+        var disposition = resp.Content.Headers.ContentDisposition;
+        Assert.NotNull(disposition);
+        Assert.Equal("attachment", disposition.DispositionType);
+        var fileName = disposition.FileNameStar ?? disposition.FileName;
+        Assert.NotNull(fileName);
+        Assert.EndsWith(".sql", fileName.Trim('"'));
+
+        var ddl = await resp.Content.ReadAsStringAsync(ct);
+        Assert.Contains("CREATE TABLE", ddl);
+        Assert.Contains("users", ddl);
+        // Data-protection invariant: structure only, never rows.
+        Assert.DoesNotContain("COPY ", ddl);
+        Assert.DoesNotContain("INSERT INTO", ddl);
+    }
+
+    [Fact]
+    public async Task ExportDdl_Returns401_ForAnonymous()
+    {
+        using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
+        var resp = await client.GetAsync(
+            $"/api/schema/{Guid.NewGuid()}/ddl",
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExportDdl_Returns403_ForBob()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // alice creates a database; bob has no role on it → 403
+        var (aliceSession, _, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _a = aliceSession;
+
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        var resp = await bobSession.Client.GetAsync($"/api/schema/{databaseId}/ddl", ct);
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task ExportDdl_Returns404_ForUnknownDatabase()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, _, _) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var resp = await session.Client.GetAsync($"/api/schema/{Guid.NewGuid()}/ddl", ct);
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
     private sealed record ListUserBody(UserRow[] Users);
     private sealed record UserRow(string Id, string Email);
     private sealed record SchemaTreeBody(SchemaInfoBody[] Schemas);

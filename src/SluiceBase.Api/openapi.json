@@ -196,6 +196,39 @@
         }
       }
     },
+    "/api/schema/{databaseId}/ddl": {
+      "get": {
+        "tags": [
+          "SchemaEndpoints"
+        ],
+        "operationId": "ExportSchemaDdl",
+        "parameters": [
+          {
+            "name": "databaseId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/query": {
       "post": {
         "tags": [
