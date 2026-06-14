@@ -1,6 +1,7 @@
-import { Alert, Box, Center, Loader, Stack, Text } from "@mantine/core";
+import { Alert, Box, Button, Center, Group, Loader, Stack, Text } from "@mantine/core";
+import { IconDownload } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { meQueryOptions, useSchema } from "@/api/hooks";
+import { meQueryOptions, useCatalogServer, useExportSchemaDdl, useSchema } from "@/api/hooks";
 import { DatabaseSelect } from "@/components/DatabaseSelect";
 import { ErdCanvas } from "@/components/erd/ErdCanvas";
 import { useSessionState } from "@/utils/useSessionState";
@@ -21,6 +22,18 @@ function DiagramPage() {
     null,
   );
   const schema = useSchema(selectedDatabaseId);
+  const catalog = useCatalogServer();
+  const exportDdl = useExportSchemaDdl();
+
+  function handleExport() {
+    if (!selectedDatabaseId) return;
+    const match = (catalog.data?.servers ?? [])
+      .flatMap((s) => s.databases.map((d) => ({ id: d.id, label: `${s.name}-${d.displayName}` })))
+      .find((d) => d.id === selectedDatabaseId);
+    const base = (match?.label ?? "schema").replace(/[^a-zA-Z0-9._-]/g, "-");
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    exportDdl.mutate({ databaseId: selectedDatabaseId, filename: `${base}-schema-${timestamp}.sql` });
+  }
 
   return (
     <Stack
@@ -31,7 +44,19 @@ function DiagramPage() {
       }}
     >
       <Box p="xs" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
-        <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
+        <Group justify="space-between" wrap="nowrap">
+          <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
+          <Button
+            leftSection={<IconDownload size={14} />}
+            size="sm"
+            variant="default"
+            disabled={!selectedDatabaseId}
+            loading={exportDdl.isPending}
+            onClick={handleExport}
+          >
+            Export DDL
+          </Button>
+        </Group>
       </Box>
       <Box style={{ flex: 1, minHeight: 0 }}>
         {!selectedDatabaseId && (

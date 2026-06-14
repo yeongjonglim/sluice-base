@@ -9,6 +9,7 @@ import {
 import { notifications } from "@mantine/notifications";
 import type { paths } from "./schema.ts";
 import { ApiError, apiRequest } from "@/api/client";
+import { downloadTextFile } from "@/utils/download";
 
 export function createAppQueryClient(): QueryClient {
   return new QueryClient({
@@ -370,6 +371,22 @@ export function useSchemaCompletions(databaseId: string | null) {
         `/api/schema/${databaseId}`,
       ),
     select: schemaToCompletions,
+  });
+}
+
+export function useExportSchemaDdl() {
+  return useMutation({
+    mutationFn: async ({ databaseId, filename }: { databaseId: string; filename: string }) => {
+      const ddl = await apiRequest<void, string>(`/api/schema/${databaseId}/ddl`);
+      downloadTextFile(ddl, filename, "application/sql");
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Export failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
   });
 }
 
