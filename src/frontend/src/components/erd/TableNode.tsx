@@ -15,8 +15,6 @@ export function TableNode({ data }: NodeProps<TableNodeType>) {
         overflow: "hidden",
       }}
     >
-      <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
-      <Handle type="source" position={Position.Right} style={{ opacity: 0 }} />
       <Box
         px="sm"
         py={6}
@@ -30,7 +28,19 @@ export function TableNode({ data }: NodeProps<TableNodeType>) {
         </Text>
       </Box>
       {data.columns.map((col) => (
-        <Group key={col.name} px="sm" py={3} gap="xs" wrap="nowrap" justify="space-between">
+        // position: relative anchors this column's handles at the row's height, so a
+        // foreign-key edge leaves/enters at the related column instead of the node centre.
+        <Group
+          key={col.name}
+          px="sm"
+          py={3}
+          gap="xs"
+          wrap="nowrap"
+          justify="space-between"
+          style={{ position: "relative" }}
+        >
+          <Handle type="target" position={Position.Left} id={col.name} style={{ opacity: 0 }} />
+          <Handle type="source" position={Position.Right} id={col.name} style={{ opacity: 0 }} />
           <Group gap={6} wrap="nowrap">
             {col.isPrimaryKey && <IconKey size={13} color="var(--mantine-color-yellow-6)" />}
             {col.isForeignKey && <IconLink size={13} color="var(--mantine-color-blue-5)" />}

@@ -62,6 +62,10 @@ export function buildErdModel(tree: SchemaTree): ErdModel {
           id: fk.constraintName,
           source: tableId,
           target: `${fk.referencedSchema}.${fk.referencedTable}`,
+          // Anchor the edge at the related column rows (first column for composite keys),
+          // matching the per-column handle ids rendered by TableNode.
+          sourceHandle: fk.columns[0],
+          targetHandle: fk.referencedColumns[0],
           label: fk.constraintName,
         });
       }
