@@ -41,38 +41,41 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                            ORDER BY table_schema, table_name, ordinal_position;
                            """;
 
+        // Constraints are read from pg_catalog, not information_schema: information_schema's
+        // table_constraints / referential_constraints views only expose constraints on tables
+        // where the current role has a privilege OTHER THAN SELECT, so the read-only credential
+        // used for introspection sees none of them. pg_catalog is not privilege-gated this way.
         const string primaryKeysSql = """
-                           SELECT tc.table_schema, tc.table_name, kcu.column_name
-                           FROM information_schema.table_constraints tc
-                           JOIN information_schema.key_column_usage kcu
-                             ON tc.constraint_name = kcu.constraint_name
-                            AND tc.table_schema = kcu.table_schema
-                           WHERE tc.constraint_type = 'PRIMARY KEY'
-                             AND tc.table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
-                           ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position;
+                           SELECT n.nspname, c.relname, a.attname
+                           FROM pg_constraint con
+                           JOIN pg_class c ON c.oid = con.conrelid
+                           JOIN pg_namespace n ON n.oid = c.relnamespace
+                           JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY (con.conkey)
+                           WHERE con.contype = 'p'
+                             AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY n.nspname, c.relname, array_position(con.conkey, a.attnum);
                            """;
 
-        // The referenced side is joined via a second key_column_usage (ccu), not
-        // constraint_column_usage, and aligned on position_in_unique_constraint. This pairs
-        // each FK column with its referenced column by ordinal position so composite foreign
-        // keys map correctly; constraint_column_usage would produce a cartesian cross-join.
+        // unnest(conkey, confkey) WITH ORDINALITY pairs each FK column with its referenced
+        // column by position, so composite foreign keys map correctly.
         const string foreignKeysSql = """
                            SELECT
-                               rc.constraint_name,
-                               kcu.table_schema, kcu.table_name, kcu.column_name,
-                               ccu.table_schema AS ref_schema,
-                               ccu.table_name   AS ref_table,
-                               ccu.column_name  AS ref_column
-                           FROM information_schema.referential_constraints rc
-                           JOIN information_schema.key_column_usage kcu
-                             ON kcu.constraint_name = rc.constraint_name
-                            AND kcu.constraint_schema = rc.constraint_schema
-                           JOIN information_schema.key_column_usage ccu
-                             ON ccu.constraint_name = rc.unique_constraint_name
-                            AND ccu.constraint_schema = rc.unique_constraint_schema
-                            AND ccu.ordinal_position = kcu.position_in_unique_constraint
-                           WHERE kcu.table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
-                           ORDER BY rc.constraint_name, kcu.ordinal_position;
+                               con.conname,
+                               n.nspname, c.relname, att.attname,
+                               rn.nspname AS ref_schema,
+                               rc.relname AS ref_table,
+                               ratt.attname AS ref_column
+                           FROM pg_constraint con
+                           JOIN pg_class c ON c.oid = con.conrelid
+                           JOIN pg_namespace n ON n.oid = c.relnamespace
+                           JOIN pg_class rc ON rc.oid = con.confrelid
+                           JOIN pg_namespace rn ON rn.oid = rc.relnamespace
+                           JOIN LATERAL unnest(con.conkey, con.confkey) WITH ORDINALITY AS k(conkey, confkey, ord) ON true
+                           JOIN pg_attribute att ON att.attrelid = con.conrelid AND att.attnum = k.conkey
+                           JOIN pg_attribute ratt ON ratt.attrelid = con.confrelid AND ratt.attnum = k.confkey
+                           WHERE con.contype = 'f'
+                             AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY con.conname, k.ord;
                            """;
 
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
