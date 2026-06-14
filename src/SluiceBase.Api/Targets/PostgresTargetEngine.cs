@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Diagnostics;
 using System.Globalization;
 using System.Text;
 using System.Text.Encodings.Web;
@@ -155,6 +156,62 @@ internal sealed class PostgresTargetEngine : ITargetEngine
             .ToList();
 
         return new SchemaTree(schemas);
+    }
+
+    public async Task<string> ExportSchemaDdlAsync(string connectionString, CancellationToken ct)
+    {
+        var builder = new NpgsqlConnectionStringBuilder(connectionString);
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = "pg_dump",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+        };
+
+        // --schema-only is hard-coded and non-overridable: this method exposes no parameter
+        // that could request table data, so the data-protection invariant holds by construction.
+        // --no-owner / --no-privileges keep diffs against codebase migrations clean.
+        psi.ArgumentList.Add("--schema-only");
+        psi.ArgumentList.Add("--no-owner");
+        psi.ArgumentList.Add("--no-privileges");
+        psi.ArgumentList.Add($"--host={builder.Host}");
+        psi.ArgumentList.Add($"--port={builder.Port}");
+        psi.ArgumentList.Add($"--username={builder.Username}");
+        psi.ArgumentList.Add($"--dbname={builder.Database}");
+
+        // Password is passed only via the child process environment — never on the command line.
+        psi.Environment["PGPASSWORD"] = builder.Password ?? string.Empty;
+
+        using var process = new Process { StartInfo = psi };
+        _ = process.Start();
+
+        // Read both pipes concurrently to avoid a full-buffer deadlock.
+        var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
+        var stderrTask = process.StandardError.ReadToEndAsync(ct);
+
+        try
+        {
+            await process.WaitForExitAsync(ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Don't leave pg_dump (and its Postgres connection) running after cancellation.
+            process.Kill();
+            throw;
+        }
+
+        var stdout = await stdoutTask.ConfigureAwait(false);
+        var stderr = await stderrTask.ConfigureAwait(false);
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                $"pg_dump exited with code {process.ExitCode}: {stderr}");
+        }
+
+        return stdout;
     }
 
     public async Task<QueryData> ExecuteQueryAsync(string connectionString, string sql, CancellationToken ct)

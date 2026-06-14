@@ -36,7 +36,10 @@ RUN dotnet publish src/SluiceBase.Api/SluiceBase.Api.csproj \
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
 WORKDIR /app
 
-RUN apk add --no-cache krb5-libs
+# postgresql-client provides pg_dump for the schema DDL export feature.
+# The meta package tracks the newest major in the base image's repo; pg_dump is
+# forward-compatible, so a newer client can always dump older target servers.
+RUN apk add --no-cache krb5-libs postgresql-client
 
 COPY --from=api-build /publish .
 COPY --from=frontend-build /app/src/frontend/dist ./wwwroot

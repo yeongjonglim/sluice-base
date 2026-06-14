@@ -162,4 +162,23 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
                 "UPDATE public.nonexistent SET foo = bar",
                 ct));
     }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_ExportSchemaDdl_ReturnsSchemaOnlyDdl()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+
+        Assert.NotNull(connectionString);
+
+        var ddl = await _targetEngine.ExportSchemaDdlAsync(connectionString, ct);
+
+        // Structure is present...
+        Assert.Contains("CREATE TABLE", ddl);
+        Assert.Contains("users", ddl);
+        // ...but no data is ever emitted (data-protection invariant).
+        Assert.DoesNotContain("COPY ", ddl);
+        Assert.DoesNotContain("INSERT INTO", ddl);
+    }
 }

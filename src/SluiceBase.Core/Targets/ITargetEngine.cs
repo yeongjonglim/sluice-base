@@ -15,6 +15,10 @@ public interface ITargetEngine
         string connectionString,
         CancellationToken ct);
 
+    Task<string> ExportSchemaDdlAsync(
+        string connectionString,
+        CancellationToken ct);
+
     Task<QueryData> ExecuteQueryAsync(
         string connectionString,
         string sql,
