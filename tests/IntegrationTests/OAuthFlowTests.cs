@@ -215,23 +215,14 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
 
     // ── Full OAuth flow (CI-gated: requires Keycloak + running Aspire stack) ──
     //
-    // The full dance: register → authorize (following OIDC redirect through Keycloak)
-    // → capture code from redirect → POST /token with code_verifier → assert tokens
-    // → POST /token with refresh_token → assert new tokens.
+    // The full dance: register → authorize → capture code from redirect → POST /token
+    // with code_verifier → assert tokens → POST /token with refresh_token → assert new tokens.
     //
-    // This flow works by:
-    //   1. Using a CookieContainer-equipped HttpClient (AllowAutoRedirect=true) so it
-    //      follows the OIDC challenge through to Keycloak's login page automatically.
-    //   2. Submitting Keycloak credentials via the kc-form-login form (same approach
-    //      used by KeycloakLoginHelper.SignInAsync).
-    //   3. Following the final redirect back to the registered redirect_uri.
-    //      Because our redirect_uri is a synthetic https://localhost/mcp-test/callback,
-    //      the final redirect request will fail with a connection error — we catch it,
-    //      read Location from the last response (or from the exception's RequestUri)
-    //      to extract the `code` and `state` query parameters.
-    //
-    // If Keycloak is not reachable or the stack is not fully started the test will fail
-    // with a meaningful HTTP or socket error that CI will surface.
+    // Authentication reuses KeycloakLoginHelper.SignInAsync (the proven login path used by
+    // every other authenticated test), which returns a session whose Client carries the
+    // sb.auth cookie and uses AllowAutoRedirect=false. Because the session is already
+    // authenticated, GET /mcp/oauth/authorize issues the code immediately and returns a
+    // 302 to redirect_uri?code=...&state=... — no Keycloak login form scraping required.
 
     [Fact]
     public async Task FullFlow_AuthorizeCodeExchange_ReturnsTokens()
@@ -252,34 +243,6 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
             clientId = await RegisterClientAsync(setupClient, redirectUri, ct);
         }
 
-        var gatewayBase = factory.InitialisedApp.GetEndpoint("gateway", "https");
-
-        // Build a cookie-container client that follows redirects automatically.
-        // AllowAutoRedirect=true so we can follow through the OIDC challenge and
-        // Keycloak's own redirects in one shot.
-        var cookieJar = new CookieContainer();
-        using var loginHandler = new HttpClientHandler
-        {
-            CookieContainer = cookieJar,
-            AllowAutoRedirect = true,
-            UseCookies = true,
-            ServerCertificateCustomValidationCallback =
-                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-        };
-
-        // We need to stop BEFORE following the final redirect to our redirect_uri
-        // (which is a synthetic URL that doesn't actually exist). We'll do a
-        // partial follow: let AllowAutoRedirect handle the OIDC/Keycloak chain but
-        // catch the final redirect by switching to AllowAutoRedirect=false at the end.
-        //
-        // Strategy: make the first call with AllowAutoRedirect=true up through Keycloak
-        // submission. The final redirect from Keycloak back to /mcp/oauth/authorize
-        // (with the OIDC code) will be followed, and the authorize endpoint will then
-        // redirect to our redirect_uri. We switch AllowAutoRedirect=false for that
-        // last hop so we can read the Location header.
-
-        using var followClient = new HttpClient(loginHandler) { BaseAddress = gatewayBase };
-
         var authorizeUrl = $"/mcp/oauth/authorize" +
                            $"?client_id={Uri.EscapeDataString(clientId)}" +
                            $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
@@ -288,46 +251,12 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
                            $"&code_challenge_method=S256" +
                            $"&state={Uri.EscapeDataString(state)}";
 
-        // Step 1: GET /mcp/oauth/authorize — will redirect to Keycloak login
-        var loginPageResponse = await followClient.GetAsync(authorizeUrl, ct);
-        loginPageResponse.EnsureSuccessStatusCode();
+        // Sign in via KeycloakLoginHelper — the session Client carries the sb.auth cookie
+        // and has AllowAutoRedirect=false. Because the session is already authenticated,
+        // GET /mcp/oauth/authorize returns 302 directly to redirect_uri?code=...
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
 
-        // Step 2: Parse Keycloak login form action and submit credentials
-        var html = await loginPageResponse.Content.ReadAsStringAsync(ct);
-        var kcFormMatch = System.Text.RegularExpressions.Regex.Match(
-            html,
-            """<form[^>]+id="kc-form-login"[^>]+action="(?<action>[^"]+)""",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-
-        Assert.True(kcFormMatch.Success, "Could not find Keycloak login form — is the stack healthy?");
-
-        var loginActionUrl = HttpUtility.HtmlDecode(kcFormMatch.Groups["action"].Value);
-        var loginForm = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["username"] = "alice",
-            ["password"] = "dev",
-            ["credentialId"] = string.Empty,
-        });
-        var afterLogin = await followClient.PostAsync(loginActionUrl, loginForm, ct);
-
-        // Step 3: Keycloak may post a self-submitting form (SAMLResponse-style redirect).
-        // Follow any auto-post forms the same way KeycloakLoginHelper does.
-        await FollowAutoPostFormsAsync(followClient, afterLogin, ct);
-
-        // At this point the cookie jar should contain the session cookie. Now perform
-        // the authorize request again — this time with AllowAutoRedirect=false so we
-        // can capture the final redirect to our redirect_uri.
-        using var captureHandler = new HttpClientHandler
-        {
-            CookieContainer = cookieJar,
-            AllowAutoRedirect = false,
-            UseCookies = true,
-            ServerCertificateCustomValidationCallback =
-                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-        };
-        using var captureClient = new HttpClient(captureHandler) { BaseAddress = gatewayBase };
-
-        var authorizeResponse = await captureClient.GetAsync(authorizeUrl, ct);
+        var authorizeResponse = await session.Client.GetAsync(authorizeUrl, ct);
 
         // The endpoint should redirect us to our redirect_uri with ?code=...&state=...
         Assert.Equal(HttpStatusCode.Redirect, authorizeResponse.StatusCode);
@@ -341,7 +270,7 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         Assert.False(string.IsNullOrEmpty(code), "Expected 'code' in redirect query string");
         Assert.Equal(state, returnedState);
 
-        // Step 4: Exchange code for tokens via POST /mcp/oauth/token (on the api directly).
+        // Step 2: Exchange code for tokens via POST /mcp/oauth/token (on the api directly).
         using var tokenClient = ApiClient();
 
         var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -365,7 +294,7 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         Assert.True(tokenBody.TryGetProperty("expires_in", out var expiresIn));
         Assert.True(expiresIn.GetInt32() > 0);
 
-        // Step 5: Use the refresh token to get a new token pair.
+        // Step 3: Use the refresh token to get a new token pair.
         var refreshForm = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "refresh_token",
@@ -384,38 +313,5 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         // New tokens must differ from the initial ones (rotation).
         Assert.NotEqual(accessToken.GetString(), newAccessToken.GetString());
         Assert.NotEqual(refreshToken.GetString(), newRefreshToken.GetString());
-    }
-
-    // ── Helpers for following Keycloak's auto-post forms ──────────────────────
-
-    private static async Task FollowAutoPostFormsAsync(
-        HttpClient client, HttpResponseMessage response, CancellationToken ct)
-    {
-        var html = await response.Content.ReadAsStringAsync(ct);
-
-        if (!html.Contains("document.forms[0].submit()", StringComparison.OrdinalIgnoreCase)
-            && !html.Contains("Onload", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        var actionMatch = System.Text.RegularExpressions.Regex.Match(
-            html, """<form[^>]+action="(?<action>[^"]+)""",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (!actionMatch.Success)
-        {
-            return;
-        }
-
-        var actionUrl = HttpUtility.HtmlDecode(actionMatch.Groups["action"].Value);
-
-        var fields = System.Text.RegularExpressions.Regex
-            .Matches(html, """<input[^>]+name="(?<name>[^"]+)"[^>]+value="(?<value>[^"]*)" """,
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-            .ToDictionary(
-                m => m.Groups["name"].Value,
-                m => HttpUtility.HtmlDecode(m.Groups["value"].Value));
-
-        await client.PostAsync(actionUrl, new FormUrlEncodedContent(fields), ct);
     }
 }

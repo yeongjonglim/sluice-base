@@ -67,66 +67,23 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
             clientId = await RegisterOAuthClientAsync(setupClient, redirectUri, ct);
         }
 
-        var gatewayBase = factory.InitialisedApp.GetEndpoint("gateway", "https");
-        var cookieJar = new CookieContainer();
+        // Step 1: sign in via the proven KeycloakLoginHelper — returns an authenticated session
+        // whose Client carries the sb.auth cookie and has AllowAutoRedirect=false.
+        using var session = await LoginHelper.SignInAsync(username, password, ct);
 
-        // Step 1: drive through Keycloak login so we get a session cookie
-        using var loginHandler = new HttpClientHandler
-        {
-            CookieContainer = cookieJar,
-            AllowAutoRedirect = true,
-            UseCookies = true,
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-        };
-        using var followClient = new HttpClient(loginHandler) { BaseAddress = gatewayBase };
-
-        var authorizeUrl = $"/mcp/oauth/authorize" +
-                           $"?client_id={Uri.EscapeDataString(clientId)}" +
-                           $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
-                           $"&response_type=code" +
-                           $"&code_challenge={Uri.EscapeDataString(codeChallenge)}" +
-                           $"&code_challenge_method=S256" +
+        var authorizeUrl = $"/mcp/oauth/authorize?client_id={Uri.EscapeDataString(clientId)}" +
+                           $"&redirect_uri={Uri.EscapeDataString(redirectUri)}&response_type=code" +
+                           $"&code_challenge={Uri.EscapeDataString(codeChallenge)}&code_challenge_method=S256" +
                            $"&state=mcptools-test";
 
-        var loginPageResp = await followClient.GetAsync(authorizeUrl, ct);
-        loginPageResp.EnsureSuccessStatusCode();
-
-        var html = await loginPageResp.Content.ReadAsStringAsync(ct);
-        var kcMatch = System.Text.RegularExpressions.Regex.Match(
-            html,
-            """<form[^>]+id="kc-form-login"[^>]+action="(?<action>[^"]+)""",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        Assert.True(kcMatch.Success, "Could not find Keycloak login form — is the Aspire stack healthy?");
-
-        var loginActionUrl = HttpUtility.HtmlDecode(kcMatch.Groups["action"].Value);
-        var loginForm = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["username"] = username,
-            ["password"] = password,
-            ["credentialId"] = string.Empty,
-        });
-        var afterLogin = await followClient.PostAsync(loginActionUrl, loginForm, ct);
-        await FollowAutoPostFormsAsync(followClient, afterLogin, ct);
-
-        // Step 2: re-issue authorize request with AllowAutoRedirect=false to capture the code
-        using var captureHandler = new HttpClientHandler
-        {
-            CookieContainer = cookieJar,
-            AllowAutoRedirect = false,
-            UseCookies = true,
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-        };
-        using var captureClient = new HttpClient(captureHandler) { BaseAddress = gatewayBase };
-
-        var authResp = await captureClient.GetAsync(authorizeUrl, ct);
+        // The session is already authenticated — the authorize endpoint sees ctx.User and
+        // issues the code immediately, returning 302 to redirect_uri?code=...
+        var authResp = await session.Client.GetAsync(authorizeUrl, ct);
         Assert.Equal(HttpStatusCode.Redirect, authResp.StatusCode);
-
-        var location = authResp.Headers.Location!;
-        var qs = HttpUtility.ParseQueryString(location.Query);
-        var code = qs["code"];
+        var code = HttpUtility.ParseQueryString(authResp.Headers.Location!.Query)["code"];
         Assert.False(string.IsNullOrEmpty(code), "Expected authorization code in redirect");
 
-        // Step 3: exchange code for tokens
+        // Step 2: exchange code for tokens
         using var tokenClient = ApiClient();
         var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -373,36 +330,6 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
 
         Assert.NotNull(sourceValue);
         Assert.Equal("Mcp", sourceValue!.ToString());
-    }
-
-    // ── Follow-redirect helpers (same as OAuthFlowTests) ────────────────────────
-
-    private static async Task FollowAutoPostFormsAsync(HttpClient client, HttpResponseMessage response, CancellationToken ct)
-    {
-        var html = await response.Content.ReadAsStringAsync(ct);
-        if (!html.Contains("document.forms[0].submit()", StringComparison.OrdinalIgnoreCase)
-            && !html.Contains("Onload", StringComparison.OrdinalIgnoreCase))
-        {
-            return;
-        }
-
-        var actionMatch = System.Text.RegularExpressions.Regex.Match(
-            html, """<form[^>]+action="(?<action>[^"]+)""",
-            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        if (!actionMatch.Success)
-        {
-            return;
-        }
-
-        var actionUrl = HttpUtility.HtmlDecode(actionMatch.Groups["action"].Value);
-        var fields = System.Text.RegularExpressions.Regex
-            .Matches(html, """<input[^>]+name="(?<name>[^"]+)"[^>]+value="(?<value>[^"]*)" """,
-                System.Text.RegularExpressions.RegexOptions.IgnoreCase)
-            .ToDictionary(
-                m => m.Groups["name"].Value,
-                m => HttpUtility.HtmlDecode(m.Groups["value"].Value));
-
-        await client.PostAsync(actionUrl, new FormUrlEncodedContent(fields), ct);
     }
 
     // ── Private record types ─────────────────────────────────────────────────────
