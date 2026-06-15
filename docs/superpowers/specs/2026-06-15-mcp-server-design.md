@@ -180,3 +180,9 @@ installed SDK version.
   code). Before adversarial/multi-tenant production use, add
   `IsConcurrencyToken()` on `McpAuthCode.Consumed` and `McpToken.Revoked` (with a
   `DbUpdateConcurrencyException` → reject handler) and regenerate the migration.
+- **`run_query` timeouts/server-errors surface as a successful tool call with an
+  error-bearing payload** (inherited faithfully from the REST `/api/query`
+  behavior, which returns `Ok` with an error in the body for timeout/generic
+  exceptions). MCP has a first-class `isError: true` result channel that would be
+  more semantically correct for the AI client; a future refinement could map
+  those paths to MCP tool errors (ideally alongside aligning the REST path).
