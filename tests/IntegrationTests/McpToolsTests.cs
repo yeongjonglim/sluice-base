@@ -234,14 +234,10 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
     ///   3. Sends a POST /mcp request with Authorization: Bearer &lt;token&gt; and asserts
     ///      the response is NOT 401/403 (i.e., the bearer handler authenticates the request).
     ///
-    /// A full MCP tool-call assertion (sending initialize + tools/call JSON-RPC) requires the
-    /// ModelContextProtocol.Client package which is not yet referenced in the test project.
-    /// The bearer-acceptance assertion here confirms end-to-end wiring (DI, auth policy, route).
-    /// Full tool invocation is exercised by CI via the existing McpTokenServiceTests +
-    /// OAuthFlowTests together with the bearer-acceptance check here.
-    ///
-    /// TODO: add ModelContextProtocol.Client to the test project and drive the full
-    ///       tools/list + tools/call sequence once the MCP client API stabilizes.
+    /// This test confirms end-to-end wiring (DI, auth policy, route) via bearer acceptance.
+    /// The full MCP tools/list + tools/call round-trip is exercised by
+    /// <see cref="RunQuery_ViaMcpClient_ReturnsRowsAndLogsSourceMcp"/> using the
+    /// ModelContextProtocol.Client package.
     /// </summary>
     [Fact]
     public async Task ListDatabases_WithValidBearerToken_IsAuthenticated()
