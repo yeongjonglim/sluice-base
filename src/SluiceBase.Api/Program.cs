@@ -47,6 +47,7 @@ builder.Services.AddSingleton<ITargetEngine, PostgresTargetEngine>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
+builder.Services.AddScoped<ISchemaService, SchemaService>();
 
 // Register the "vite" HttpClient used by BrandingHtmlMiddleware in dev.
 if (builder.Environment.IsDevelopment())
