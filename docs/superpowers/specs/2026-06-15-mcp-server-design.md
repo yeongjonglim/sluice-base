@@ -130,9 +130,11 @@ Extract this into three services so HTTP and MCP share one code path (honors the
 The existing `/api/*` endpoints become thin wrappers over these services
 (behavior-preserving, covered by existing tests). The MCP tools call the
 identical methods. `IQueryService.ExecuteAsync` takes a `source` parameter so
-MCP-originated queries are tagged in the audit log (reusing the existing
-`SourceRequestId`/source concept), making agent queries distinguishable from UI
-queries in history.
+MCP-originated queries are tagged in the audit log. NOTE: `QueryLog` has **no**
+source field today (`SourceRequestId` belongs to the unrelated `update_request`
+write-approval workflow). This adds a small new `QuerySource` enum (`Ui`/`Mcp`)
+column to `QueryLog` — included in the same branch migration — making agent
+queries distinguishable from UI queries in history.
 
 ## Identity, permission & audit reuse
 
