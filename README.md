@@ -94,6 +94,7 @@ The app is available at `http://localhost:8080`.
 | `Mcp__Enabled` | | `true` | Enable the MCP server and its OAuth endpoints (see [Connecting AI tools](#connecting-ai-tools-mcp)) |
 | `Mcp__AccessTokenMinutes` | | `60` | Lifetime of an MCP access token in minutes |
 | `Mcp__RefreshTokenDays` | | `30` | Lifetime of an MCP refresh token in days |
+| `Mcp__AuthCodeSeconds` | | `120` | Lifetime of an MCP OAuth authorization code in seconds |
 
 ### Branding colours
 

@@ -15,7 +15,8 @@ internal static class OAuthRegistrationEndpoints
             TimeProvider timeProvider,
             CancellationToken ct) =>
         {
-            if (request.RedirectUris is null or { Count: 0 })
+            if (request.RedirectUris is null or { Count: 0 }
+                || request.RedirectUris.Any(u => !Uri.TryCreate(u, UriKind.Absolute, out _)))
             {
                 return Results.BadRequest(new { error = "invalid_redirect_uri" });
             }

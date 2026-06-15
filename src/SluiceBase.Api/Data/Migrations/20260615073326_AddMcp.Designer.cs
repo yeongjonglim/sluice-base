@@ -12,7 +12,7 @@ using SluiceBase.Api.Data;
 namespace SluiceBase.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260615061739_AddMcp")]
+    [Migration("20260615073326_AddMcp")]
     partial class AddMcp
     {
         /// <inheritdoc />
@@ -395,8 +395,10 @@ namespace SluiceBase.Api.Data.Migrations
 
                     b.Property<string>("Source")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Ui")
                         .HasColumnName("source");
 
                     b.Property<string>("Status")

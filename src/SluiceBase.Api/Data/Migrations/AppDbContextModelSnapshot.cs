@@ -392,8 +392,10 @@ namespace SluiceBase.Api.Data.Migrations
 
                     b.Property<string>("Source")
                         .IsRequired()
+                        .ValueGeneratedOnAdd()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
+                        .HasDefaultValue("Ui")
                         .HasColumnName("source");
 
                     b.Property<string>("Status")

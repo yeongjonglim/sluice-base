@@ -17,7 +17,7 @@ namespace SluiceBase.Api.Data.Migrations
                 type: "character varying(16)",
                 maxLength: 16,
                 nullable: false,
-                defaultValue: "");
+                defaultValue: "Ui");
 
             migrationBuilder.CreateTable(
                 name: "mcp_auth_code",
