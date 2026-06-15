@@ -14,8 +14,8 @@ namespace IntegrationTests;
 /// </summary>
 public sealed class McpTokenServiceTests : IAsyncLifetime
 {
-    // Image tag sourced from https://github.com/microsoft/aspire/blob/main/src/Aspire.Hosting.PostgreSQL/PostgresContainerImageTags.cs
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.3")
+    // Pinned to the Postgres major version the app runs against (Aspire default / docker-compose postgres:17).
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17")
         .WithDatabase("sluice_test_mcp")
         .WithUsername("postgres")
         .WithPassword("postgres")

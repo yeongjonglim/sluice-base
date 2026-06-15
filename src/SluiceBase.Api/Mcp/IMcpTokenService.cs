@@ -80,6 +80,8 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
             return null;
         }
 
+        // Single-use: mark consumed. The Consume() mutation and the new token rows are flushed
+        // together by the single SaveChangesAsync inside IssueTokenPairAsync (one unit of work).
         authCode.Consume();
         var tokens = await IssueTokenPairAsync(authCode.UserId, clientId, ct);
         return tokens;
