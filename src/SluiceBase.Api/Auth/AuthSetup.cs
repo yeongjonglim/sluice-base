@@ -1,7 +1,9 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
+using SluiceBase.Api.Mcp;
 using SluiceBase.Core.Permissions;
 
 namespace SluiceBase.Api.Auth;
@@ -110,7 +112,9 @@ internal static class AuthSetup
                     claimsIdentity.AddClaim(new Claim(AppClaims.InternalUserIdClaim, user.Id.ToString()));
                     ctx.Principal.AddIdentity(claimsIdentity);
                 };
-            });
+            })
+            .AddScheme<AuthenticationSchemeOptions, McpBearerAuthenticationHandler>(
+                McpBearerAuthenticationHandler.SchemeName, _ => { });
 
         services.AddAuthorization(options =>
         {
@@ -119,6 +123,10 @@ internal static class AuthSetup
                 options.AddPolicy(permission,
                     policy => policy.Requirements.Add(new PermissionRequirement(permission)));
             }
+
+            options.AddPolicy(McpBearerAuthenticationHandler.SchemeName, policy => policy
+                .AddAuthenticationSchemes(McpBearerAuthenticationHandler.SchemeName)
+                .RequireAuthenticatedUser());
         });
 
         services.AddScoped<IUserLoginRecorder, UserLoginRecorder>();
