@@ -7,6 +7,7 @@ using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Extensions;
 using SluiceBase.Api.Mcp;
+using SluiceBase.Api.Mcp.Tools;
 using SluiceBase.Api.Middleware;
 using SluiceBase.Api.Servers;
 using SluiceBase.Api.Services;
@@ -54,6 +55,10 @@ builder.Services.AddScoped<IQueryService, QueryService>();
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
 builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
 
+builder.Services.AddMcpServer()
+    .WithHttpTransport()
+    .WithTools<DatabaseTools>();
+
 // Register the "vite" HttpClient used by BrandingHtmlMiddleware in dev.
 if (builder.Environment.IsDevelopment())
 {
@@ -93,6 +98,7 @@ if (builder.Environment.IsDevelopment())
 
 app.MapDefaultEndpoints();
 app.MapAllEndpoints();
+app.MapMcp("/mcp").RequireAuthorization(McpBearerAuthenticationHandler.SchemeName);
 
 // Terminal handler: inject branding into index.html for all non-API GET requests.
 // In dev: fetches index.html from the Vite dev server and injects branding.
