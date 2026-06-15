@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\tools\CoverageReport\CoverageReport.csproj" />
+    <ProjectReference Include="..\..\src\SluiceBase.Api\SluiceBase.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>

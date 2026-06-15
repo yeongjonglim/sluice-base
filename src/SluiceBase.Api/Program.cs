@@ -6,6 +6,7 @@ using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Extensions;
+using SluiceBase.Api.Mcp;
 using SluiceBase.Api.Middleware;
 using SluiceBase.Api.Servers;
 using SluiceBase.Api.Services;
@@ -49,6 +50,9 @@ builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<ISchemaService, SchemaService>();
 builder.Services.AddScoped<IQueryService, QueryService>();
+
+builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
+builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
 
 // Register the "vite" HttpClient used by BrandingHtmlMiddleware in dev.
 if (builder.Environment.IsDevelopment())

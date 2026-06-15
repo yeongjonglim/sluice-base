@@ -32,6 +32,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="IntegrationTests" />
+    <InternalsVisibleTo Include="CoverageReport.Tests" />
   </ItemGroup>
   
 </Project>
