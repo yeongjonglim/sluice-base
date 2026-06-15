@@ -6,6 +6,7 @@ using System.Web;
 using Aspire.Hosting;
 using Aspire.Hosting.Testing;
 using IntegrationTests.Supports;
+using ModelContextProtocol.Client;
 using Npgsql;
 using SluiceBase.Api.Endpoints;
 using SluiceBase.Core.Permissions;
@@ -26,6 +27,11 @@ namespace IntegrationTests;
 /// package (not yet referenced in this test project) and multiple round-trips, this test
 /// mints a valid bearer token and asserts it is accepted (200 / MCP response) rather than
 /// doing a full tool-call assertion via the MCP client library. A TODO marks the upgrade path.
+///
+/// Test 3 (run_query) drives a real tools/call over the MCP client and asserts that:
+///   - all three tools are listed (list_databases, get_schema, run_query)
+///   - run_query returns rows for a SELECT against the seeded database
+///   - a query_log row with source = 'Mcp' is persisted in the metadata DB
 /// </summary>
 public sealed class McpToolsTests(SluiceBaseStackFactory factory)
 {
@@ -275,6 +281,102 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         // Must NOT be 401 (unauthenticated) or 403 (forbidden)
         Assert.NotEqual(HttpStatusCode.Unauthorized, resp.StatusCode);
         Assert.NotEqual(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    // ── Test 3: run_query via MCP client round-trip ──────────────────────────────
+
+    /// <summary>
+    /// Full MCP client round-trip test for run_query.
+    ///
+    /// This test:
+    ///   1. Creates an admin session, seeds a server + database, grants bob query:execute.
+    ///   2. Mints an MCP access token for bob.
+    ///   3. Connects the ModelContextProtocol.Client via HttpClientTransport (streamable HTTP)
+    ///      with the bearer token on the underlying HttpClient.
+    ///   4. Calls tools/list and asserts list_databases, get_schema, and run_query are present.
+    ///   5. Calls run_query with a SELECT and asserts the result contains content (rows).
+    ///   6. Queries the metadata DB and asserts a query_log row with source = 'Mcp' was persisted.
+    /// </summary>
+    [Fact]
+    public async Task RunQuery_ViaMcpClient_ReturnsRowsAndLogsSourceMcp()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (adminSession, adminXsrf, databaseId) = await AdminSessionWithDatabaseAsync(LoginHelper, factory.InitialisedApp, ct);
+        using var admin = adminSession;
+
+        // Ensure bob's user row exists
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await bobSession.Client.GetAsync("/api/me", ct);
+
+        var users = await admin.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var bob = users!.Users.Single(u => u.Email == "bob@example.com");
+
+        // Grant bob query:execute on the database
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(admin, bob.Id, Permissions.QueryExecute, databaseId, adminXsrf, ct);
+
+        // Mint a bearer token for bob
+        var accessToken = await MintAccessTokenAsync("bob", "dev", ct);
+
+        // Build an HttpClient with the Authorization header preset and bypassing TLS validation
+        // (Aspire dev certs are self-signed in test environments).
+        var apiEndpoint = factory.InitialisedApp.GetEndpoint("api", "https");
+        var mcpEndpoint = new Uri(apiEndpoint, "/mcp");
+
+        var innerHandler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
+        };
+        var httpClient = new HttpClient(innerHandler)
+        {
+            BaseAddress = mcpEndpoint,
+        };
+        httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+        var transportOptions = new HttpClientTransportOptions
+        {
+            Endpoint = mcpEndpoint,
+            TransportMode = HttpTransportMode.StreamableHttp,
+        };
+
+        await using var transport = new HttpClientTransport(transportOptions, httpClient, loggerFactory: null, ownsHttpClient: true);
+        await using var mcpClient = await McpClient.CreateAsync(transport, cancellationToken: ct);
+
+        // 4. Assert all three tools are discoverable
+        var tools = await mcpClient.ListToolsAsync(cancellationToken: ct);
+        var toolNames = tools.Select(t => t.Name).ToArray();
+        Assert.Contains("list_databases", toolNames);
+        Assert.Contains("get_schema", toolNames);
+        Assert.Contains("run_query", toolNames);
+
+        // 5. Call run_query and assert the response has content (not an error)
+        // Use a comment containing a unique token so we can locate the log row.
+        var uniqueMarker = $"mcp-test-{Guid.NewGuid():N}";
+        var sql = $"SELECT 1 AS value -- {uniqueMarker}";
+
+        var callResult = await mcpClient.CallToolAsync(
+            "run_query",
+            new Dictionary<string, object?>
+            {
+                ["databaseId"] = databaseId,
+                ["sql"] = sql,
+            },
+            cancellationToken: ct);
+
+        Assert.False(callResult.IsError, $"run_query returned an error: {string.Join("; ", callResult.Content.Select(c => c is ModelContextProtocol.Protocol.TextContentBlock t ? t.Text : string.Empty))}");
+        Assert.NotEmpty(callResult.Content);
+
+        // 6. Verify a query_log row with source = 'Mcp' was persisted
+        var metaConnStr = await factory.InitialisedApp.GetConnectionStringAsync("metadata-db", ct);
+        await using var conn = new NpgsqlConnection(metaConnStr);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(
+            "SELECT source FROM query_log WHERE query_text LIKE @marker LIMIT 1", conn);
+        cmd.Parameters.AddWithValue("@marker", $"%{uniqueMarker}%");
+        var sourceValue = await cmd.ExecuteScalarAsync(ct);
+
+        Assert.NotNull(sourceValue);
+        Assert.Equal("Mcp", sourceValue!.ToString());
     }
 
     // ── Follow-redirect helpers (same as OAuthFlowTests) ────────────────────────
