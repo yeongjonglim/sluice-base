@@ -1,3 +1,5 @@
+using SluiceBase.Api.Mcp.Oauth;
+
 namespace SluiceBase.Api.Endpoints;
 
 internal static class EndpointMapper
@@ -16,6 +18,8 @@ internal static class EndpointMapper
         SchemaEndpoints.Map(app);
         QueryEndpoints.Map(app);
         UpdateEndpoints.Map(app);
+        OAuthMetadataEndpoints.Map(app);
+        OAuthRegistrationEndpoints.Map(app);
 
         if (app.Environment.IsDevelopment())
         {

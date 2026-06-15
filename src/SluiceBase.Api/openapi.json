@@ -344,6 +344,52 @@
         }
       }
     },
+    "/.well-known/oauth-protected-resource": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/.well-known/oauth-authorization-server": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/mcp/oauth/register": {
+      "post": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterClientRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/admin/user": {
       "get": {
         "tags": [
@@ -2534,6 +2580,30 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "RegisterClientRequest": {
+        "required": [
+          "client_name",
+          "redirect_uris"
+        ],
+        "type": "object",
+        "properties": {
+          "client_name": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "redirect_uris": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
           }
         }
       },
