@@ -8,6 +8,7 @@ using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Extensions;
 using SluiceBase.Api.Middleware;
 using SluiceBase.Api.Servers;
+using SluiceBase.Api.Services;
 using SluiceBase.Api.Targets;
 using SluiceBase.Core.Branding;
 using SluiceBase.Core.Targets;
@@ -45,6 +46,7 @@ builder.Services.AddOpenApi(x =>
 builder.Services.AddSingleton<ITargetEngine, PostgresTargetEngine>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
+builder.Services.AddScoped<ICatalogService, CatalogService>();
 
 // Register the "vite" HttpClient used by BrandingHtmlMiddleware in dev.
 if (builder.Environment.IsDevelopment())
