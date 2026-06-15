@@ -41,13 +41,20 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         return new McpTokenService(db, clock ?? TimeProvider.System, opts);
     }
 
-    private static UserId SampleUserId() => UserId.From(Guid.NewGuid());
     private const string ClientId = "test-client-001";
 
     /// <summary>
-    /// Seeds the MCP OAuth client row required by FK constraints (if any).
-    /// The service itself does not enforce FK — we skip seeding and rely on EF's schema.
+    /// Seeds a real <see cref="User"/> row so FK constraints on <c>mcp_auth_code.user_id</c>
+    /// and <c>mcp_token.user_id</c> are satisfied.
     /// </summary>
+    private static async Task<UserId> SeedUserAsync(AppDbContext db, CancellationToken ct = default)
+    {
+        var user = User.Create("test@example.com", "Test User", DateTimeOffset.UtcNow);
+        db.Users.Add(user);
+        await db.SaveChangesAsync(ct);
+        return user.Id;
+    }
+
     private static async Task MigrateAsync(AppDbContext db)
     {
         await db.Database.MigrateAsync();
@@ -61,7 +68,7 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         await MigrateAsync(db);
         var svc = CreateService(db);
 
-        var userId = SampleUserId();
+        var userId = await SeedUserAsync(db, ct);
         const string redirectUri = "https://example.com/callback";
         const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var codeChallenge = TokenHasher.ComputePkceS256Challenge(codeVerifier);
@@ -87,7 +94,7 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         await MigrateAsync(db);
         var svc = CreateService(db);
 
-        var userId = SampleUserId();
+        var userId = await SeedUserAsync(db, ct);
         const string redirectUri = "https://example.com/callback";
         const string correctVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         const string wrongVerifier = "wrong-verifier-value-that-does-not-match-challenge";
@@ -107,7 +114,7 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         await MigrateAsync(db);
         var svc = CreateService(db);
 
-        var userId = SampleUserId();
+        var userId = await SeedUserAsync(db, ct);
         const string redirectUri = "https://example.com/callback";
         const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var codeChallenge = TokenHasher.ComputePkceS256Challenge(codeVerifier);
@@ -131,7 +138,7 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         await MigrateAsync(db);
         var svc = CreateService(db);
 
-        var userId = SampleUserId();
+        var userId = await SeedUserAsync(db, ct);
         const string redirectUri = "https://example.com/callback";
         const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var codeChallenge = TokenHasher.ComputePkceS256Challenge(codeVerifier);
@@ -159,7 +166,7 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         await MigrateAsync(db);
         var svc = CreateService(db);
 
-        var userId = SampleUserId();
+        var userId = await SeedUserAsync(db, ct);
         const string redirectUri = "https://example.com/callback";
         const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var codeChallenge = TokenHasher.ComputePkceS256Challenge(codeVerifier);
@@ -182,7 +189,7 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         await MigrateAsync(db);
         var svc = CreateService(db);
 
-        var userId = SampleUserId();
+        var userId = await SeedUserAsync(db, ct);
         const string redirectUri = "https://example.com/callback";
         const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var codeChallenge = TokenHasher.ComputePkceS256Challenge(codeVerifier);
@@ -212,7 +219,7 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         var frozenPast = new FrozenTimeProvider(DateTimeOffset.UtcNow.AddMinutes(-120));
         var svc = CreateService(db, frozenPast);
 
-        var userId = SampleUserId();
+        var userId = await SeedUserAsync(db, ct);
         const string redirectUri = "https://example.com/callback";
         const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var codeChallenge = TokenHasher.ComputePkceS256Challenge(codeVerifier);
