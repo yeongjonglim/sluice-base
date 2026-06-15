@@ -390,6 +390,30 @@
         }
       }
     },
+    "/mcp/oauth/authorize": {
+      "get": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/mcp/oauth/token": {
+      "post": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
     "/api/admin/user": {
       "get": {
         "tags": [
