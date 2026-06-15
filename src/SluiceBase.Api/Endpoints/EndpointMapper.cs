@@ -20,6 +20,8 @@ internal static class EndpointMapper
         UpdateEndpoints.Map(app);
         OAuthMetadataEndpoints.Map(app);
         OAuthRegistrationEndpoints.Map(app);
+        OAuthAuthorizeEndpoints.Map(app);
+        OAuthTokenEndpoints.Map(app);
 
         if (app.Environment.IsDevelopment())
         {
