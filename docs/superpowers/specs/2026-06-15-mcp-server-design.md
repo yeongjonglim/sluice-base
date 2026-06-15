@@ -169,3 +169,14 @@ queries distinguishable from UI queries in history.
 None blocking. Specific OAuth-endpoint shapes and the exact `ModelContextProtocol`
 auth-integration API will be pinned during the implementation plan against the
 installed SDK version.
+
+## Known limitations / future hardening
+
+- **Auth-code/refresh redemption is not guarded by an optimistic-concurrency
+  token.** Concurrent redemption of the same code (or refresh token) could
+  TOCTOU-race the `Consumed`/`Revoked` check and issue two token pairs. Low risk
+  under the v1 threat model (PKCE + single-use + redirect-URI binding already
+  block auth-code injection; the residual requires an attacker racing their own
+  code). Before adversarial/multi-tenant production use, add
+  `IsConcurrencyToken()` on `McpAuthCode.Consumed` and `McpToken.Revoked` (with a
+  `DbUpdateConcurrencyException` → reject handler) and regenerate the migration.
