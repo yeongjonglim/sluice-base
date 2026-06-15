@@ -91,6 +91,9 @@ The app is available at `http://localhost:8080`.
 | `Branding__LogoUrl` | | — | URL to a custom logo image — see [using local files](#using-local-branding-files) |
 | `Branding__FaviconUrl` | | — | URL to a custom favicon — see [using local files](#using-local-branding-files) |
 | `Query__TimeoutSeconds` | | `30` | Maximum query execution time in seconds |
+| `Mcp__Enabled` | | `true` | Enable the MCP server and its OAuth endpoints (see [Connecting AI tools](#connecting-ai-tools-mcp)) |
+| `Mcp__AccessTokenMinutes` | | `60` | Lifetime of an MCP access token in minutes |
+| `Mcp__RefreshTokenDays` | | `30` | Lifetime of an MCP refresh token in days |
 
 ### Branding colours
 
@@ -142,6 +145,42 @@ Register a **confidential** OIDC client with these settings:
 The ID token must include the `sub`, `email`, and `name` claims.
 
 **Keycloak:** create a realm, add a client with the settings above, and point `Oidc__Authority` to `https://your-keycloak/realms/your-realm`.
+
+## Connecting AI tools (MCP)
+
+SluiceBase exposes a [Model Context Protocol](https://modelcontextprotocol.io) server so AI coding tools (Claude Code, Codex) can list databases, browse schema, and run read-only queries **as the authenticated user** — reusing the same per-database permissions, sensitive-column screening, and audit logging as the web UI.
+
+The MCP endpoint is served at `https://your-domain/mcp` (streamable HTTP). Authentication uses OAuth 2.1: SluiceBase acts as the authorization server and brokers login to your existing OIDC provider, so users sign in with the **same login page they already use** — no extra credentials, and tokens are user-scoped and revocable.
+
+### Claude Code
+
+```bash
+claude mcp add --transport http sluicebase https://your-domain/mcp
+```
+
+Then in Claude Code, run `/mcp`, select **sluicebase → Authenticate**. A browser opens to your OIDC provider's login page; after signing in you're returned to the client and the tools become available.
+
+### Codex
+
+Add a remote MCP server pointing at the same URL in your Codex MCP configuration:
+
+```toml
+[mcp_servers.sluicebase]
+transport = "http"
+url = "https://your-domain/mcp"
+```
+
+Codex runs the same OAuth flow on first use.
+
+### Tools
+
+| Tool | Description |
+|---|---|
+| `list_databases` | Lists the databases the user can query, grouped by server |
+| `get_schema` | Returns a database's table/column schema (sensitive columns flagged) |
+| `run_query` | Executes a read-only SQL query (subject to the user's `query:execute` permission, sensitive-column blocking, and audit logging — MCP-origin queries are tagged in the history) |
+
+Set `Mcp__Enabled=false` to disable the MCP server and its OAuth endpoints entirely.
 
 ## Development setup
 
