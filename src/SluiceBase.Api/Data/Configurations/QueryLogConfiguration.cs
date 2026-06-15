@@ -15,7 +15,7 @@ internal sealed class QueryLogConfiguration : IEntityTypeConfiguration<QueryLog>
         builder.HasKey(q => q.Id);
         builder.Property(q => q.QueryText).IsRequired();
         builder.Property(q => q.Status).HasMaxLength(16).IsRequired();
-        builder.Property(q => q.Source).HasMaxLength(16).HasConversion<string>().IsRequired();
+        builder.Property(q => q.Source).HasMaxLength(16).IsRequired();
 
         builder.HasOne<User>().WithMany()
             .HasForeignKey(q => q.UserId)
