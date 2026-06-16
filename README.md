@@ -198,6 +198,53 @@ dotnet run --project src/AppHost
 
 The Aspire dashboard opens at `https://localhost:15888`. Once all services are healthy, use the **Seed Server Registry** command on the Metadata database resource to populate sample target databases.
 
+The local stack runs behind a YARP gateway at `https://localhost:5443` (Keycloak login, the SPA, and the API are all reached through it). Dev users are seeded in Keycloak: `alice@example.com` / `dev` (bootstrap admin) and `bob@example.com` / `dev`.
+
+### Testing the MCP server locally
+
+The MCP endpoint is served through the gateway at **`https://localhost:5443/mcp`**.
+
+1. Trust the dev HTTPS certificate so an MCP client accepts the `localhost` TLS connection:
+
+   ```bash
+   dotnet dev-certs https --trust
+   ```
+
+2. Start the stack (`dotnet run --project src/AppHost`) and run the **Seed Server Registry** command from the dashboard.
+
+3. Sign in to `https://localhost:5443` once as `alice@example.com` / `dev` to bootstrap the admin user. Alice has `server:manage`, so `list_databases` works immediately. To exercise the permission path with a non-admin, sign in as `bob@example.com` and grant him `query:execute` on a database via the **Access** admin page.
+
+4. Connect a client:
+
+   **MCP Inspector** (quickest way to drive the OAuth flow and call tools):
+
+   ```bash
+   NODE_TLS_REJECT_UNAUTHORIZED=0 npx @modelcontextprotocol/inspector
+   ```
+
+   Set Transport to **Streamable HTTP**, URL to `https://localhost:5443/mcp`, and connect. (`NODE_TLS_REJECT_UNAUTHORIZED=0` is only needed to accept the local dev certificate.)
+
+   **Claude Code:**
+
+   ```bash
+   claude mcp add --transport http sluicebase https://localhost:5443/mcp
+   ```
+
+   Then run `/mcp`, select **sluicebase → Authenticate**, and sign in via the Keycloak page.
+
+5. Smoke-test the OAuth discovery without a client (no auth required):
+
+   ```bash
+   curl -k https://localhost:5443/.well-known/oauth-protected-resource
+   curl -k -i https://localhost:5443/mcp   # expect 401 + WWW-Authenticate: Bearer resource_metadata=...
+   ```
+
+The OAuth + tool round-trip is also covered by the integration tests:
+
+```bash
+dotnet test tests/IntegrationTests --filter "McpTokenServiceTests|OAuthFlowTests|McpToolsTests"
+```
+
 ## License
 
 [MIT](LICENSE)
