@@ -1,4 +1,4 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.4.3">
+<Project Sdk="Aspire.AppHost.Sdk/13.4.5">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -6,13 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.JavaScript" Version="13.4.3" />
-    <PackageReference Include="Aspire.Hosting.Keycloak" Version="13.4.3-preview.1.26305.13" />
-    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.4.3" />
-    <PackageReference Include="Aspire.Hosting.Yarp" Version="13.4.3" />
+    <PackageReference Include="Aspire.Hosting.JavaScript" Version="13.4.5" />
+    <PackageReference Include="Aspire.Hosting.Keycloak" Version="13.4.5-preview.1.26316.12" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.4.5" />
+    <PackageReference Include="Aspire.Hosting.Yarp" Version="13.4.5" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.Keycloak.Extensions" Version="13.4.0-preview.1.260602-0230" />
-    <!-- Override vulnerable transitive MessagePack (pulled via StreamJsonRpc 2.22.23); see GHSA-hv8m-jj95-wg3x -->
-    <PackageReference Include="MessagePack" Version="2.5.302" />
   </ItemGroup>
 
   <ItemGroup>
