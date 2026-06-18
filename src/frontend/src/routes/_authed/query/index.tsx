@@ -31,9 +31,10 @@ import {
   IconTable,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef } from "react";
+import { cloneElement, useCallback, useMemo, useRef, useState } from "react";
 import { keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
+import type { CSSProperties, MouseEvent, ReactElement, Ref } from "react";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import type { ExecuteQueryResponse } from "@/api/hooks";
 import { ApiError } from "@/api/client";
@@ -130,13 +131,21 @@ function QueryPage() {
         margin: "calc(-1 * var(--mantine-spacing-sm))",
       }}
     >
-      <Splitter.Pane defaultSize={20} min={12} style={{ overflow: "auto" }}>
-        <Stack gap={0} p="xs" w="100%" miw="max-content">
-          <Box mb="xs">
-            <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
+      <Splitter.Pane
+        defaultSize={20}
+        min={12}
+        style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}
+      >
+        {/* Database picker stays fixed at the panel width; it never scrolls with long names. */}
+        <Box p="xs" style={{ flexShrink: 0 }}>
+          <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
+        </Box>
+        {/* Schema tree scrolls on its own — long table/column names extend horizontally here. */}
+        <Box data-schema-scroll style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+          <Box miw="max-content" px="xs" pb="xs">
+            <SchemaSidebar schema={schema} onTableClick={handleTableClick} />
           </Box>
-          <SchemaSidebar schema={schema} onTableClick={handleTableClick} />
-        </Stack>
+        </Box>
       </Splitter.Pane>
 
       <Splitter.Pane defaultSize={80} min={30} style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -365,6 +374,39 @@ type TableClickHandler = (
   columns: Array<{ name: string; isSensitive: boolean; isRestricted: boolean }>,
 ) => void;
 
+// Shows a floating tooltip with the full label, but only while the wrapped element is wider
+// than the visible (scrollable) panel area. The names sit in a max-content container, so they
+// never self-truncate — overflow has to be measured against the surrounding scroll viewport.
+function OverflowTooltip({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactElement<{
+    ref?: Ref<HTMLElement>;
+    onMouseEnter?: (event: MouseEvent<HTMLElement>) => void;
+  }>;
+}) {
+  const ref = useRef<HTMLElement>(null);
+  const [disabled, setDisabled] = useState(true);
+
+  const handleMouseEnter = (event: MouseEvent<HTMLElement>) => {
+    const el = ref.current;
+    if (el) {
+      const scroller = el.closest<HTMLElement>("[data-schema-scroll]");
+      const available = scroller?.clientWidth ?? el.clientWidth;
+      setDisabled(Math.ceil(el.getBoundingClientRect().width) <= available);
+    }
+    children.props.onMouseEnter?.(event);
+  };
+
+  return (
+    <Tooltip.Floating label={label} disabled={disabled}>
+      {cloneElement(children, { ref, onMouseEnter: handleMouseEnter })}
+    </Tooltip.Floating>
+  );
+}
+
 function SchemaSidebar({
   schema,
   onTableClick,
@@ -419,55 +461,88 @@ function SchemaSidebar({
     );
   }
 
+  // Pins the chevron / action controls to the right edge of the scroll viewport so they stay
+  // visible at the panel width while long names scroll underneath them.
+  const stickyRight: CSSProperties = {
+    position: "sticky",
+    right: 0,
+    marginLeft: "auto",
+    flexShrink: 0,
+    alignItems: "center",
+    background: "var(--mantine-color-body)",
+  };
+
   return (
     <Stack gap={0}>
       {schema.data.schemas.map((s) => {
         const schemaExpanded = expandedSchemas.includes(s.name);
         return (
           <div key={s.name}>
-            <NavLink
-              label={s.name}
-              leftSection={<IconDatabase size={14} />}
-              rightSection={
-                schemaExpanded ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />
-              }
-              onClick={() => toggleSchema(s.name)}
-              active={false}
-              styles={{ label: { whiteSpace: "nowrap" } }}
-            />
+            <Flex wrap="nowrap" align="center" w="100%">
+              <NavLink
+                label={s.name}
+                leftSection={<IconDatabase size={14} />}
+                onClick={() => toggleSchema(s.name)}
+                active={false}
+                style={{ width: "max-content", flexShrink: 0 }}
+                styles={{ label: { whiteSpace: "nowrap" } }}
+              />
+              <Box
+                px={4}
+                onClick={() => toggleSchema(s.name)}
+                style={{ ...stickyRight, display: "flex", cursor: "pointer" }}
+              >
+                {schemaExpanded ? (
+                  <IconChevronDown size={12} />
+                ) : (
+                  <IconChevronRight size={12} />
+                )}
+              </Box>
+            </Flex>
             {schemaExpanded &&
               s.tables.map((t) => {
                 const tableKey = `${s.name}.${t.name}`;
                 const tableExpanded = expandedTables.includes(tableKey);
                 return (
                   <div key={tableKey}>
-                    <Group gap="xs" justify="space-between" wrap="nowrap">
-                      <NavLink
-                        label={t.name}
-                        leftSection={<IconTable size={14} />}
-                        rightSection={
-                          tableExpanded ? (
+                    <Flex wrap="nowrap" align="center" w="100%">
+                      <OverflowTooltip label={t.name}>
+                        <NavLink
+                          label={t.name}
+                          leftSection={<IconTable size={14} />}
+                          onClick={() => toggleTable(tableKey)}
+                          pl="lg"
+                          active={false}
+                          style={{ width: "max-content", flexShrink: 0 }}
+                          styles={{ label: { whiteSpace: "nowrap" } }}
+                        />
+                      </OverflowTooltip>
+                      <Group gap={2} wrap="nowrap" pl={4} style={stickyRight}>
+                        <ActionIcon
+                          variant="subtle"
+                          color="gray"
+                          size="sm"
+                          onClick={() => toggleTable(tableKey)}
+                          aria-label={tableExpanded ? "Collapse columns" : "Expand columns"}
+                        >
+                          {tableExpanded ? (
                             <IconChevronDown size={12} />
                           ) : (
                             <IconChevronRight size={12} />
-                          )
-                        }
-                        onClick={() => toggleTable(tableKey)}
-                        pl="lg"
-                        active={false}
-                        styles={{ label: { whiteSpace: "nowrap" } }}
-                      />
-                      <Tooltip label="Append SELECT query" position="right" withArrow>
-                        <Button
-                          onClick={() => onTableClick(s.name, t.name, t.columns)}
-                          size="xs"
-                          variant="subtle"
-                          disabled={t.columns.every((c) => c.isSensitive)}
-                        >
-                          <IconPlaylistAdd />
-                        </Button>
-                      </Tooltip>
-                    </Group>
+                          )}
+                        </ActionIcon>
+                        <Tooltip label="Append SELECT query" position="right" withArrow>
+                          <Button
+                            onClick={() => onTableClick(s.name, t.name, t.columns)}
+                            size="xs"
+                            variant="subtle"
+                            disabled={t.columns.every((c) => c.isSensitive)}
+                          >
+                            <IconPlaylistAdd />
+                          </Button>
+                        </Tooltip>
+                      </Group>
+                    </Flex>
                     {tableExpanded && (
                       <Stack
                         gap={0}
@@ -482,9 +557,11 @@ function SchemaSidebar({
                             wrap="nowrap"
                             style={c.isRestricted ? { opacity: 0.45 } : undefined}
                           >
-                            <Text size="xs" style={{ minWidth: 0 }}>
-                              {c.name}
-                            </Text>
+                            <OverflowTooltip label={`${c.name} · ${c.dataType}`}>
+                              <Text size="xs" style={{ minWidth: 0 }}>
+                                {c.name}
+                              </Text>
+                            </OverflowTooltip>
                             <Code fz="xs">{c.dataType}</Code>
                             {c.isNullable && (
                               <Text size="xs" c="dimmed">
