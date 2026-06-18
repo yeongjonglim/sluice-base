@@ -70,6 +70,11 @@ builder.AddYarp("gateway")
         cfg.AddRoute("/signout-callback-oidc", apiCluster);
         cfg.AddRoute("/openapi/{**rest}", apiCluster);
 
+        // MCP server + OAuth authorization-server endpoints live on the API.
+        cfg.AddRoute("/mcp", apiCluster);
+        cfg.AddRoute("/mcp/{**rest}", apiCluster);
+        cfg.AddRoute("/.well-known/{**rest}", apiCluster);
+
         // Browser navigations carry Accept: text/html — route through the API
         // so BrandingHtmlMiddleware can inject __BRANDING__ into index.html.
         cfg.AddRoute("/{**rest}", apiCluster)

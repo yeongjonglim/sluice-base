@@ -6,8 +6,11 @@ using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Extensions;
+using SluiceBase.Api.Mcp;
+using SluiceBase.Api.Mcp.Tools;
 using SluiceBase.Api.Middleware;
 using SluiceBase.Api.Servers;
+using SluiceBase.Api.Services;
 using SluiceBase.Api.Targets;
 using SluiceBase.Core.Branding;
 using SluiceBase.Core.Targets;
@@ -45,6 +48,20 @@ builder.Services.AddOpenApi(x =>
 builder.Services.AddSingleton<ITargetEngine, PostgresTargetEngine>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
+builder.Services.AddScoped<ICatalogService, CatalogService>();
+builder.Services.AddScoped<ISchemaService, SchemaService>();
+builder.Services.AddScoped<IQueryService, QueryService>();
+
+builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
+builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
+
+var mcpEnabled = builder.Configuration.GetValue($"{McpOptions.SectionName}:Enabled", true);
+if (mcpEnabled)
+{
+    builder.Services.AddMcpServer()
+        .WithHttpTransport()
+        .WithTools<DatabaseTools>();
+}
 
 // Register the "vite" HttpClient used by BrandingHtmlMiddleware in dev.
 if (builder.Environment.IsDevelopment())
@@ -85,6 +102,10 @@ if (builder.Environment.IsDevelopment())
 
 app.MapDefaultEndpoints();
 app.MapAllEndpoints();
+if (mcpEnabled)
+{
+    app.MapMcp("/mcp").RequireAuthorization(McpBearerAuthenticationHandler.SchemeName);
+}
 
 // Terminal handler: inject branding into index.html for all non-API GET requests.
 // In dev: fetches index.html from the Vite dev server and injects branding.

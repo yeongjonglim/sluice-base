@@ -1,3 +1,4 @@
+using SluiceBase.Core.Mcp;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Queries;
 using SluiceBase.Core.Servers;
@@ -18,4 +19,7 @@ namespace SluiceBase.Api.Data.Converters;
 [EfCoreConverter<CredentialId>]
 [EfCoreConverter<QueryLogId>]
 [EfCoreConverter<UpdateRequestId>]
+[EfCoreConverter<McpOAuthClientId>]
+[EfCoreConverter<McpAuthCodeId>]
+[EfCoreConverter<McpTokenId>]
 internal partial class VogenEfCoreConverters;

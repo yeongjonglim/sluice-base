@@ -15,6 +15,8 @@ internal sealed class QueryLogConfiguration : IEntityTypeConfiguration<QueryLog>
         builder.HasKey(q => q.Id);
         builder.Property(q => q.QueryText).IsRequired();
         builder.Property(q => q.Status).HasMaxLength(16).IsRequired();
+        // Default existing/unspecified rows to Ui (the historical origin before MCP existed).
+        builder.Property(q => q.Source).HasMaxLength(16).HasDefaultValue(QuerySource.Ui).IsRequired();
 
         builder.HasOne<User>().WithMany()
             .HasForeignKey(q => q.UserId)

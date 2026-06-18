@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <IsPackable>false</IsPackable>
@@ -9,14 +9,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\AppHost\AppHost.csproj" />
     <ProjectReference Include="..\..\src\SluiceBase.Api\SluiceBase.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.Testing" Version="13.4.3" />
-    <PackageReference Include="ModelContextProtocol" Version="1.4.0" />
-    <PackageReference Include="Testcontainers.PostgreSql" Version="4.12.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.6.0" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>

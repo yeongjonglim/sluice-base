@@ -54,4 +54,20 @@ public class QueryLogTests
 
         Assert.Equal(sql, log.QueryText);
     }
+
+    [Fact]
+    public void Create_DefaultsSourceToUi()
+    {
+        var log = QueryLog.Create(null, null, "select 1", QueryLogStatus.Success,
+            DateTimeOffset.UnixEpoch, 1, 0, null);
+        Assert.Equal(QuerySource.Ui, log.Source);
+    }
+
+    [Fact]
+    public void Create_RecordsMcpSource()
+    {
+        var log = QueryLog.Create(null, null, "select 1", QueryLogStatus.Success,
+            DateTimeOffset.UnixEpoch, 1, 0, null, source: QuerySource.Mcp);
+        Assert.Equal(QuerySource.Mcp, log.Source);
+    }
 }

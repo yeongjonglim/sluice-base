@@ -19,6 +19,7 @@ public sealed class QueryLog
     public int? RowCount { get; private set; }
     public string? Error { get; private set; }
     public string[] SensitiveColumns { get; private set; } = [];
+    public QuerySource Source { get; private set; }
 
     public static QueryLog Create(
         UserId? userId,
@@ -29,7 +30,8 @@ public sealed class QueryLog
         int? durationMs,
         int? rowCount,
         string? error,
-        string[]? sensitiveColumns = null) => new()
+        string[]? sensitiveColumns = null,
+        QuerySource source = QuerySource.Ui) => new()
     {
         Id = QueryLogId.FromNewVersion7Guid(),
         UserId = userId,
@@ -41,5 +43,6 @@ public sealed class QueryLog
         RowCount = rowCount,
         Error = error,
         SensitiveColumns = sensitiveColumns ?? [],
+        Source = source,
     };
 }
