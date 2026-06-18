@@ -33,7 +33,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="IntegrationTests" />
-    <InternalsVisibleTo Include="CoverageReport.Tests" />
+    <InternalsVisibleTo Include="SluiceBase.Api.Tests" />
   </ItemGroup>
   
 </Project>

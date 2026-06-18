@@ -1,6 +1,6 @@
 using SluiceBase.Api.Mcp;
 
-namespace CoverageReport.Tests;
+namespace SluiceBase.Api.Tests;
 
 public class TokenHasherTests
 {

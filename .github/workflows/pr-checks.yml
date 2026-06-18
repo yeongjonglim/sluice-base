@@ -36,6 +36,16 @@ jobs:
       - name: Build
         run: dotnet build SluiceBase.slnx --configuration Release --no-restore
 
+      - name: Run unit tests
+        shell: bash
+        run: |
+          dotnet test tests/SluiceBase.Api.Tests \
+            --configuration Release --no-build \
+            --logger "console;verbosity=normal" --logger "trx"
+          dotnet test tests/SluiceBase.Core.Tests \
+            --configuration Release --no-build \
+            --logger "console;verbosity=normal" --logger "trx"
+
       - name: Install latest PostgreSQL client (pg_dump)
         run: |
           sudo install -d /usr/share/postgresql-common/pgdg
