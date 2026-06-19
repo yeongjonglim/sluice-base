@@ -86,6 +86,7 @@ public class AccessGroupEndpointTests(SluiceBaseStackFactory factory)
         var aliceAfter = Assert.Single(after!.Users, u => u.Email == "alice@example.com");
         var serverManage = Assert.Single(aliceAfter.Permissions, p => p.Permission == Permissions.ServerManage);
         Assert.Contains(serverManage.FromGroups, g => g.Name == name);
+        Assert.False(serverManage.FromDirect);
     }
 
     private sealed record UsersProvBody(IReadOnlyList<UserProvItem> Users);
