@@ -27,7 +27,7 @@ internal sealed class CatalogService(AppDbContext db, IAccessResolver resolver) 
         }
         else
         {
-            var allowedIds = await resolver.DatabasesWithPermissionAsync(user.Id, Permissions.QueryExecute, ct);
+            var allowedIds = await resolver.DatabasesWithAnyScopeableAsync(user.Id, ct);
             databases = await baseQuery.Where(d => allowedIds.Contains(d.Id)).Include(d => d.Server).ToListAsync(ct);
         }
 
