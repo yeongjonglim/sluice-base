@@ -131,6 +131,7 @@ internal static class AuthSetup
 
         services.AddScoped<IUserLoginRecorder, UserLoginRecorder>();
         services.AddScoped<ICurrentUserAccessor, CurrentUserAccessor>();
+        services.AddScoped<IAccessResolver, AccessResolver>();
         services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
         services.AddScoped<IAuthorizationHandler, AnyPermissionAuthorizationHandler>();
         services.AddHttpContextAccessor();
