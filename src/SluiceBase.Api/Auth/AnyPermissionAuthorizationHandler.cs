@@ -3,15 +3,24 @@ using Microsoft.AspNetCore.Authorization;
 namespace SluiceBase.Api.Auth;
 
 internal sealed class AnyPermissionAuthorizationHandler(
-    ICurrentUserAccessor currentUser) : AuthorizationHandler<AnyPermissionRequirement>
+    ICurrentUserAccessor currentUser,
+    IAccessResolver resolver) : AuthorizationHandler<AnyPermissionRequirement>
 {
     protected override async Task HandleRequirementAsync(
         AuthorizationHandlerContext ctx, AnyPermissionRequirement req)
     {
         var user = await currentUser.GetAsync(CancellationToken.None);
-        if (user is not null && req.Permissions.Any(user.HasPermission))
+        if (user is null)
         {
-            ctx.Succeed(req);
+            return;
+        }
+        foreach (var permission in req.Permissions)
+        {
+            if (await resolver.HasGlobalPermissionAsync(user.Id, permission, CancellationToken.None))
+            {
+                ctx.Succeed(req);
+                return;
+            }
         }
     }
 }

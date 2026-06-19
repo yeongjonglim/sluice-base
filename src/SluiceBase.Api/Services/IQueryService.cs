@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Queries;
@@ -31,7 +32,8 @@ internal sealed class QueryService(
     IServerConnectionFactory connectionFactory,
     ITargetEngine targetEngine,
     TimeProvider timeProvider,
-    IConfiguration configuration) : IQueryService
+    IConfiguration configuration,
+    IAccessResolver resolver) : IQueryService
 {
     public async Task<QueryExecutionResult> ExecuteAsync(User user, DatabaseId databaseId, string sql, QuerySource source, CancellationToken ct)
     {
@@ -44,9 +46,8 @@ internal sealed class QueryService(
             return new QueryExecutionResult(QueryOutcome.NotFound, null, null, null);
         }
 
-        // Enforce database role: user must have query:execute on this specific database
-        var hasRole = await db.UserDatabaseRoles.AnyAsync(
-            r => r.UserId == user.Id && r.Permission == Permissions.QueryExecute && r.DatabaseId == database.Id, ct);
+        // Enforce database role: user must have query:execute on this specific database (direct or via group)
+        var hasRole = await resolver.HasDatabasePermissionAsync(user.Id, database.Id, Permissions.QueryExecute, ct);
         if (!hasRole)
         {
             return new QueryExecutionResult(QueryOutcome.Forbidden, null, null, null);
