@@ -29,18 +29,33 @@ internal static class PermissionEndpoints
     private static async Task<Ok<ListUsersResponse>> ListUsers(AppDbContext db, CancellationToken ct)
     {
         var users = await db.ExternalLogins
-            .Include(u => u.User)
-            .ThenInclude(u => u.Permissions)
+            .Include(u => u.User).ThenInclude(u => u.Permissions)
             .AsNoTracking()
             .OrderBy(u => u.Email)
-            .Select(u => new UserSummaryResponse(
-                u.UserId,
-                u.Email,
-                u.Name,
-                u.LastLoginAt,
-                u.User.Permissions.Select(p => p.Permission).ToArray()))
+            .Select(u => new { u.UserId, u.Email, u.Name, u.LastLoginAt,
+                Direct = u.User.Permissions.Select(p => p.Permission).ToList() })
             .ToListAsync(ct);
-        return TypedResults.Ok(new ListUsersResponse(users));
+
+        // all group-global grants joined to membership + group name
+        var groupGrants = await db.AccessGroupMembers
+            .Join(db.AccessGroupPermissions, m => m.GroupId, p => p.GroupId,
+                (m, p) => new { m.UserId, p.Permission, p.GroupId })
+            .Join(db.AccessGroups, x => x.GroupId, g => g.Id,
+                (x, g) => new { x.UserId, x.Permission, Group = new GroupRef(g.Id, g.Name) })
+            .ToListAsync(ct);
+
+        var result = users.Select(u =>
+        {
+            var groupsForUser = groupGrants.Where(g => g.UserId == u.UserId).ToList();
+            var perms = u.Direct.Concat(groupsForUser.Select(g => g.Permission)).Distinct()
+                .Select(perm => new EffectivePermission(
+                    perm, u.Direct.Contains(perm),
+                    groupsForUser.Where(g => g.Permission == perm).Select(g => g.Group).ToList()))
+                .ToList();
+            return new UserSummaryResponse(u.UserId, u.Email, u.Name, u.LastLoginAt, perms);
+        }).ToList();
+
+        return TypedResults.Ok(new ListUsersResponse(result));
     }
 
     private static async Task<Results<ValidationProblem, NotFound, Ok, Created>> GrantPermission(
@@ -111,6 +126,6 @@ internal sealed record UserSummaryResponse(
     string? Email,
     string? Name,
     DateTimeOffset? LastLoginAt,
-    string[] Permissions);
+    IReadOnlyList<EffectivePermission> Permissions);
 
 internal sealed record ListUsersResponse(IReadOnlyList<UserSummaryResponse> Users);

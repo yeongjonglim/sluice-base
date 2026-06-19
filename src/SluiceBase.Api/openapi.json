@@ -2493,21 +2493,31 @@
           }
         }
       },
-      "DatabaseRoleItem": {
+      "DatabaseRoleListResponse": {
         "required": [
-          "id",
+          "roles"
+        ],
+        "type": "object",
+        "properties": {
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectiveDatabaseRoleItem"
+            }
+          }
+        }
+      },
+      "EffectiveDatabaseRoleItem": {
+        "required": [
           "userId",
           "userEmail",
           "userName",
           "permission",
-          "grantedAt",
-          "grantedById"
+          "fromDirect",
+          "fromGroups"
         ],
         "type": "object",
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/UserDatabaseRoleId"
-          },
           "userId": {
             "$ref": "#/components/schemas/UserId"
           },
@@ -2526,32 +2536,69 @@
           "permission": {
             "type": "string"
           },
-          "grantedAt": {
-            "type": "string",
-            "format": "date-time"
+          "fromDirect": {
+            "type": "boolean"
           },
-          "grantedById": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/UserId"
-              }
-            ]
+          "fromGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupRef"
+            }
           }
         }
       },
-      "DatabaseRoleListResponse": {
+      "EffectivePermission": {
         "required": [
-          "roles"
+          "permission",
+          "fromDirect",
+          "fromGroups"
         ],
         "type": "object",
         "properties": {
-          "roles": {
+          "permission": {
+            "type": "string"
+          },
+          "fromDirect": {
+            "type": "boolean"
+          },
+          "fromGroups": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/DatabaseRoleItem"
+              "$ref": "#/components/schemas/GroupRef"
+            }
+          }
+        }
+      },
+      "EffectiveUserRoleItem": {
+        "required": [
+          "databaseId",
+          "databaseDisplayName",
+          "serverName",
+          "permission",
+          "fromDirect",
+          "fromGroups"
+        ],
+        "type": "object",
+        "properties": {
+          "databaseId": {
+            "$ref": "#/components/schemas/DatabaseId"
+          },
+          "databaseDisplayName": {
+            "type": "string"
+          },
+          "serverName": {
+            "type": "string"
+          },
+          "permission": {
+            "type": "string"
+          },
+          "fromDirect": {
+            "type": "boolean"
+          },
+          "fromGroups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GroupRef"
             }
           }
         }
@@ -2705,6 +2752,21 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "GroupRef": {
+        "required": [
+          "groupId",
+          "name"
+        ],
+        "type": "object",
+        "properties": {
+          "groupId": {
+            "$ref": "#/components/schemas/AccessGroupId"
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -3781,45 +3843,9 @@
         }
       },
       "UserColumnBypassId": { },
-      "UserDatabaseRoleId": {
-        "type": "string",
-        "format": "uuid"
-      },
       "UserId": {
         "type": "string",
         "format": "uuid"
-      },
-      "UserRoleItem": {
-        "required": [
-          "id",
-          "databaseId",
-          "databaseDisplayName",
-          "serverName",
-          "permission",
-          "grantedAt"
-        ],
-        "type": "object",
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/UserDatabaseRoleId"
-          },
-          "databaseId": {
-            "$ref": "#/components/schemas/DatabaseId"
-          },
-          "databaseDisplayName": {
-            "type": "string"
-          },
-          "serverName": {
-            "type": "string"
-          },
-          "permission": {
-            "type": "string"
-          },
-          "grantedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
       },
       "UserRoleListResponse": {
         "required": [
@@ -3830,7 +3856,7 @@
           "roles": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/UserRoleItem"
+              "$ref": "#/components/schemas/EffectiveUserRoleItem"
             }
           }
         }
@@ -3870,7 +3896,7 @@
           "permissions": {
             "type": "array",
             "items": {
-              "type": "string"
+              "$ref": "#/components/schemas/EffectivePermission"
             }
           }
         }

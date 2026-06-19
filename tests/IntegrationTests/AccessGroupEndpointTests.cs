@@ -64,6 +64,37 @@ public class AccessGroupEndpointTests(SluiceBaseStackFactory factory)
         Assert.Equal(HttpStatusCode.Created, (await admin.Client.SendAsync(ok, ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task ListUsers_ReportsGroupProvenanceForGlobalPermission()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var admin = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var xsrf = await admin.FetchXsrfTokenAsync(ct);
+
+        var users = await admin.Client.GetFromJsonAsync<UsersProvBody>("/api/admin/user", ct);
+        var alice = Assert.Single(users!.Users, u => u.Email == "alice@example.com");
+
+        var name = $"grp-{Guid.NewGuid():N}"[..16];
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Post, "/api/admin/group", xsrf, new { name }), ct)).EnsureSuccessStatusCode();
+        var groups = await admin.Client.GetFromJsonAsync<GroupListBody2>("/api/admin/group", ct);
+        var group = Assert.Single(groups!.Groups, g => g.Name == name);
+
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Post, $"/api/admin/group/{group.Id}/member/{alice.Id}", xsrf), ct)).EnsureSuccessStatusCode();
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Post, $"/api/admin/group/{group.Id}/permission/{Permissions.ServerManage}", xsrf), ct)).EnsureSuccessStatusCode();
+
+        var after = await admin.Client.GetFromJsonAsync<UsersProvBody>("/api/admin/user", ct);
+        var aliceAfter = Assert.Single(after!.Users, u => u.Email == "alice@example.com");
+        var serverManage = Assert.Single(aliceAfter.Permissions, p => p.Permission == Permissions.ServerManage);
+        Assert.Contains(serverManage.FromGroups, g => g.Name == name);
+    }
+
+    private sealed record UsersProvBody(IReadOnlyList<UserProvItem> Users);
+    private sealed record UserProvItem(string Id, string? Email, IReadOnlyList<EffPermBody> Permissions);
+    private sealed record EffPermBody(string Permission, bool FromDirect, IReadOnlyList<GroupRefBody> FromGroups);
+    private sealed record GroupRefBody(string GroupId, string Name);
+    private sealed record GroupListBody2(IReadOnlyList<GroupItem2> Groups);
+    private sealed record GroupItem2(string Id, string Name);
+
     private sealed record GroupListBody(IReadOnlyList<GroupSummaryBody> Groups);
     private sealed record GroupSummaryBody(string Id, string Name, string? Description, int MemberCount);
 }
