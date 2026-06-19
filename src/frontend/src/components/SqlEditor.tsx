@@ -77,6 +77,8 @@ export const SqlEditor = forwardRef<ReactCodeMirrorRef, SqlEditorProps>(
           border: "1px solid var(--mantine-color-default-border)",
           borderRadius: "var(--mantine-radius-sm)",
           overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
           ...style,
         }}
       >
@@ -92,6 +94,9 @@ export const SqlEditor = forwardRef<ReactCodeMirrorRef, SqlEditorProps>(
           height={height}
           minHeight={minHeight}
           maxHeight={maxHeight}
+          // Make the CodeMirror wrapper fill the bordered box so a height="100%" editor
+          // has a bounded reference and its scroller can take over instead of growing.
+          style={{ flex: 1, minHeight: 0 }}
         />
       </Box>
     );
