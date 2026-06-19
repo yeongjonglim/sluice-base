@@ -682,6 +682,233 @@ export function useRemoveDatabaseRole() {
   });
 }
 
+// ── Access groups ─────────────────────────────────────────────────────────
+
+export type GroupListResponse =
+  paths["/api/admin/group"]["get"]["responses"][200]["content"]["application/json"];
+export type GroupDetailResponse =
+  paths["/api/admin/group/{groupId}"]["get"]["responses"][200]["content"]["application/json"];
+export type GroupRef = GroupDetailResponse["members"][0];
+export type EffectivePermission =
+  paths["/api/admin/user"]["get"]["responses"][200]["content"]["application/json"]["users"][0]["permissions"][0];
+
+export function useGroups() {
+  return useQuery({
+    queryKey: ["admin", "groups"] as const,
+    queryFn: () =>
+      apiRequest<void, GroupListResponse>("/api/admin/group"),
+  });
+}
+
+export function useGroup(groupId: string | null) {
+  return useQuery({
+    queryKey: ["admin", "group", groupId] as const,
+    enabled: groupId !== null,
+    queryFn: () =>
+      apiRequest<void, GroupDetailResponse>(`/api/admin/group/${groupId}`),
+  });
+}
+
+export function useCreateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: paths["/api/admin/group"]["post"]["requestBody"]["content"]["application/json"]) =>
+      apiRequest<
+        paths["/api/admin/group"]["post"]["requestBody"]["content"]["application/json"],
+        void
+      >("/api/admin/group", { method: "POST", body }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "groups"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Create group failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useUpdateGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      ...body
+    }: { groupId: string } & paths["/api/admin/group/{groupId}"]["patch"]["requestBody"]["content"]["application/json"]) =>
+      apiRequest<
+        paths["/api/admin/group/{groupId}"]["patch"]["requestBody"]["content"]["application/json"],
+        void
+      >(`/api/admin/group/${groupId}`, { method: "PATCH", body }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "groups"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Update group failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useDeleteGroup() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (groupId: string) =>
+      apiRequest<void, void>(`/api/admin/group/${groupId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "groups"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Delete group failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useAddGroupMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
+      apiRequest<void, void>(`/api/admin/group/${groupId}/member/${userId}`, { method: "POST" }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Add member failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useRemoveGroupMember() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, userId }: { groupId: string; userId: string }) =>
+      apiRequest<void, void>(`/api/admin/group/${groupId}/member/${userId}`, { method: "DELETE" }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Remove member failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useAssignGroupPermission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, permission }: { groupId: string; permission: string }) =>
+      apiRequest<void, void>(`/api/admin/group/${groupId}/permission/${permission}`, { method: "POST" }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Assign permission failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useRemoveGroupPermission() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ groupId, permission }: { groupId: string; permission: string }) =>
+      apiRequest<void, void>(`/api/admin/group/${groupId}/permission/${permission}`, { method: "DELETE" }),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Remove permission failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useAssignGroupDatabaseRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      databaseId,
+      permission,
+    }: {
+      groupId: string;
+      databaseId: string;
+      permission: string;
+    }) =>
+      apiRequest<void, void>(
+        `/api/admin/group/${groupId}/database/${databaseId}/role/${permission}`,
+        { method: "POST" },
+      ),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Assign database role failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useRemoveGroupDatabaseRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      groupId,
+      databaseId,
+      permission,
+    }: {
+      groupId: string;
+      databaseId: string;
+      permission: string;
+    }) =>
+      apiRequest<void, void>(
+        `/api/admin/group/${groupId}/database/${databaseId}/role/${permission}`,
+        { method: "DELETE" },
+      ),
+    onSuccess: (_data, { groupId }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Remove database role failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
 // ── Query history ─────────────────────────────────────────────────────────
 
 export interface QueryHistoryItem {
