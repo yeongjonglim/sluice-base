@@ -62,6 +62,9 @@ public class AccessGroupEndpointTests(SluiceBaseStackFactory factory)
         // server:manage is global → 201
         var ok = Mutation(HttpMethod.Post, $"/api/admin/group/{group.Id}/permission/{Permissions.ServerManage}", xsrf);
         Assert.Equal(HttpStatusCode.Created, (await admin.Client.SendAsync(ok, ct)).StatusCode);
+
+        // Clean up — cascades members + grants so they don't pollute effective-permission assertions in other tests.
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Delete, $"/api/admin/group/{group.Id}", xsrf), ct)).EnsureSuccessStatusCode();
     }
 
     [Fact]
@@ -87,6 +90,9 @@ public class AccessGroupEndpointTests(SluiceBaseStackFactory factory)
         var serverManage = Assert.Single(aliceAfter.Permissions, p => p.Permission == Permissions.ServerManage);
         Assert.Contains(serverManage.FromGroups, g => g.Name == name);
         Assert.False(serverManage.FromDirect);
+
+        // Clean up — cascades alice's membership + server:manage grant so they don't leak into AdminPermissionTests.
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Delete, $"/api/admin/group/{group.Id}", xsrf), ct)).EnsureSuccessStatusCode();
     }
 
     private sealed record UsersProvBody(IReadOnlyList<UserProvItem> Users);

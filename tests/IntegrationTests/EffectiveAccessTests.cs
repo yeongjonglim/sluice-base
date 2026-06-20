@@ -1,8 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using IntegrationTests.Supports;
-using Microsoft.Extensions.DependencyInjection;
-using SluiceBase.Api.Data;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Servers;
 
@@ -20,13 +18,12 @@ public class EffectiveAccessTests(SluiceBaseStackFactory factory)
         // alice signs in; resolve her user id
         var alice = await LoginHelper.SignInAsync("alice", "dev", ct);
 
-        // Capture the seeded DatabaseId outside the scope so it's accessible after the scope closes.
+        // Capture the seeded DatabaseId outside the scope so it's accessible after the context closes.
         DatabaseId? seededDatabaseId = null;
 
         // Seed a database + a group that grants query:execute on it, with alice as member.
-        await using (var scope = factory.InitialisedApp.Services.CreateAsyncScope())
+        await using (var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct))
         {
-            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
             var aliceUser = await AccessGroupTestHelper.GetUserByEmailAsync(db, "alice@example.com", ct);
             var (_, dbId) = await AccessGroupTestHelper.SeedDatabaseOnlyAsync(db, ct);
 

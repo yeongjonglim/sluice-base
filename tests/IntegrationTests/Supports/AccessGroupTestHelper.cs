@@ -1,3 +1,4 @@
+using Aspire.Hosting.Testing;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Data;
 using SluiceBase.Core.Servers;
@@ -7,6 +8,17 @@ namespace IntegrationTests.Supports;
 
 internal static class AccessGroupTestHelper
 {
+    public static async Task<AppDbContext> CreateMetadataDbContextAsync(
+        SluiceBaseStackFactory factory, CancellationToken ct)
+    {
+        var connStr = await factory.InitialisedApp.GetConnectionStringAsync("metadata-db", ct);
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(connStr)
+            .Options;
+        return new AppDbContext(options);
+    }
+
+
     public static async Task<(UserId User, DatabaseId Db)> SeedUserAndDatabaseAsync(
         AppDbContext db, CancellationToken ct)
     {

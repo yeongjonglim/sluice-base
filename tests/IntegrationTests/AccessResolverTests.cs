@@ -1,5 +1,4 @@
 using IntegrationTests.Supports;
-using Microsoft.Extensions.DependencyInjection;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Core.Permissions;
@@ -15,8 +14,7 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
     private async Task<(UserId User, DatabaseId Db)> SeedAsync(
         Func<AppDbContext, UserId, DatabaseId, Task> arrange, CancellationToken ct)
     {
-        await using var scope = factory.InitialisedApp.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct);
         var (userId, dbId) = await AccessGroupTestHelper.SeedUserAndDatabaseAsync(db, ct);
         await arrange(db, userId, dbId);
         await db.SaveChangesAsync(ct);
@@ -35,8 +33,7 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
             return Task.CompletedTask;
         }, ct);
 
-        await using var scope = factory.InitialisedApp.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct);
         Assert.True(await ResolverOver(db).HasDatabasePermissionAsync(user, dbId, Permissions.QueryExecute, ct));
     }
 
@@ -54,8 +51,7 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
             await Task.CompletedTask;
         }, ct);
 
-        await using var scope = factory.InitialisedApp.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct);
         Assert.True(await ResolverOver(db).HasDatabasePermissionAsync(user, dbId, Permissions.QueryExecute, ct));
     }
 
@@ -73,8 +69,7 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
             return Task.CompletedTask;
         }, ct);
 
-        await using var scope = factory.InitialisedApp.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct);
         Assert.False(await ResolverOver(db).HasDatabasePermissionAsync(user, dbId, Permissions.QueryExecute, ct));
     }
 
@@ -93,8 +88,7 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
             await Task.CompletedTask;
         }, ct);
 
-        await using var scope = factory.InitialisedApp.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct);
         var result = await ResolverOver(db).DatabasesWithPermissionAsync(user, Permissions.QueryAudit, ct);
         Assert.Contains(dbId, result);
         Assert.Single(result); // de-duplicated across direct + group
@@ -114,8 +108,7 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
             return Task.CompletedTask;
         }, ct);
 
-        await using var scope = factory.InitialisedApp.Services.CreateAsyncScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await using var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct);
         Assert.True(await ResolverOver(db).HasGlobalPermissionAsync(user, Permissions.ServerManage, ct));
     }
 }
