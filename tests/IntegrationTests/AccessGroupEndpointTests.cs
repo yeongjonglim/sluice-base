@@ -77,6 +77,10 @@ public class AccessGroupEndpointTests(SluiceBaseStackFactory factory)
         var users = await admin.Client.GetFromJsonAsync<UsersProvBody>("/api/admin/user", ct);
         var alice = Assert.Single(users!.Users, u => u.Email == "alice@example.com");
 
+        // Ensure alice has no DIRECT server:manage — other tests share this database and may
+        // have left one, which would make FromDirect true. Revoke is idempotent (204 if absent).
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Delete, $"/api/admin/user/{alice.Id}/permission/{Permissions.ServerManage}", xsrf), ct)).EnsureSuccessStatusCode();
+
         var name = $"grp-{Guid.NewGuid():N}"[..16];
         (await admin.Client.SendAsync(Mutation(HttpMethod.Post, "/api/admin/group", xsrf, new { name }), ct)).EnsureSuccessStatusCode();
         var groups = await admin.Client.GetFromJsonAsync<GroupListBody2>("/api/admin/group", ct);

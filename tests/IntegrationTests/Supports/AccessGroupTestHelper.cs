@@ -12,8 +12,12 @@ internal static class AccessGroupTestHelper
         SluiceBaseStackFactory factory, CancellationToken ct)
     {
         var connStr = await factory.InitialisedApp.GetConnectionStringAsync("metadata-db", ct);
+        // Match the API's EF configuration (Program.cs registers the context with
+        // UseSnakeCaseNamingConvention); without it column names default to PascalCase
+        // and writes fail with 42703 "column \"Id\" of relation \"server\" does not exist".
         var options = new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql(connStr)
+            .UseSnakeCaseNamingConvention()
             .Options;
         return new AppDbContext(options);
     }
