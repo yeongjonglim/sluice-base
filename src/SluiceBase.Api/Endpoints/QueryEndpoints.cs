@@ -55,6 +55,7 @@ internal static class QueryEndpoints
         [FromQuery] string[]? sensitiveColumn,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
+        IAccessResolver resolver,
         CancellationToken ct)
     {
         if (@from.HasValue && to.HasValue && @from > to)
@@ -64,18 +65,11 @@ internal static class QueryEndpoints
 
         var user = await currentUser.GetAsync(ct);
 
-        // databases where user has query:audit (can see all queries)
-        var auditDatabaseIds = await db.UserDatabaseRoles
-            .Where(r => r.UserId == user!.Id && r.Permission == Permissions.QueryAudit)
-            .Select(r => r.DatabaseId)
-            .ToListAsync(ct);
+        // databases where user has query:audit (can see all queries, direct or via group)
+        var auditDatabaseIds = await resolver.DatabasesWithPermissionAsync(user!.Id, Permissions.QueryAudit, ct);
 
-        // databases where user has any role (can see own queries)
-        var anyRoleDatabaseIds = await db.UserDatabaseRoles
-            .Where(r => r.UserId == user!.Id)
-            .Select(r => r.DatabaseId)
-            .Distinct()
-            .ToListAsync(ct);
+        // databases where user has any scopeable role (can see own queries, direct or via group)
+        var anyRoleDatabaseIds = await resolver.DatabasesWithAnyScopeableAsync(user!.Id, ct);
 
         DatabaseId? filterDb = databaseId is not null && Guid.TryParse(databaseId, out var dbGuid)
             ? DatabaseId.From(dbGuid)

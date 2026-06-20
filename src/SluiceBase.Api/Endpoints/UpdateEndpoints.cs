@@ -33,6 +33,7 @@ internal static class UpdateEndpoints
         SubmitUpdateRequest req,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
+        IAccessResolver resolver,
         TimeProvider timeProvider,
         CancellationToken ct)
     {
@@ -51,8 +52,7 @@ internal static class UpdateEndpoints
             return TypedResults.NotFound();
         }
 
-        var hasSubmitRole = await db.UserDatabaseRoles.AnyAsync(
-            r => r.UserId == user.Id && r.Permission == Permissions.UpdateSubmit && r.DatabaseId == database.Id, ct);
+        var hasSubmitRole = await resolver.HasDatabasePermissionAsync(user.Id, database.Id, Permissions.UpdateSubmit, ct);
         if (!hasSubmitRole)
         {
             return TypedResults.Forbid();
@@ -91,18 +91,16 @@ internal static class UpdateEndpoints
         string? status,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
+        IAccessResolver resolver,
         CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct);
 
-        var allowedDatabaseIds = await db.UserDatabaseRoles
-            .Where(r => r.UserId == user!.Id &&
-                        (r.Permission == Permissions.UpdateSubmit ||
-                         r.Permission == Permissions.UpdateApprove ||
-                         r.Permission == Permissions.UpdateExecute))
-            .Select(r => r.DatabaseId)
-            .Distinct()
-            .ToListAsync(ct);
+        // Collect databases where the user has any update permission (submit, approve, or execute)
+        var submitIds = await resolver.DatabasesWithPermissionAsync(user!.Id, Permissions.UpdateSubmit, ct);
+        var approveIds = await resolver.DatabasesWithPermissionAsync(user!.Id, Permissions.UpdateApprove, ct);
+        var executeIds = await resolver.DatabasesWithPermissionAsync(user!.Id, Permissions.UpdateExecute, ct);
+        var allowedDatabaseIds = submitIds.Union(approveIds).Union(executeIds).ToList();
 
         DatabaseId? filterDb = databaseId is not null && Guid.TryParse(databaseId, out var dbGuid)
             ? DatabaseId.From(dbGuid)
@@ -145,6 +143,7 @@ internal static class UpdateEndpoints
         UpdateRequestId id,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
+        IAccessResolver resolver,
         CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct);
@@ -157,12 +156,10 @@ internal static class UpdateEndpoints
 
         if (request.DatabaseId is not null)
         {
-            var hasRole = await db.UserDatabaseRoles.AnyAsync(
-                r => r.UserId == user!.Id && r.DatabaseId == request.DatabaseId &&
-                     (r.Permission == Permissions.UpdateSubmit ||
-                      r.Permission == Permissions.UpdateApprove ||
-                      r.Permission == Permissions.UpdateExecute), ct);
-            if (!hasRole)
+            var hasSubmit = await resolver.HasDatabasePermissionAsync(user!.Id, request.DatabaseId.Value, Permissions.UpdateSubmit, ct);
+            var hasApprove = await resolver.HasDatabasePermissionAsync(user!.Id, request.DatabaseId.Value, Permissions.UpdateApprove, ct);
+            var hasExecute = await resolver.HasDatabasePermissionAsync(user!.Id, request.DatabaseId.Value, Permissions.UpdateExecute, ct);
+            if (!hasSubmit && !hasApprove && !hasExecute)
             {
                 return TypedResults.NotFound();
             }
@@ -178,6 +175,7 @@ internal static class UpdateEndpoints
         ReviewUpdateRequest req,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
+        IAccessResolver resolver,
         TimeProvider timeProvider,
         CancellationToken ct)
     {
@@ -195,8 +193,7 @@ internal static class UpdateEndpoints
             return TypedResults.Unauthorized();
         }
 
-        var hasApproveRole = await db.UserDatabaseRoles.AnyAsync(
-            r => r.UserId == user.Id && r.Permission == Permissions.UpdateApprove && r.DatabaseId == request.DatabaseId, ct);
+        var hasApproveRole = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId!.Value, Permissions.UpdateApprove, ct);
         if (!hasApproveRole)
         {
             return TypedResults.Forbid();
@@ -223,6 +220,7 @@ internal static class UpdateEndpoints
         ReviewUpdateRequest req,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
+        IAccessResolver resolver,
         TimeProvider timeProvider,
         CancellationToken ct)
     {
@@ -240,8 +238,7 @@ internal static class UpdateEndpoints
             return TypedResults.Unauthorized();
         }
 
-        var hasApproveRole = await db.UserDatabaseRoles.AnyAsync(
-            r => r.UserId == user.Id && r.Permission == Permissions.UpdateApprove && r.DatabaseId == request.DatabaseId, ct);
+        var hasApproveRole = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId!.Value, Permissions.UpdateApprove, ct);
         if (!hasApproveRole)
         {
             return TypedResults.Forbid();
@@ -269,6 +266,7 @@ internal static class UpdateEndpoints
         AppDbContext db,
         TimeProvider timeProvider,
         ICurrentUserAccessor currentUser,
+        IAccessResolver resolver,
         CancellationToken ct)
     {
         var request = await LoadForMutation(db, id, ct);
@@ -285,8 +283,7 @@ internal static class UpdateEndpoints
             return TypedResults.Unauthorized();
         }
 
-        var hasSubmitRole = await db.UserDatabaseRoles.AnyAsync(
-            r => r.UserId == user.Id && r.Permission == Permissions.UpdateSubmit && r.DatabaseId == request.DatabaseId, ct);
+        var hasSubmitRole = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId!.Value, Permissions.UpdateSubmit, ct);
         if (!hasSubmitRole)
         {
             return TypedResults.Forbid();
@@ -312,6 +309,7 @@ internal static class UpdateEndpoints
         UpdateRequestId id,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
+        IAccessResolver resolver,
         IServerConnectionFactory connectionFactory,
         ITargetEngine targetEngine,
         TimeProvider timeProvider,
@@ -353,8 +351,7 @@ internal static class UpdateEndpoints
             return TypedResults.Unauthorized();
         }
 
-        var hasExecuteRole = await db.UserDatabaseRoles.AnyAsync(
-            r => r.UserId == user.Id && r.Permission == Permissions.UpdateExecute && r.DatabaseId == request.DatabaseId, ct);
+        var hasExecuteRole = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId!.Value, Permissions.UpdateExecute, ct);
         if (!hasExecuteRole)
         {
             return TypedResults.Forbid();

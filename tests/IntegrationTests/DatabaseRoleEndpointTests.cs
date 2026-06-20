@@ -316,7 +316,7 @@ public class DatabaseRoleEndpointTests(SluiceBaseStackFactory factory)
 
     // ── response records ──────────────────────────────────────────────────────
 
-    private sealed record RoleItem(string Id, string UserId, string Permission);
+    private sealed record RoleItem(string UserId, string Permission);
     private sealed record RoleListBody(RoleItem[] Roles);
     private sealed record UserRoleItem(string DatabaseId, string Permission);
     private sealed record UserRoleListBody(UserRoleItem[] Roles);

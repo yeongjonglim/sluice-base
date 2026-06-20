@@ -1,0 +1,111 @@
+using System.Net;
+using System.Net.Http.Json;
+using IntegrationTests.Supports;
+using SluiceBase.Core.Permissions;
+
+namespace IntegrationTests;
+
+public class AccessGroupEndpointTests(SluiceBaseStackFactory factory)
+{
+    private KeycloakLoginHelper LoginHelper => new(factory.InitialisedApp);
+
+    private static HttpRequestMessage Mutation(HttpMethod method, string url, string xsrf, object? body = null)
+    {
+        var req = new HttpRequestMessage(method, url);
+        req.Headers.Add("X-XSRF-TOKEN", xsrf);
+        if (body is not null)
+        {
+            req.Content = JsonContent.Create(body);
+        }
+        return req;
+    }
+
+    [Fact]
+    public async Task CreateListAndDeleteGroup_RoundTrips()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var admin = await LoginHelper.SignInAsync("alice", "dev", ct); // alice is bootstrap admin
+        var xsrf = await admin.FetchXsrfTokenAsync(ct);
+
+        var name = $"grp-{Guid.NewGuid():N}"[..16];
+        var create = Mutation(HttpMethod.Post, "/api/admin/group", xsrf, new { name, description = "desc" });
+        var createResp = await admin.Client.SendAsync(create, ct);
+        Assert.Equal(HttpStatusCode.Created, createResp.StatusCode);
+
+        var list = await admin.Client.GetFromJsonAsync<GroupListBody>("/api/admin/group", ct);
+        var created = Assert.Single(list!.Groups, g => g.Name == name);
+
+        var del = Mutation(HttpMethod.Delete, $"/api/admin/group/{created.Id}", xsrf);
+        (await admin.Client.SendAsync(del, ct)).EnsureSuccessStatusCode();
+
+        var afterList = await admin.Client.GetFromJsonAsync<GroupListBody>("/api/admin/group", ct);
+        Assert.DoesNotContain(afterList!.Groups, g => g.Name == name);
+    }
+
+    [Fact]
+    public async Task GrantGlobalPermission_RejectsNonGlobal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var admin = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var xsrf = await admin.FetchXsrfTokenAsync(ct);
+
+        var name = $"grp-{Guid.NewGuid():N}"[..16];
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Post, "/api/admin/group", xsrf, new { name }), ct))
+            .EnsureSuccessStatusCode();
+        var list = await admin.Client.GetFromJsonAsync<GroupListBody>("/api/admin/group", ct);
+        var group = Assert.Single(list!.Groups, g => g.Name == name);
+
+        // query:execute is scopeable, not global → 400
+        var bad = Mutation(HttpMethod.Post, $"/api/admin/group/{group.Id}/permission/{Permissions.QueryExecute}", xsrf);
+        Assert.Equal(HttpStatusCode.BadRequest, (await admin.Client.SendAsync(bad, ct)).StatusCode);
+
+        // server:manage is global → 201
+        var ok = Mutation(HttpMethod.Post, $"/api/admin/group/{group.Id}/permission/{Permissions.ServerManage}", xsrf);
+        Assert.Equal(HttpStatusCode.Created, (await admin.Client.SendAsync(ok, ct)).StatusCode);
+
+        // Clean up — cascades members + grants so they don't pollute effective-permission assertions in other tests.
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Delete, $"/api/admin/group/{group.Id}", xsrf), ct)).EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task ListUsers_ReportsGroupProvenanceForGlobalPermission()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var admin = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var xsrf = await admin.FetchXsrfTokenAsync(ct);
+
+        var users = await admin.Client.GetFromJsonAsync<UsersProvBody>("/api/admin/user", ct);
+        var alice = Assert.Single(users!.Users, u => u.Email == "alice@example.com");
+
+        // Ensure alice has no DIRECT server:manage — other tests share this database and may
+        // have left one, which would make FromDirect true. Revoke is idempotent (204 if absent).
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Delete, $"/api/admin/user/{alice.Id}/permission/{Permissions.ServerManage}", xsrf), ct)).EnsureSuccessStatusCode();
+
+        var name = $"grp-{Guid.NewGuid():N}"[..16];
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Post, "/api/admin/group", xsrf, new { name }), ct)).EnsureSuccessStatusCode();
+        var groups = await admin.Client.GetFromJsonAsync<GroupListBody2>("/api/admin/group", ct);
+        var group = Assert.Single(groups!.Groups, g => g.Name == name);
+
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Post, $"/api/admin/group/{group.Id}/member/{alice.Id}", xsrf), ct)).EnsureSuccessStatusCode();
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Post, $"/api/admin/group/{group.Id}/permission/{Permissions.ServerManage}", xsrf), ct)).EnsureSuccessStatusCode();
+
+        var after = await admin.Client.GetFromJsonAsync<UsersProvBody>("/api/admin/user", ct);
+        var aliceAfter = Assert.Single(after!.Users, u => u.Email == "alice@example.com");
+        var serverManage = Assert.Single(aliceAfter.Permissions, p => p.Permission == Permissions.ServerManage);
+        Assert.Contains(serverManage.FromGroups, g => g.Name == name);
+        Assert.False(serverManage.FromDirect);
+
+        // Clean up — cascades alice's membership + server:manage grant so they don't leak into AdminPermissionTests.
+        (await admin.Client.SendAsync(Mutation(HttpMethod.Delete, $"/api/admin/group/{group.Id}", xsrf), ct)).EnsureSuccessStatusCode();
+    }
+
+    private sealed record UsersProvBody(IReadOnlyList<UserProvItem> Users);
+    private sealed record UserProvItem(string Id, string? Email, IReadOnlyList<EffPermBody> Permissions);
+    private sealed record EffPermBody(string Permission, bool FromDirect, IReadOnlyList<GroupRefBody> FromGroups);
+    private sealed record GroupRefBody(string GroupId, string Name);
+    private sealed record GroupListBody2(IReadOnlyList<GroupItem2> Groups);
+    private sealed record GroupItem2(string Id, string Name);
+
+    private sealed record GroupListBody(IReadOnlyList<GroupSummaryBody> Groups);
+    private sealed record GroupSummaryBody(string Id, string Name, string? Description, int MemberCount);
+}

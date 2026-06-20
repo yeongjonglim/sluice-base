@@ -477,6 +477,86 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/group": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListAccessGroups"];
+        put?: never;
+        post: operations["CreateAccessGroup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/group/{groupId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["GetAccessGroup"];
+        put?: never;
+        post?: never;
+        delete: operations["DeleteAccessGroup"];
+        options?: never;
+        head?: never;
+        patch: operations["UpdateAccessGroup"];
+        trace?: never;
+    };
+    "/api/admin/group/{groupId}/member/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["AddAccessGroupMember"];
+        delete: operations["RemoveAccessGroupMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/group/{groupId}/permission/{permission}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["GrantAccessGroupPermission"];
+        delete: operations["RevokeAccessGroupPermission"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/group/{groupId}/database/{databaseId}/role/{permission}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["GrantAccessGroupDatabaseRole"];
+        delete: operations["RevokeAccessGroupDatabaseRole"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/database/{databaseId}/sensitive-column": {
         parameters: {
             query?: never;
@@ -753,6 +833,7 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccessGroupId: unknown;
         AddCredentialRequest: {
             label: string;
             username: string;
@@ -828,6 +909,10 @@ export interface components {
             ok: boolean;
             error: null | string;
         };
+        CreateGroupRequest: {
+            name: string;
+            description: null | string;
+        };
         CreateServerRequest: {
             name: string;
             kind: string;
@@ -861,18 +946,29 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
-        DatabaseRoleItem: {
-            id: components["schemas"]["UserDatabaseRoleId"];
+        DatabaseRoleListResponse: {
+            roles: components["schemas"]["EffectiveDatabaseRoleItem"][];
+        };
+        EffectiveDatabaseRoleItem: {
             userId: components["schemas"]["UserId"];
             userEmail: null | string;
             userName: null | string;
             permission: string;
-            /** Format: date-time */
-            grantedAt: string;
-            grantedById: null | components["schemas"]["UserId"];
+            fromDirect: boolean;
+            fromGroups: components["schemas"]["GroupRef"][];
         };
-        DatabaseRoleListResponse: {
-            roles: components["schemas"]["DatabaseRoleItem"][];
+        EffectivePermission: {
+            permission: string;
+            fromDirect: boolean;
+            fromGroups: components["schemas"]["GroupRef"][];
+        };
+        EffectiveUserRoleItem: {
+            databaseId: components["schemas"]["DatabaseId"];
+            databaseDisplayName: string;
+            serverName: string;
+            permission: string;
+            fromDirect: boolean;
+            fromGroups: components["schemas"]["GroupRef"][];
         };
         ForeignKey: {
             constraintName: string;
@@ -886,6 +982,41 @@ export interface components {
         };
         GrantPermissionRequest: {
             permission: string;
+        };
+        GroupDatabaseRoleItem: {
+            databaseId: components["schemas"]["DatabaseId"];
+            permission: string;
+        };
+        GroupDetailResponse: {
+            id: components["schemas"]["AccessGroupId"];
+            name: string;
+            description: null | string;
+            members: components["schemas"]["GroupMemberItem"][];
+            globalPermissions: string[];
+            databaseRoles: components["schemas"]["GroupDatabaseRoleItem"][];
+        };
+        GroupListResponse: {
+            groups: components["schemas"]["GroupSummary"][];
+        };
+        GroupMemberItem: {
+            userId: components["schemas"]["UserId"];
+            email: null | string;
+            name: null | string;
+        };
+        GroupRef: {
+            groupId: components["schemas"]["AccessGroupId"];
+            name: string;
+        };
+        GroupSummary: {
+            id: components["schemas"]["AccessGroupId"];
+            name: string;
+            description: null | string;
+            /** Format: int32 */
+            memberCount: number | string;
+            /** Format: int32 */
+            globalPermissionCount: number | string;
+            /** Format: int32 */
+            databaseRoleCount: number | string;
         };
         HealthResponse: {
             status: string;
@@ -1038,6 +1169,10 @@ export interface components {
             writeCredentialId: null | components["schemas"]["CredentialId"];
             isDisabled: boolean;
         };
+        UpdateGroupRequest: {
+            name: string;
+            description: null | string;
+        };
         UpdateRequestDetailResponse: {
             id: components["schemas"]["UpdateRequestId"];
             databaseId: null | components["schemas"]["DatabaseId"];
@@ -1096,20 +1231,9 @@ export interface components {
         };
         UserColumnBypassId: unknown;
         /** Format: uuid */
-        UserDatabaseRoleId: string;
-        /** Format: uuid */
         UserId: string;
-        UserRoleItem: {
-            id: components["schemas"]["UserDatabaseRoleId"];
-            databaseId: components["schemas"]["DatabaseId"];
-            databaseDisplayName: string;
-            serverName: string;
-            permission: string;
-            /** Format: date-time */
-            grantedAt: string;
-        };
         UserRoleListResponse: {
-            roles: components["schemas"]["UserRoleItem"][];
+            roles: components["schemas"]["EffectiveUserRoleItem"][];
         };
         UserSummaryResponse: {
             id: components["schemas"]["UserId"];
@@ -1117,7 +1241,7 @@ export interface components {
             name: null | string;
             /** Format: date-time */
             lastLoginAt: null | string;
-            permissions: string[];
+            permissions: components["schemas"]["EffectivePermission"][];
         };
     };
     responses: never;
@@ -1687,6 +1811,316 @@ export interface operations {
             };
             /** @description Not Found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ListAccessGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupListResponse"];
+                };
+            };
+        };
+    };
+    CreateAccessGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GetAccessGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GroupDetailResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    DeleteAccessGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    UpdateAccessGroup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    AddAccessGroupMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RemoveAccessGroupMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+                userId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GrantAccessGroupPermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RevokeAccessGroupPermission: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    GrantAccessGroupDatabaseRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+                databaseId: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["HttpValidationProblemDetails"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    RevokeAccessGroupDatabaseRole: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                groupId: string;
+                databaseId: string;
+                permission: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };

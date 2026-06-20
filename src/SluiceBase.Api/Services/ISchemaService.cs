@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Servers;
 using SluiceBase.Core.Permissions;
@@ -21,7 +22,8 @@ internal interface ISchemaService
 internal sealed class SchemaService(
     AppDbContext db,
     IServerConnectionFactory connectionFactory,
-    ITargetEngine targetEngine) : ISchemaService
+    ITargetEngine targetEngine,
+    IAccessResolver resolver) : ISchemaService
 {
     public async Task<SchemaResult> GetAnnotatedSchemaAsync(User user, DatabaseId databaseId, CancellationToken ct)
     {
@@ -32,8 +34,7 @@ internal sealed class SchemaService(
             return new SchemaResult(SchemaOutcome.NotFound, null, null);
         }
 
-        var hasRole = await db.UserDatabaseRoles.AnyAsync(
-            r => r.UserId == user.Id && r.Permission == Permissions.QueryExecute && r.DatabaseId == databaseId, ct);
+        var hasRole = await resolver.HasDatabasePermissionAsync(user.Id, databaseId, Permissions.QueryExecute, ct);
         if (!hasRole)
         {
             return new SchemaResult(SchemaOutcome.Forbidden, null, null);

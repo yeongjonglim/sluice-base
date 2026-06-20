@@ -11,6 +11,7 @@ internal static class EndpointMapper
         HealthEndpoints.Map(app);
         PermissionEndpoints.Map(app);
         DatabaseRoleEndpoints.Map(app);
+        AccessGroupEndpoints.Map(app);
         SensitiveColumnEndpoints.Map(app);
         CatalogEndpoints.Map(app);
         ServerEndpoints.Map(app);

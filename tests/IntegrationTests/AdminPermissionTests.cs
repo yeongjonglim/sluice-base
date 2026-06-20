@@ -264,6 +264,6 @@ public class AdminPermissionTests(SluiceBaseStackFactory factory)
 
     private sealed record MeBody(
         string Id, string Sub, string Email, string? Name, string[] Permissions);
-    private sealed record UserRow(string Id, string Email, string[] Permissions);
+    private sealed record UserRow(string Id, string Email);
     private sealed record ListBody(UserRow[] Users);
 }

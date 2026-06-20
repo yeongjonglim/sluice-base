@@ -46,6 +46,7 @@ internal static class SchemaEndpoints
         DatabaseId databaseId,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
+        IAccessResolver resolver,
         IServerConnectionFactory connectionFactory,
         ITargetEngine targetEngine,
         CancellationToken ct)
@@ -59,8 +60,7 @@ internal static class SchemaEndpoints
             return TypedResults.NotFound();
         }
 
-        var hasRole = await db.UserDatabaseRoles.AnyAsync(
-            r => r.UserId == user!.Id && r.Permission == Permissions.QueryExecute && r.DatabaseId == databaseId, ct);
+        var hasRole = await resolver.HasDatabasePermissionAsync(user!.Id, databaseId, Permissions.QueryExecute, ct);
         if (!hasRole)
         {
             return TypedResults.Forbid();

@@ -58,16 +58,42 @@ internal static class DatabaseRoleEndpoints
     private static async Task<Ok<DatabaseRoleListResponse>> ListByDatabase(
         DatabaseId databaseId, AppDbContext db, CancellationToken ct)
     {
-        var roles = await db.UserDatabaseRoles
+        var direct = await db.UserDatabaseRoles
             .AsNoTracking()
             .Where(r => r.DatabaseId == databaseId)
-            .Join(db.ExternalLogins,
-                r => r.UserId,
-                l => l.UserId,
-                (r, l) => new DatabaseRoleItem(r.Id, r.UserId, l.Email, l.Name, r.Permission, r.GrantedAt, r.GrantedById))
+            .Select(r => new { r.UserId, r.Permission })
             .ToListAsync(ct);
 
-        return TypedResults.Ok(new DatabaseRoleListResponse(roles));
+        var viaGroups = await db.AccessGroupDatabaseRoles
+            .Where(r => r.DatabaseId == databaseId)
+            .Join(db.AccessGroupMembers, r => r.GroupId, m => m.GroupId,
+                (r, m) => new { m.UserId, r.Permission, r.GroupId })
+            .Join(db.AccessGroups, x => x.GroupId, g => g.Id,
+                (x, g) => new { x.UserId, x.Permission, Group = new GroupRef(g.Id, g.Name) })
+            .ToListAsync(ct);
+
+        var userIds = direct.Select(d => d.UserId)
+            .Concat(viaGroups.Select(v => v.UserId)).Distinct().ToList();
+
+        var logins = await db.ExternalLogins
+            .Where(l => userIds.Contains(l.UserId))
+            .Select(l => new { l.UserId, l.Email, l.Name })
+            .ToListAsync(ct);
+
+        var keys = direct.Select(d => (d.UserId, d.Permission))
+            .Concat(viaGroups.Select(v => (v.UserId, v.Permission))).Distinct();
+
+        var items = keys.Select(k =>
+        {
+            var login = logins.FirstOrDefault(l => l.UserId == k.UserId);
+            return new EffectiveDatabaseRoleItem(
+                k.UserId, login?.Email, login?.Name, k.Permission,
+                direct.Any(d => d.UserId == k.UserId && d.Permission == k.Permission),
+                viaGroups.Where(v => v.UserId == k.UserId && v.Permission == k.Permission)
+                    .Select(v => v.Group).ToList());
+        }).ToList();
+
+        return TypedResults.Ok(new DatabaseRoleListResponse(items));
     }
 
     // ── assign by database ────────────────────────────────────────────────────
@@ -140,21 +166,37 @@ internal static class DatabaseRoleEndpoints
     private static async Task<Ok<UserRoleListResponse>> ListByUser(
         UserId userId, AppDbContext db, CancellationToken ct)
     {
-        var roles = await db.UserDatabaseRoles
-            .AsNoTracking()
+        var direct = await db.UserDatabaseRoles
             .Where(r => r.UserId == userId)
-            .Select(r => new UserRoleItem(
-                r.Id,
-                r.DatabaseId,
-                db.Databases.Where(d => d.Id == r.DatabaseId).Select(d => d.DisplayName).FirstOrDefault() ?? "",
-                db.Databases.Where(d => d.Id == r.DatabaseId)
-                    .Select(d => db.Servers.Where(s => s.Id == d.ServerId).Select(s => s.Name).FirstOrDefault())
-                    .FirstOrDefault() ?? "",
-                r.Permission,
-                r.GrantedAt))
+            .Select(r => new { r.DatabaseId, r.Permission })
             .ToListAsync(ct);
 
-        return TypedResults.Ok(new UserRoleListResponse(roles));
+        var viaGroups = await db.AccessGroupMembers
+            .Where(m => m.UserId == userId)
+            .Join(db.AccessGroupDatabaseRoles, m => m.GroupId, r => r.GroupId,
+                (m, r) => new { r.DatabaseId, r.Permission, r.GroupId })
+            .Join(db.AccessGroups, x => x.GroupId, g => g.Id,
+                (x, g) => new { x.DatabaseId, x.Permission, Group = new GroupRef(g.Id, g.Name) })
+            .ToListAsync(ct);
+
+        var dbNames = await db.Databases
+            .Join(db.Servers, d => d.ServerId, s => s.Id, (d, s) => new { d.Id, d.DisplayName, ServerName = s.Name })
+            .ToListAsync(ct);
+
+        var keys = direct.Select(d => (d.DatabaseId, d.Permission))
+            .Concat(viaGroups.Select(v => (v.DatabaseId, v.Permission))).Distinct();
+
+        var items = keys.Select(k =>
+        {
+            var name = dbNames.FirstOrDefault(n => n.Id == k.DatabaseId);
+            return new EffectiveUserRoleItem(
+                k.DatabaseId, name?.DisplayName ?? "", name?.ServerName ?? "", k.Permission,
+                direct.Any(d => d.DatabaseId == k.DatabaseId && d.Permission == k.Permission),
+                viaGroups.Where(v => v.DatabaseId == k.DatabaseId && v.Permission == k.Permission)
+                    .Select(v => v.Group).ToList());
+        }).ToList();
+
+        return TypedResults.Ok(new UserRoleListResponse(items));
     }
 
     // ── assign by user ────────────────────────────────────────────────────────
@@ -207,26 +249,25 @@ internal static class DatabaseRoleEndpoints
     public sealed record AssignDatabaseRoleRequest(UserId UserId, string Permission);
     public sealed record AssignUserRoleRequest(DatabaseId DatabaseId, string Permission);
 
-    public sealed record DatabaseRoleItem(
-        UserDatabaseRoleId Id,
+    public sealed record EffectiveDatabaseRoleItem(
         UserId UserId,
         string? UserEmail,
         string? UserName,
         string Permission,
-        DateTimeOffset GrantedAt,
-        UserId? GrantedById);
+        bool FromDirect,
+        IReadOnlyList<GroupRef> FromGroups);
 
-    public sealed record DatabaseRoleListResponse(IReadOnlyList<DatabaseRoleItem> Roles);
+    public sealed record DatabaseRoleListResponse(IReadOnlyList<EffectiveDatabaseRoleItem> Roles);
 
-    public sealed record UserRoleItem(
-        UserDatabaseRoleId Id,
+    public sealed record EffectiveUserRoleItem(
         DatabaseId DatabaseId,
         string DatabaseDisplayName,
         string ServerName,
         string Permission,
-        DateTimeOffset GrantedAt);
+        bool FromDirect,
+        IReadOnlyList<GroupRef> FromGroups);
 
-    public sealed record UserRoleListResponse(IReadOnlyList<UserRoleItem> Roles);
+    public sealed record UserRoleListResponse(IReadOnlyList<EffectiveUserRoleItem> Roles);
 
     public sealed record AdminDatabaseItem(DatabaseId Id, string DisplayName, bool IsDisabled);
 
