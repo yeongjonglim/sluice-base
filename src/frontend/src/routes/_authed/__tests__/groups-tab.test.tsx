@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import React from "react";
 import { GroupsTab } from "@/routes/_authed/access.tsx";
 
@@ -272,5 +273,91 @@ describe("GroupPanel (via GroupsTab group selection)", () => {
       const loader = document.querySelector(".mantine-Loader-root");
       expect(loader).not.toBeNull();
     });
+  });
+
+  it("fires the success notification after a db-role toggle settles", async () => {
+    // mutate invokes the onSuccess callback so the onSettled notification path runs
+    mockUseAssignGroupDatabaseRole.mockReturnValue({
+      mutate: (_args: unknown, opts: { onSuccess?: () => void }) => opts.onSuccess?.(),
+    });
+    await renderAndSelectGroup();
+    await waitFor(() => screen.getByText(/per-database roles/i));
+    const cb = screen.getByRole("checkbox", { name: /query execute on blue app db/i });
+    await userEvent.click(cb.closest("td")!);
+    expect(notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Access updated" }),
+    );
+  });
+
+  it("fires the success notification after granting a global permission", async () => {
+    mockUseAssignGroupPermission.mockReturnValue({
+      mutate: (_args: unknown, opts: { onSuccess?: () => void }) => opts.onSuccess?.(),
+    });
+    await renderAndSelectGroup();
+    await waitFor(() => screen.getByText(/global permissions/i));
+    await userEvent.click(screen.getByRole("checkbox", { name: /server manage/i }));
+    expect(notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Permission granted" }),
+    );
+  });
+
+  it("adds a member through the Select and notifies", async () => {
+    const addMutateFn = vi.fn((_args: unknown, opts: { onSuccess?: () => void }) => opts.onSuccess?.());
+    mockUseAddGroupMember.mockReturnValue({ mutate: addMutateFn });
+    // user-2 is not yet a member, so it appears in the add-member Select
+    mockUseUsers.mockReturnValue({
+      isLoading: false,
+      data: { users: [
+        { id: "user-1", email: "alice@example.com", name: "Alice", permissions: [], lastLoginAt: null },
+        { id: "user-2", email: "bob@example.com", name: "Bob", permissions: [], lastLoginAt: null },
+      ] },
+    });
+    await renderAndSelectGroup();
+    await waitFor(() => screen.getByPlaceholderText(/add member/i));
+    await userEvent.click(screen.getByPlaceholderText(/add member/i));
+    await userEvent.click(await screen.findByText("bob@example.com"));
+    expect(addMutateFn).toHaveBeenCalledWith(
+      expect.objectContaining({ groupId: "grp-1", userId: "user-2" }),
+      expect.any(Object),
+    );
+  });
+
+  async function openHeaderMenu() {
+    const menuBtn = screen.getAllByRole("button").find(
+      (b) => b.getAttribute("aria-haspopup") === "menu",
+    );
+    await userEvent.click(menuBtn!);
+  }
+
+  it("renames the group through the menu and modal", async () => {
+    const updateFn = vi.fn();
+    mockUseUpdateGroup.mockReturnValue({ mutate: updateFn, isPending: false });
+    await renderAndSelectGroup();
+    await waitFor(() => screen.getByText(/per-database roles/i));
+    await openHeaderMenu();
+    await userEvent.click(await screen.findByText("Rename"));
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+    // The rename modal pre-fills the name input with the current group name.
+    const nameInput = screen.getByDisplayValue("Admins");
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Renamed");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(updateFn).toHaveBeenCalledWith(
+      expect.objectContaining({ groupId: "grp-1", name: "Renamed" }),
+      expect.any(Object),
+    );
+  });
+
+  it("deletes the group through the menu and confirm modal", async () => {
+    const deleteFn = vi.fn();
+    mockUseDeleteGroup.mockReturnValue({ mutate: deleteFn, isPending: false });
+    await renderAndSelectGroup();
+    await waitFor(() => screen.getByText(/per-database roles/i));
+    await openHeaderMenu();
+    await userEvent.click(await screen.findByText(/delete group/i));
+    await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
+    const confirmBtn = screen.getByRole("button", { name: /^delete$/i });
+    await userEvent.click(confirmBtn);
+    expect(deleteFn).toHaveBeenCalledWith("grp-1", expect.any(Object));
   });
 });

@@ -8,10 +8,12 @@ import {
   useAssignGroupPermission,
   useCreateGroup,
   useDeleteGroup,
+  useGroup,
   useGroups,
   useRemoveGroupDatabaseRole,
   useRemoveGroupMember,
   useRemoveGroupPermission,
+  useUpdateGroup,
 } from "@/api/hooks";
 
 vi.mock("@/api/client", () => ({
@@ -51,6 +53,44 @@ describe("useGroups", () => {
     const { result } = renderHook(() => useGroups(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.groups[0].name).toBe("Analysts");
+  });
+});
+
+describe("useGroup", () => {
+  it("fetches the group detail when a groupId is given", async () => {
+    const detail = { id: "g1", name: "Analysts", description: null, members: [], globalPermissions: [], databaseRoles: [] };
+    vi.mocked(apiRequest).mockResolvedValue(detail);
+    const { result } = renderHook(() => useGroup("g1"), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiRequest).toHaveBeenCalledWith("/api/admin/group/g1");
+    expect(result.current.data?.name).toBe("Analysts");
+  });
+
+  it("is disabled when groupId is null", () => {
+    const { result } = renderHook(() => useGroup(null), { wrapper });
+    expect(result.current.fetchStatus).toBe("idle");
+    expect(apiRequest).not.toHaveBeenCalled();
+  });
+});
+
+describe("useUpdateGroup", () => {
+  it("PATCHes the group path with the body", async () => {
+    vi.mocked(apiRequest).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useUpdateGroup(), { wrapper });
+    result.current.mutate({ groupId: "g1", name: "Renamed", description: null });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/api/admin/group/g1",
+      expect.objectContaining({ method: "PATCH", body: { name: "Renamed", description: null } }),
+    );
+  });
+
+  it("shows an error notification on failure", async () => {
+    vi.mocked(apiRequest).mockRejectedValue(new Error("network error"));
+    const { result } = renderHook(() => useUpdateGroup(), { wrapper });
+    result.current.mutate({ groupId: "g1", name: "Renamed", description: null });
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(notifications.show).toHaveBeenCalledWith(expect.objectContaining({ color: "red" }));
   });
 });
 
