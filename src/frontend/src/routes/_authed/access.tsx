@@ -73,7 +73,7 @@ export const Route = createFileRoute("/_authed/access")({
   component: AccessPage,
 });
 
-function AccessPage() {
+export function AccessPage() {
   return (
     <Stack gap="md">
       <Title order={2}>Access control</Title>
@@ -109,7 +109,7 @@ function AccessPage() {
   );
 }
 
-function ByDatabaseTab() {
+export function ByDatabaseTab() {
   const servers = useAdminServers();
   const [selectedDb, setSelectedDb] = useState<(AdminDatabaseItem & { serverName: string }) | null>(null);
 
@@ -151,7 +151,7 @@ function ByDatabaseTab() {
   );
 }
 
-function ByUserTab() {
+export function ByUserTab() {
   const users = useUsers();
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const selectedUser = (users.data?.users ?? []).find((u) => u.id === selectedUserId);
@@ -425,7 +425,7 @@ export function DatabaseRolePanel({
   );
 }
 
-function SensitiveColumnsTab() {
+export function SensitiveColumnsTab() {
   const servers = useAdminServers();
   const [selectedDb, setSelectedDb] = useState<(AdminDatabaseItem & { serverName: string }) | null>(null);
 
