@@ -35,7 +35,7 @@ export const Route = createFileRoute("/_authed/permission")({
   component: PermissionsAdminPage,
 });
 
-function PermissionsAdminPage() {
+export function PermissionsAdminPage() {
   const me = useMe();
   const users = useUsers();
   const catalog = usePermissionCatalog();

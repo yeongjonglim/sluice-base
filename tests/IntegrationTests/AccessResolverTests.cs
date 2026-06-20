@@ -43,7 +43,7 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         var (user, dbId) = await SeedAsync(async (db, u, d) =>
         {
-            var group = AccessGroup.Create("Analysts", null, null, DateTimeOffset.UtcNow);
+            var group = AccessGroup.Create($"grp-{Guid.NewGuid():N}", null, null, DateTimeOffset.UtcNow);
             db.AccessGroups.Add(group);
             db.AccessGroupMembers.Add(AccessGroupMember.Add(group.Id, u, null, DateTimeOffset.UtcNow));
             db.AccessGroupDatabaseRoles.Add(
@@ -61,7 +61,7 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         var (user, dbId) = await SeedAsync((db, u, d) =>
         {
-            var group = AccessGroup.Create("Analysts", null, null, DateTimeOffset.UtcNow);
+            var group = AccessGroup.Create($"grp-{Guid.NewGuid():N}", null, null, DateTimeOffset.UtcNow);
             db.AccessGroups.Add(group);
             // grant to group but DO NOT add user as member
             db.AccessGroupDatabaseRoles.Add(
@@ -80,7 +80,7 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
         var (user, dbId) = await SeedAsync(async (db, u, d) =>
         {
             db.UserDatabaseRoles.Add(UserDatabaseRole.Grant(u, Permissions.QueryAudit, d, null, DateTimeOffset.UtcNow));
-            var group = AccessGroup.Create("A", null, null, DateTimeOffset.UtcNow);
+            var group = AccessGroup.Create($"grp-{Guid.NewGuid():N}", null, null, DateTimeOffset.UtcNow);
             db.AccessGroups.Add(group);
             db.AccessGroupMembers.Add(AccessGroupMember.Add(group.Id, u, null, DateTimeOffset.UtcNow));
             db.AccessGroupDatabaseRoles.Add(
@@ -100,7 +100,7 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         var (user, _) = await SeedAsync((db, u, d) =>
         {
-            var group = AccessGroup.Create("Admins", null, null, DateTimeOffset.UtcNow);
+            var group = AccessGroup.Create($"grp-{Guid.NewGuid():N}", null, null, DateTimeOffset.UtcNow);
             db.AccessGroups.Add(group);
             db.AccessGroupMembers.Add(AccessGroupMember.Add(group.Id, u, null, DateTimeOffset.UtcNow));
             db.AccessGroupPermissions.Add(
