@@ -781,6 +781,7 @@ export function useAddGroupMember() {
     onSuccess: (_data, { groupId }) => {
       void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
       void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "database"] });
     },
     onError: (error) => {
       notifications.show({
@@ -800,6 +801,7 @@ export function useRemoveGroupMember() {
     onSuccess: (_data, { groupId }) => {
       void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
       void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "database"] });
     },
     onError: (error) => {
       notifications.show({
@@ -819,6 +821,7 @@ export function useAssignGroupPermission() {
     onSuccess: (_data, { groupId }) => {
       void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
       void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "database"] });
     },
     onError: (error) => {
       notifications.show({
@@ -838,6 +841,7 @@ export function useRemoveGroupPermission() {
     onSuccess: (_data, { groupId }) => {
       void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
       void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "database"] });
     },
     onError: (error) => {
       notifications.show({
@@ -868,6 +872,7 @@ export function useAssignGroupDatabaseRole() {
     onSuccess: (_data, { groupId }) => {
       void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
       void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "database"] });
     },
     onError: (error) => {
       notifications.show({
@@ -898,6 +903,7 @@ export function useRemoveGroupDatabaseRole() {
     onSuccess: (_data, { groupId }) => {
       void qc.invalidateQueries({ queryKey: ["admin", "group", groupId] });
       void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "database"] });
     },
     onError: (error) => {
       notifications.show({
