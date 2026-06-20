@@ -1,4 +1,5 @@
-import { Badge, Card, Group, Stack, Switch, Table, Text, TextInput, Title } from "@mantine/core";
+import { Badge, Card, Group, Stack, Switch, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
+import { IconUsers } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
@@ -151,16 +152,45 @@ function PermissionsAdminPage() {
                       : "Never"}
                   </Text>
                 </Table.Td>
-                {permissions.map((permission) => (
-                  <Table.Td key={permission}>
-                    <Switch
-                      checked={user.permissions.includes(permission)}
-                      disabled={isMutating(user.id)}
-                      aria-label={PERMISSION_LABELS[permission].full}
-                      onChange={(e) => void handleToggle(user, permission, e.currentTarget.checked)}
-                    />
-                  </Table.Td>
-                ))}
+                {permissions.map((permission) => {
+                  // Find the effective permission entry for this permission
+                  const ep = user.permissions.find((p) => p.permission === permission);
+                  const isDirect = ep?.fromDirect ?? false;
+                  const inheritedGroups = ep?.fromGroups ?? [];
+                  const isInherited = inheritedGroups.length > 0;
+
+                  return (
+                    <Table.Td key={permission}>
+                      <Stack gap={2}>
+                        <Switch
+                          checked={isDirect}
+                          // Disable toggle if permission is only inherited (not directly granted)
+                          disabled={isMutating(user.id) || (!isDirect && isInherited)}
+                          aria-label={PERMISSION_LABELS[permission].full}
+                          onChange={(e) => void handleToggle(user, permission, e.currentTarget.checked)}
+                        />
+                        {/* Show inherited-via indicator when permission comes via group(s) */}
+                        {isInherited && (
+                          <Tooltip
+                            label={`Inherited via ${inheritedGroups.map((g) => g.name).join(", ")}`}
+                            withArrow
+                          >
+                            <Group
+                              gap={4}
+                              style={{ cursor: "default", color: "var(--mantine-color-cyan-7)" }}
+                              aria-label={`${PERMISSION_LABELS[permission].full} inherited via ${inheritedGroups.map((g) => g.name).join(", ")}`}
+                            >
+                              <IconUsers size={12} />
+                              <Text size="xs" c="cyan" style={{ lineHeight: 1 }}>
+                                {inheritedGroups.map((g) => g.name).join(", ")}
+                              </Text>
+                            </Group>
+                          </Tooltip>
+                        )}
+                      </Stack>
+                    </Table.Td>
+                  );
+                })}
               </Table.Tr>
             ))}
           </Table.Tbody>

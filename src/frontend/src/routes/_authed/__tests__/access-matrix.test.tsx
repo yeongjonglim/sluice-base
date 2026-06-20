@@ -84,14 +84,15 @@ const testDatabase = { id: "db-1", displayName: "Blue App DB", isDisabled: false
 describe("UserRolePanel", () => {
   it("renders a checkbox for each database × permission pair", () => {
     render(React.createElement(UserRolePanel, { user: testUser }), { wrapper: Wrapper });
-    // 2 databases × 5 permissions = 10 checkboxes
+    // 2 databases × 5 permissions = 10 checkboxes (legend uses spans, not checkboxes)
     expect(screen.getAllByRole("checkbox")).toHaveLength(10);
   });
 
   it("checks boxes that match existing roles", () => {
+    // Roles now include fromDirect/fromGroups provenance fields
     mockUseUserRoles.mockReturnValue({
       isLoading: false,
-      data: { roles: [{ id: "r-1", databaseId: "db-1", permission: "query:execute", databaseDisplayName: "Blue App DB", serverName: "Blue", grantedAt: "" }] },
+      data: { roles: [{ id: "r-1", databaseId: "db-1", permission: "query:execute", databaseDisplayName: "Blue App DB", serverName: "Blue", grantedAt: "", fromDirect: true, fromGroups: [] }] },
     });
     render(React.createElement(UserRolePanel, { user: testUser }), { wrapper: Wrapper });
     const checked = screen.getAllByRole("checkbox", { checked: true });
@@ -102,7 +103,8 @@ describe("UserRolePanel", () => {
   it("calls assignUserRole when checking an unchecked box", async () => {
     mockAssignUserRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs.onSuccess?.());
     render(React.createElement(UserRolePanel, { user: testUser }), { wrapper: Wrapper });
-    await userEvent.click(screen.getAllByRole("checkbox", { checked: false })[0].closest("td")!);
+    // Click directly on the checkbox (EffectiveCell handles toggle via onChange, not td onClick)
+    await userEvent.click(screen.getAllByRole("checkbox", { checked: false })[0]);
     expect(mockAssignUserRole).toHaveBeenCalledWith(
       expect.objectContaining({ userId: "user-1", databaseId: expect.any(String), permission: expect.any(String) }),
       expect.any(Object),
@@ -112,11 +114,12 @@ describe("UserRolePanel", () => {
   it("calls removeDatabaseRole when unchecking a checked box", async () => {
     mockUseUserRoles.mockReturnValue({
       isLoading: false,
-      data: { roles: [{ id: "r-1", databaseId: "db-1", permission: "query:execute", databaseDisplayName: "Blue App DB", serverName: "Blue", grantedAt: "" }] },
+      data: { roles: [{ id: "r-1", databaseId: "db-1", permission: "query:execute", databaseDisplayName: "Blue App DB", serverName: "Blue", grantedAt: "", fromDirect: true, fromGroups: [] }] },
     });
     mockRemoveRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs.onSuccess?.());
     render(React.createElement(UserRolePanel, { user: testUser }), { wrapper: Wrapper });
-    await userEvent.click(screen.getAllByRole("checkbox", { checked: true })[0].closest("td")!);
+    // Click directly on the checked checkbox
+    await userEvent.click(screen.getAllByRole("checkbox", { checked: true })[0]);
     expect(mockRemoveRole).toHaveBeenCalledWith(
       expect.objectContaining({ databaseId: "db-1", userId: "user-1", permission: "query:execute" }),
       expect.any(Object),
@@ -127,7 +130,7 @@ describe("UserRolePanel", () => {
     const { notifications } = await import("@mantine/notifications");
     mockAssignUserRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs.onSuccess?.());
     render(React.createElement(UserRolePanel, { user: testUser }), { wrapper: Wrapper });
-    await userEvent.click(screen.getAllByRole("checkbox", { checked: false })[0].closest("td")!);
+    await userEvent.click(screen.getAllByRole("checkbox", { checked: false })[0]);
     expect(notifications.show).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Access updated", color: "teal" }),
     );
@@ -145,14 +148,15 @@ describe("UserRolePanel", () => {
 describe("DatabaseRolePanel", () => {
   it("renders a checkbox for each user × permission pair", () => {
     render(React.createElement(DatabaseRolePanel, { database: testDatabase }), { wrapper: Wrapper });
-    // 1 user × 5 permissions = 5 checkboxes
+    // 1 user × 5 permissions = 5 checkboxes (legend uses spans, not checkboxes)
     expect(screen.getAllByRole("checkbox")).toHaveLength(5);
   });
 
   it("checks boxes that match existing roles", () => {
+    // Roles now include fromDirect/fromGroups provenance fields
     mockUseDatabaseRoles.mockReturnValue({
       isLoading: false,
-      data: { roles: [{ id: "r-2", userId: "user-2", permission: "query:execute", userEmail: "bob@example.com", userName: "Bob Dev", grantedAt: "", grantedById: null }] },
+      data: { roles: [{ id: "r-2", userId: "user-2", permission: "query:execute", userEmail: "bob@example.com", userName: "Bob Dev", grantedAt: "", grantedById: null, fromDirect: true, fromGroups: [] }] },
     });
     render(React.createElement(DatabaseRolePanel, { database: testDatabase }), { wrapper: Wrapper });
     const checked = screen.getAllByRole("checkbox", { checked: true });
@@ -163,7 +167,8 @@ describe("DatabaseRolePanel", () => {
   it("calls assignDatabaseRole when checking an unchecked box", async () => {
     mockAssignDatabaseRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs.onSuccess?.());
     render(React.createElement(DatabaseRolePanel, { database: testDatabase }), { wrapper: Wrapper });
-    await userEvent.click(screen.getAllByRole("checkbox", { checked: false })[0].closest("td")!);
+    // Click directly on the checkbox (EffectiveCell handles toggle via onChange, not td onClick)
+    await userEvent.click(screen.getAllByRole("checkbox", { checked: false })[0]);
     expect(mockAssignDatabaseRole).toHaveBeenCalledWith(
       expect.objectContaining({ databaseId: "db-1", userId: "user-2", permission: expect.any(String) }),
       expect.any(Object),
@@ -173,11 +178,12 @@ describe("DatabaseRolePanel", () => {
   it("calls removeDatabaseRole when unchecking a checked box", async () => {
     mockUseDatabaseRoles.mockReturnValue({
       isLoading: false,
-      data: { roles: [{ id: "r-2", userId: "user-2", permission: "query:execute", userEmail: "bob@example.com", userName: "Bob Dev", grantedAt: "", grantedById: null }] },
+      data: { roles: [{ id: "r-2", userId: "user-2", permission: "query:execute", userEmail: "bob@example.com", userName: "Bob Dev", grantedAt: "", grantedById: null, fromDirect: true, fromGroups: [] }] },
     });
     mockRemoveRole.mockImplementation((_v: unknown, cbs: { onSuccess?: () => void }) => cbs.onSuccess?.());
     render(React.createElement(DatabaseRolePanel, { database: testDatabase }), { wrapper: Wrapper });
-    await userEvent.click(screen.getAllByRole("checkbox", { checked: true })[0].closest("td")!);
+    // Click directly on the checked checkbox
+    await userEvent.click(screen.getAllByRole("checkbox", { checked: true })[0]);
     expect(mockRemoveRole).toHaveBeenCalledWith(
       expect.objectContaining({ databaseId: "db-1", userId: "user-2", permission: "query:execute" }),
       expect.any(Object),

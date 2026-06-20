@@ -16,6 +16,7 @@ import {
   Title,
   Textarea,
 } from "@mantine/core";
+import { EffectiveCell } from "@/components/EffectiveCell";
 import { notifications } from "@mantine/notifications";
 import { IconDatabase, IconDots, IconShieldLock, IconUser, IconUsers } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
@@ -195,10 +196,15 @@ export function UserRolePanel({
   const pendingRef = useRef(0);
   const hadErrorRef = useRef(false);
 
-  function isChecked(databaseId: string, permission: string): boolean {
-    return (roles.data?.roles ?? []).some(
+  function getProvenance(databaseId: string, permission: string) {
+    const role = (roles.data?.roles ?? []).find(
       (r) => r.databaseId === databaseId && r.permission === permission,
     );
+    if (!role) return { fromDirect: false, fromGroups: [] as Array<{ groupId: string; name: string }> };
+    return {
+      fromDirect: role.fromDirect,
+      fromGroups: (role.fromGroups ?? []).map((g) => ({ groupId: g.groupId as string, name: g.name })),
+    };
   }
 
   function handleToggle(databaseId: string, permission: string, checked: boolean) {
@@ -231,6 +237,21 @@ export function UserRolePanel({
         <Text fw={600}>{user.email ?? user.id}</Text>
         {user.name && <Text size="xs" c="dimmed">{user.name}</Text>}
       </Stack>
+      {/* Legend */}
+      <Group gap="md" style={{ fontSize: 12, color: "var(--mantine-color-dimmed)" }}>
+        <Group gap={4}>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: "var(--mantine-color-blue-6)", display: "inline-block" }} />
+          <Text size="xs">Direct grant</Text>
+        </Group>
+        <Group gap={4}>
+          <IconUsers size={14} style={{ color: "var(--mantine-color-cyan-7)" }} />
+          <Text size="xs">Inherited via group</Text>
+        </Group>
+        <Group gap={4}>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: "var(--mantine-color-blue-6)", border: "2px solid var(--mantine-color-cyan-6)", display: "inline-block" }} />
+          <Text size="xs" c="cyan">Both</Text>
+        </Group>
+      </Group>
       <Table.ScrollContainer minWidth={500}>
         <Table striped highlightOnHover>
           <Table.Thead>
@@ -259,23 +280,22 @@ export function UserRolePanel({
                 .map((db) => (
                   <Table.Tr key={db.id}>
                     <Table.Td><Text size="sm">{db.displayName}</Text></Table.Td>
-                    {SCOPEABLE_PERMISSIONS.map((p) => (
-                      <Table.Td
-                        key={p.value}
-                        onClick={() => { if (!roles.isLoading) handleToggle(db.id, p.value, !isChecked(db.id, p.value)); }}
-                        style={{ cursor: roles.isLoading ? "default" : "pointer" }}
-                      >
-                        <div style={{ display: "flex", justifyContent: "center" }}>
-                          <Checkbox
-                            checked={isChecked(db.id, p.value)}
-                            disabled={roles.isLoading}
-                            onChange={() => {}}
-                            aria-label={`${p.label} on ${db.displayName}`}
-                            styles={{ root: { pointerEvents: "none" } }}
-                          />
-                        </div>
-                      </Table.Td>
-                    ))}
+                    {SCOPEABLE_PERMISSIONS.map((p) => {
+                      const prov = getProvenance(db.id, p.value);
+                      return (
+                        <Table.Td key={p.value} style={{ opacity: roles.isLoading ? 0.5 : 1 }}>
+                          <div style={{ display: "flex", justifyContent: "center" }}>
+                            <EffectiveCell
+                              fromDirect={prov.fromDirect}
+                              fromGroups={prov.fromGroups}
+                              disabled={roles.isLoading}
+                              onToggle={(next) => { if (!roles.isLoading) handleToggle(db.id, p.value, next); }}
+                              ariaLabel={`${p.label} on ${db.displayName}`}
+                            />
+                          </div>
+                        </Table.Td>
+                      );
+                    })}
                   </Table.Tr>
                 )),
             ])}
@@ -298,10 +318,15 @@ export function DatabaseRolePanel({
   const pendingRef = useRef(0);
   const hadErrorRef = useRef(false);
 
-  function isChecked(userId: string, permission: string): boolean {
-    return (roles.data?.roles ?? []).some(
+  function getProvenance(userId: string, permission: string) {
+    const role = (roles.data?.roles ?? []).find(
       (r) => r.userId === userId && r.permission === permission,
     );
+    if (!role) return { fromDirect: false, fromGroups: [] as Array<{ groupId: string; name: string }> };
+    return {
+      fromDirect: role.fromDirect,
+      fromGroups: (role.fromGroups ?? []).map((g) => ({ groupId: g.groupId as string, name: g.name })),
+    };
   }
 
   function handleToggle(userId: string, permission: string, checked: boolean) {
@@ -334,6 +359,21 @@ export function DatabaseRolePanel({
         <Text fw={600}>{database.displayName}</Text>
         <Text size="xs" c="dimmed">{database.serverName}</Text>
       </Stack>
+      {/* Legend */}
+      <Group gap="md" style={{ fontSize: 12, color: "var(--mantine-color-dimmed)" }}>
+        <Group gap={4}>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: "var(--mantine-color-blue-6)", display: "inline-block" }} />
+          <Text size="xs">Direct grant</Text>
+        </Group>
+        <Group gap={4}>
+          <IconUsers size={14} style={{ color: "var(--mantine-color-cyan-7)" }} />
+          <Text size="xs">Inherited via group</Text>
+        </Group>
+        <Group gap={4}>
+          <span style={{ width: 14, height: 14, borderRadius: 3, background: "var(--mantine-color-blue-6)", border: "2px solid var(--mantine-color-cyan-6)", display: "inline-block" }} />
+          <Text size="xs" c="cyan">Both</Text>
+        </Group>
+      </Group>
       <Table.ScrollContainer minWidth={500}>
         <Table striped highlightOnHover>
           <Table.Thead>
@@ -353,23 +393,22 @@ export function DatabaseRolePanel({
                   <Text size="sm">{user.email ?? user.id}</Text>
                   {user.name && <Text size="xs" c="dimmed">{user.name}</Text>}
                 </Table.Td>
-                {SCOPEABLE_PERMISSIONS.map((p) => (
-                  <Table.Td
-                    key={p.value}
-                    onClick={() => { if (!roles.isLoading) handleToggle(user.id, p.value, !isChecked(user.id, p.value)); }}
-                    style={{ cursor: roles.isLoading ? "default" : "pointer" }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "center" }}>
-                      <Checkbox
-                        checked={isChecked(user.id, p.value)}
-                        disabled={roles.isLoading}
-                        onChange={() => {}}
-                        aria-label={`${p.label} for ${user.email ?? user.id}`}
-                        styles={{ root: { pointerEvents: "none" } }}
-                      />
-                    </div>
-                  </Table.Td>
-                ))}
+                {SCOPEABLE_PERMISSIONS.map((p) => {
+                  const prov = getProvenance(user.id, p.value);
+                  return (
+                    <Table.Td key={p.value} style={{ opacity: roles.isLoading ? 0.5 : 1 }}>
+                      <div style={{ display: "flex", justifyContent: "center" }}>
+                        <EffectiveCell
+                          fromDirect={prov.fromDirect}
+                          fromGroups={prov.fromGroups}
+                          disabled={roles.isLoading}
+                          onToggle={(next) => { if (!roles.isLoading) handleToggle(user.id, p.value, next); }}
+                          ariaLabel={`${p.label} for ${user.email ?? user.id}`}
+                        />
+                      </div>
+                    </Table.Td>
+                  );
+                })}
               </Table.Tr>
             ))}
             {(users.data?.users ?? []).length === 0 && !users.isLoading && (
