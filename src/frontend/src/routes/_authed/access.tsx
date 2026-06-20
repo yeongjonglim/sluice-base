@@ -13,19 +13,19 @@ import {
   Tabs,
   Text,
   TextInput,
-  Title,
   Textarea,
+  Title,
 } from "@mantine/core";
-import { EffectiveCell } from "@/components/EffectiveCell";
 import { notifications } from "@mantine/notifications";
 import { IconDatabase, IconDots, IconShieldLock, IconUser, IconUsers } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import type { AdminDatabaseItem } from "@/api/hooks";
+import { EffectiveCell } from "@/components/EffectiveCell";
 import {
   meQueryOptions,
-  useAdminServers,
   useAddGroupMember,
+  useAdminServers,
   useAssignDatabaseRole,
   useAssignGroupDatabaseRole,
   useAssignGroupPermission,
@@ -203,7 +203,7 @@ export function UserRolePanel({
     if (!role) return { fromDirect: false, fromGroups: [] as Array<{ groupId: string; name: string }> };
     return {
       fromDirect: role.fromDirect,
-      fromGroups: (role.fromGroups ?? []).map((g) => ({ groupId: g.groupId as string, name: g.name })),
+      fromGroups: role.fromGroups.map((g) => ({ groupId: g.groupId as string, name: g.name })),
     };
   }
 
@@ -325,7 +325,7 @@ export function DatabaseRolePanel({
     if (!role) return { fromDirect: false, fromGroups: [] as Array<{ groupId: string; name: string }> };
     return {
       fromDirect: role.fromDirect,
-      fromGroups: (role.fromGroups ?? []).map((g) => ({ groupId: g.groupId as string, name: g.name })),
+      fromGroups: role.fromGroups.map((g) => ({ groupId: g.groupId as string, name: g.name })),
     };
   }
 
@@ -759,7 +759,7 @@ function GroupPanel({ groupId }: { groupId: string }) {
   }
 
   // Users not yet in this group, for the add-member Select
-  const memberUserIds = new Set((data.members ?? []).map((m) => m.userId));
+  const memberUserIds = new Set(data.members.map((m) => m.userId));
   const nonMemberUsers = (users.data?.users ?? []).filter((u) => !memberUserIds.has(u.id));
 
   return (
@@ -786,10 +786,10 @@ function GroupPanel({ groupId }: { groupId: string }) {
       {/* Members */}
       <Stack gap="xs">
         <Text fw={500} size="sm">Members</Text>
-        {(data.members ?? []).length === 0 && (
+        {data.members.length === 0 && (
           <Text size="sm" c="dimmed">No members yet.</Text>
         )}
-        {(data.members ?? []).map((m) => (
+        {data.members.map((m) => (
           <Group key={m.userId} justify="space-between" align="center">
             <Text size="sm">{m.email ?? m.userId}</Text>
             <Button
@@ -831,7 +831,7 @@ function GroupPanel({ groupId }: { groupId: string }) {
           <Checkbox
             key={p.value}
             label={p.label}
-            checked={(data.globalPermissions ?? []).includes(p.value)}
+            checked={data.globalPermissions.includes(p.value)}
             onChange={(e) => handlePermissionToggle(p.value, e.currentTarget.checked)}
           />
         ))}
@@ -878,11 +878,9 @@ function GroupPanel({ groupId }: { groupId: string }) {
                         <Table.Td
                           key={p.value}
                           onClick={() => {
-                            if (!group.isLoading) {
-                              handleDbRoleToggle(db.id, p.value, !isDbRoleChecked(db.id, p.value));
-                            }
+                            handleDbRoleToggle(db.id, p.value, !isDbRoleChecked(db.id, p.value));
                           }}
-                          style={{ cursor: group.isLoading ? "default" : "pointer" }}
+                          style={{ cursor: "pointer" }}
                         >
                           <div style={{ display: "flex", justifyContent: "center" }}>
                             <Checkbox
