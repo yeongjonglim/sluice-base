@@ -40,6 +40,21 @@ internal sealed class AccessResolver(AppDbContext db) : IAccessResolver
             .AnyAsync(ct);
     }
 
+    public async Task<bool> HasAnyDatabasePermissionAsync(
+        UserId user, DatabaseId dbId, IReadOnlyCollection<string> permissions, CancellationToken ct)
+    {
+        var direct = await db.UserDatabaseRoles
+            .AnyAsync(r => r.UserId == user && r.DatabaseId == dbId && permissions.Contains(r.Permission), ct);
+        if (direct)
+        {
+            return true;
+        }
+        return await db.AccessGroupDatabaseRoles
+            .Where(r => r.DatabaseId == dbId && permissions.Contains(r.Permission))
+            .Where(r => MemberGroupIds(user).Contains(r.GroupId))
+            .AnyAsync(ct);
+    }
+
     public async Task<IReadOnlySet<DatabaseId>> DatabasesWithPermissionAsync(UserId user, string permission, CancellationToken ct)
     {
         var direct = db.UserDatabaseRoles

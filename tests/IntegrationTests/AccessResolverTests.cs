@@ -111,4 +111,76 @@ public class AccessResolverTests(SluiceBaseStackFactory factory)
         await using var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct);
         Assert.True(await ResolverOver(db).HasGlobalPermissionAsync(user, Permissions.ServerManage, ct));
     }
+
+    [Fact]
+    public async Task DatabasesWithAnyScopeable_UnionsDirectAndGroup_Deduplicated()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (user, dbId) = await SeedAsync(async (db, u, d) =>
+        {
+            // direct submit role + group execute role on the SAME database
+            db.UserDatabaseRoles.Add(UserDatabaseRole.Grant(u, Permissions.UpdateSubmit, d, null, DateTimeOffset.UtcNow));
+            var group = AccessGroup.Create($"grp-{Guid.NewGuid():N}", null, null, DateTimeOffset.UtcNow);
+            db.AccessGroups.Add(group);
+            db.AccessGroupMembers.Add(AccessGroupMember.Add(group.Id, u, null, DateTimeOffset.UtcNow));
+            db.AccessGroupDatabaseRoles.Add(
+                AccessGroupDatabaseRole.Grant(group.Id, Permissions.UpdateExecute, d, null, DateTimeOffset.UtcNow));
+            await Task.CompletedTask;
+        }, ct);
+
+        await using var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct);
+        var result = await ResolverOver(db).DatabasesWithAnyScopeableAsync(user, ct);
+        Assert.Contains(dbId, result);
+        Assert.Single(result); // two roles on one database collapse to a single id
+    }
+
+    [Fact]
+    public async Task EffectivePermissions_IncludesDirectAndGroupGlobalAndScopeable()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (user, _) = await SeedAsync(async (db, u, d) =>
+        {
+            db.UserPermissions.Add(UserPermissionMap.Grant(u, Permissions.ServerManage, null, DateTimeOffset.UtcNow));
+            db.UserDatabaseRoles.Add(UserDatabaseRole.Grant(u, Permissions.QueryExecute, d, null, DateTimeOffset.UtcNow));
+            var group = AccessGroup.Create($"grp-{Guid.NewGuid():N}", null, null, DateTimeOffset.UtcNow);
+            db.AccessGroups.Add(group);
+            db.AccessGroupMembers.Add(AccessGroupMember.Add(group.Id, u, null, DateTimeOffset.UtcNow));
+            db.AccessGroupPermissions.Add(
+                AccessGroupPermission.Grant(group.Id, Permissions.PermissionManage, null, DateTimeOffset.UtcNow));
+            db.AccessGroupDatabaseRoles.Add(
+                AccessGroupDatabaseRole.Grant(group.Id, Permissions.QueryAudit, d, null, DateTimeOffset.UtcNow));
+            await Task.CompletedTask;
+        }, ct);
+
+        await using var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct);
+        var result = await ResolverOver(db).EffectivePermissionsAsync(user, ct);
+        Assert.Contains(Permissions.ServerManage, result);     // direct global
+        Assert.Contains(Permissions.QueryExecute, result);     // direct scopeable
+        Assert.Contains(Permissions.PermissionManage, result); // group global
+        Assert.Contains(Permissions.QueryAudit, result);       // group scopeable
+    }
+
+    [Fact]
+    public async Task HasAnyDatabasePermission_TrueWhenOneOfSeveralHeldViaGroup()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (user, dbId) = await SeedAsync(async (db, u, d) =>
+        {
+            var group = AccessGroup.Create($"grp-{Guid.NewGuid():N}", null, null, DateTimeOffset.UtcNow);
+            db.AccessGroups.Add(group);
+            db.AccessGroupMembers.Add(AccessGroupMember.Add(group.Id, u, null, DateTimeOffset.UtcNow));
+            db.AccessGroupDatabaseRoles.Add(
+                AccessGroupDatabaseRole.Grant(group.Id, Permissions.UpdateApprove, d, null, DateTimeOffset.UtcNow));
+            await Task.CompletedTask;
+        }, ct);
+
+        await using var db = await AccessGroupTestHelper.CreateMetadataDbContextAsync(factory, ct);
+        var resolver = ResolverOver(db);
+        Assert.True(await resolver.HasAnyDatabasePermissionAsync(
+            user, dbId,
+            [Permissions.UpdateSubmit, Permissions.UpdateApprove, Permissions.UpdateExecute], ct));
+        Assert.False(await resolver.HasAnyDatabasePermissionAsync(
+            user, dbId,
+            [Permissions.UpdateSubmit, Permissions.UpdateExecute], ct));
+    }
 }
