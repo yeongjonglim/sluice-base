@@ -29,6 +29,12 @@ public sealed class AccessGroupDatabaseRole
     public UserId? GrantedById { get; private set; }
 
     public static AccessGroupDatabaseRole Grant(
-        AccessGroupId groupId, string permission, DatabaseId databaseId, UserId? grantedById, DateTimeOffset at) =>
-        new(AccessGroupDatabaseRoleId.FromNewVersion7Guid(), groupId, permission, databaseId, grantedById, at);
+        AccessGroupId groupId, string permission, DatabaseId databaseId, UserId? grantedById, DateTimeOffset at)
+    {
+        if (string.IsNullOrWhiteSpace(permission))
+        {
+            throw new ArgumentException("Permission is required.", nameof(permission));
+        }
+        return new(AccessGroupDatabaseRoleId.FromNewVersion7Guid(), groupId, permission, databaseId, grantedById, at);
+    }
 }

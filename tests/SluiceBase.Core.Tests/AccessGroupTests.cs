@@ -72,4 +72,32 @@ public class AccessGroupTests
         Assert.Equal(QueryExecute, role.Permission);
         Assert.Equal(dbId, role.DatabaseId);
     }
+
+    [Fact]
+    public void Rename_BlankName_Throws()
+    {
+        var group = AccessGroup.Create("Old", null, null, DateTimeOffset.UtcNow);
+        Assert.Throws<ArgumentException>(() => group.Rename("   "));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void Permission_Grant_BlankPermission_Throws(string permission)
+    {
+        var groupId = AccessGroupId.FromNewVersion7Guid();
+        Assert.Throws<ArgumentException>(() =>
+            AccessGroupPermission.Grant(groupId, permission, null, DateTimeOffset.UtcNow));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void DatabaseRole_Grant_BlankPermission_Throws(string permission)
+    {
+        var groupId = AccessGroupId.FromNewVersion7Guid();
+        var dbId = DatabaseId.From(Guid.NewGuid());
+        Assert.Throws<ArgumentException>(() =>
+            AccessGroupDatabaseRole.Grant(groupId, permission, dbId, null, DateTimeOffset.UtcNow));
+    }
 }
