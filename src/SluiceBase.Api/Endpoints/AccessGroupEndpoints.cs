@@ -32,16 +32,35 @@ internal static class AccessGroupEndpoints
 
     private static async Task<Ok<GroupListResponse>> ListGroups(AppDbContext db, CancellationToken ct)
     {
+        // Batched aggregation: a fixed number of queries regardless of group count,
+        // rather than three correlated COUNT subqueries per group row.
         var groups = await db.AccessGroups
             .AsNoTracking()
             .OrderBy(g => g.Name)
+            .Select(g => new { g.Id, g.Name, g.Description })
+            .ToListAsync(ct);
+
+        var memberCounts = await db.AccessGroupMembers
+            .GroupBy(m => m.GroupId)
+            .Select(x => new { GroupId = x.Key, Count = x.Count() })
+            .ToDictionaryAsync(x => x.GroupId, x => x.Count, ct);
+        var permissionCounts = await db.AccessGroupPermissions
+            .GroupBy(p => p.GroupId)
+            .Select(x => new { GroupId = x.Key, Count = x.Count() })
+            .ToDictionaryAsync(x => x.GroupId, x => x.Count, ct);
+        var roleCounts = await db.AccessGroupDatabaseRoles
+            .GroupBy(r => r.GroupId)
+            .Select(x => new { GroupId = x.Key, Count = x.Count() })
+            .ToDictionaryAsync(x => x.GroupId, x => x.Count, ct);
+
+        var result = groups
             .Select(g => new GroupSummary(
                 g.Id, g.Name, g.Description,
-                db.AccessGroupMembers.Count(m => m.GroupId == g.Id),
-                db.AccessGroupPermissions.Count(p => p.GroupId == g.Id),
-                db.AccessGroupDatabaseRoles.Count(r => r.GroupId == g.Id)))
-            .ToListAsync(ct);
-        return TypedResults.Ok(new GroupListResponse(groups));
+                memberCounts.GetValueOrDefault(g.Id),
+                permissionCounts.GetValueOrDefault(g.Id),
+                roleCounts.GetValueOrDefault(g.Id)))
+            .ToList();
+        return TypedResults.Ok(new GroupListResponse(result));
     }
 
     private static async Task<Created> CreateGroup(
@@ -63,10 +82,13 @@ internal static class AccessGroupEndpoints
             return TypedResults.NotFound();
         }
 
-        var members = await db.AccessGroupMembers
-            .Where(m => m.GroupId == groupId)
-            .Join(db.ExternalLogins, m => m.UserId, l => l.UserId,
-                (m, l) => new GroupMemberItem(m.UserId, l.Email, l.Name))
+        // Left join so a member without a corresponding ExternalLogin row still appears
+        // (with null email/name) rather than being silently dropped.
+        var members = await (
+            from m in db.AccessGroupMembers.Where(m => m.GroupId == groupId)
+            join l in db.ExternalLogins on m.UserId equals l.UserId into logins
+            from l in logins.DefaultIfEmpty()
+            select new GroupMemberItem(m.UserId, l != null ? l.Email : null, l != null ? l.Name : null))
             .ToListAsync(ct);
         var global = await db.AccessGroupPermissions
             .Where(p => p.GroupId == groupId).Select(p => p.Permission).ToListAsync(ct);

@@ -156,10 +156,12 @@ internal static class UpdateEndpoints
 
         if (request.DatabaseId is not null)
         {
-            var hasSubmit = await resolver.HasDatabasePermissionAsync(user!.Id, request.DatabaseId.Value, Permissions.UpdateSubmit, ct);
-            var hasApprove = await resolver.HasDatabasePermissionAsync(user!.Id, request.DatabaseId.Value, Permissions.UpdateApprove, ct);
-            var hasExecute = await resolver.HasDatabasePermissionAsync(user!.Id, request.DatabaseId.Value, Permissions.UpdateExecute, ct);
-            if (!hasSubmit && !hasApprove && !hasExecute)
+            var hasAnyRole = await resolver.HasAnyDatabasePermissionAsync(
+                user!.Id,
+                request.DatabaseId.Value,
+                [Permissions.UpdateSubmit, Permissions.UpdateApprove, Permissions.UpdateExecute],
+                ct);
+            if (!hasAnyRole)
             {
                 return TypedResults.NotFound();
             }

@@ -75,9 +75,9 @@ describe("EffectiveCell", () => {
     expect(marker).toBeDefined();
   });
 
-  it("renders a checked checkbox with indicator when fromDirect=true and fromGroups has entries", () => {
+  it("renders a checked checkbox with the redundancy indicator dot when fromDirect=true and fromGroups has entries", () => {
     const onToggle = vi.fn();
-    render(
+    const { container } = render(
       React.createElement(EffectiveCell, {
         fromDirect: true,
         fromGroups: [{ groupId: "g1", name: "Analysts" }],
@@ -89,6 +89,8 @@ describe("EffectiveCell", () => {
     // Shows a checked checkbox (direct grant)
     const checkbox = screen.getByRole("checkbox", { name: /query execute on blue app db/i });
     expect(checkbox).toBeChecked();
+    // And the Mantine Indicator dot signalling "also inherited via a group"
+    expect(container.querySelector(".mantine-Indicator-indicator")).not.toBeNull();
   });
 
   it("respects the disabled prop", () => {

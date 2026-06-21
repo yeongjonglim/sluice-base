@@ -27,6 +27,12 @@ public sealed class AccessGroupPermission
     public DateTimeOffset GrantedAt { get; private set; }
     public UserId? GrantedById { get; private set; }
 
-    public static AccessGroupPermission Grant(AccessGroupId groupId, string permission, UserId? grantedById, DateTimeOffset at) =>
-        new(AccessGroupPermissionId.FromNewVersion7Guid(), groupId, permission, grantedById, at);
+    public static AccessGroupPermission Grant(AccessGroupId groupId, string permission, UserId? grantedById, DateTimeOffset at)
+    {
+        if (string.IsNullOrWhiteSpace(permission))
+        {
+            throw new ArgumentException("Permission is required.", nameof(permission));
+        }
+        return new(AccessGroupPermissionId.FromNewVersion7Guid(), groupId, permission, grantedById, at);
+    }
 }

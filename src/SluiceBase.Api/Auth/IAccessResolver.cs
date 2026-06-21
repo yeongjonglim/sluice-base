@@ -7,6 +7,7 @@ internal interface IAccessResolver
 {
     Task<bool> HasGlobalPermissionAsync(UserId user, string permission, CancellationToken ct);
     Task<bool> HasDatabasePermissionAsync(UserId user, DatabaseId db, string permission, CancellationToken ct);
+    Task<bool> HasAnyDatabasePermissionAsync(UserId user, DatabaseId db, IReadOnlyCollection<string> permissions, CancellationToken ct);
     Task<IReadOnlySet<DatabaseId>> DatabasesWithPermissionAsync(UserId user, string permission, CancellationToken ct);
     Task<IReadOnlySet<DatabaseId>> DatabasesWithAnyScopeableAsync(UserId user, CancellationToken ct);
     Task<IReadOnlySet<string>> EffectivePermissionsAsync(UserId user, CancellationToken ct);
