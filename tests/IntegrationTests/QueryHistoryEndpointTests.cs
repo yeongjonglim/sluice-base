@@ -397,10 +397,50 @@ public class QueryHistoryEndpointTests(SluiceBaseStackFactory factory)
         Assert.Contains(resp!.Items, i => i.QueryText == sql);
     }
 
+    [Fact]
+    public async Task GetHistory_UiQuery_HasUiSource()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, _, databaseId) = await AliceWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var sql = $"SELECT 1 -- source-ui-{Guid.NewGuid():N}";
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new { databaseId, sql });
+        (await session.Client.SendAsync(req, ct)).EnsureSuccessStatusCode();
+
+        var resp = await session.Client.GetFromJsonAsync<HistoryBody>("/api/query/history", ct);
+        var item = Assert.Single(resp!.Items, i => i.QueryText == sql);
+        Assert.Equal("Ui", item.Source);
+    }
+
+    [Fact]
+    public async Task GetHistory_FiltersBySource()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, _, databaseId) = await AliceWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var sql = $"SELECT 1 -- source-filter-{Guid.NewGuid():N}";
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new { databaseId, sql });
+        (await session.Client.SendAsync(req, ct)).EnsureSuccessStatusCode();
+
+        // source=Ui includes the UI-run query
+        var ui = await session.Client.GetFromJsonAsync<HistoryBody>("/api/query/history?source=Ui", ct);
+        Assert.Contains(ui!.Items, i => i.QueryText == sql);
+        Assert.All(ui.Items, i => Assert.Equal("Ui", i.Source));
+
+        // source=Mcp excludes it
+        var mcp = await session.Client.GetFromJsonAsync<HistoryBody>("/api/query/history?source=Mcp", ct);
+        Assert.DoesNotContain(mcp!.Items, i => i.QueryText == sql);
+    }
+
     private sealed record HistoryBody(HistoryItem[] Items);
     private sealed record HistoryItem(
         string QueryText, string Status, string? DatabaseId, string? DatabaseDisplayName,
-        string? UserId, string? UserName, string ExecutedAt, string[] SensitiveColumns);
+        string? UserId, string? UserName, string ExecutedAt, string[] SensitiveColumns,
+        string Source, string? Error);
     private sealed record ListUserBody(UserRow[] Users);
     private sealed record UserRow(string Id, string Email);
 }

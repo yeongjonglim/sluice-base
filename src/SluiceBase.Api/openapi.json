@@ -310,6 +310,13 @@
             }
           },
           {
+            "name": "source",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sensitiveColumn",
             "in": "query",
             "schema": {
@@ -3018,7 +3025,8 @@
           "error",
           "userId",
           "userName",
-          "sensitiveColumns"
+          "sensitiveColumns",
+          "source"
         ],
         "type": "object",
         "properties": {
@@ -3096,6 +3104,9 @@
             "items": {
               "type": "string"
             }
+          },
+          "source": {
+            "$ref": "#/components/schemas/QuerySource"
           }
         }
       },
@@ -3196,6 +3207,13 @@
             ]
           }
         }
+      },
+      "QuerySource": {
+        "enum": [
+          "Ui",
+          "Mcp"
+        ],
+        "type": "string"
       },
       "RegisterClientRequest": {
         "required": [

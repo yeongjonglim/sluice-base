@@ -1075,6 +1075,7 @@ export interface components {
             userId: null | components["schemas"]["UserId"];
             userName: null | string;
             sensitiveColumns: string[];
+            source: components["schemas"]["QuerySource"];
         };
         QueryHistoryResponse: {
             items: components["schemas"]["QueryHistoryItem"][];
@@ -1095,6 +1096,8 @@ export interface components {
             durationMs: number | string;
             error: null | string;
         };
+        /** @enum {string} */
+        QuerySource: "Ui" | "Mcp";
         RegisterClientRequest: {
             client_name: null | string;
             redirect_uris: null | string[];
@@ -1522,6 +1525,7 @@ export interface operations {
                 to?: string;
                 databaseId?: string;
                 status?: string;
+                source?: string;
                 sensitiveColumn?: string[];
             };
             header?: never;
