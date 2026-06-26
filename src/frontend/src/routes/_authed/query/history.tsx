@@ -261,7 +261,7 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
     <Table.Tr>
       <Table.Td>
         <Group gap={4} justify="center">
-          {item.status === "Error" && item.error ? (
+          {item.error ? (
             <Tooltip label={item.error} multiline>
               <Badge color={STATUS_COLOR[item.status] ?? "gray"} size="sm">
                 {item.status}
