@@ -15,7 +15,7 @@ import {
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
-import { IconCopy, IconShieldLock } from "@tabler/icons-react";
+import { IconCopy, IconDeviceDesktop, IconPlugConnected, IconShieldLock } from "@tabler/icons-react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import type { QueryHistoryFilters, QueryHistoryItem } from "@/api/hooks";
@@ -28,6 +28,7 @@ type HistorySearch = {
   to?: string;
   databaseId?: string;
   status?: string;
+  source?: string;
   sensitiveColumn?: Array<string>;
 };
 
@@ -37,6 +38,7 @@ export const Route = createFileRoute("/_authed/query/history")({
     to: typeof search.to === "string" ? search.to : undefined,
     databaseId: typeof search.databaseId === "string" ? search.databaseId : undefined,
     status: typeof search.status === "string" ? search.status : undefined,
+    source: typeof search.source === "string" ? search.source : undefined,
     sensitiveColumn: Array.isArray(search.sensitiveColumn)
       ? search.sensitiveColumn.filter((v): v is string => typeof v === "string")
       : typeof search.sensitiveColumn === "string"
@@ -68,6 +70,12 @@ const STATUS_OPTIONS = [
   { value: "Blocked", label: "Blocked" },
 ];
 
+const SOURCE_OPTIONS = [
+  { value: "", label: "All sources" },
+  { value: "Ui", label: "UI" },
+  { value: "Mcp", label: "MCP" },
+];
+
 function dateToParam(d: string | null): string | undefined {
   if (!d) return undefined;
   return d;
@@ -77,7 +85,7 @@ function paramToDate(s: string | undefined): string | null {
   return s ?? null;
 }
 
-function QueryHistoryPage() {
+export function QueryHistoryPage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const canAudit = useHasPermission("query:audit");
@@ -89,6 +97,7 @@ function QueryHistoryPage() {
     to: search.to,
     databaseId: search.databaseId,
     status: search.status,
+    source: search.source,
     sensitiveColumn: search.sensitiveColumn,
   };
   const history = useQueryHistory(filters);
@@ -169,6 +178,14 @@ function QueryHistoryPage() {
           onChange={(v) => setFilter("status", v ?? undefined)}
           style={{ width: 160 }}
         />
+        <Select
+          label="Source"
+          size="sm"
+          data={SOURCE_OPTIONS}
+          value={search.source ?? ""}
+          onChange={(v) => setFilter("source", v ?? undefined)}
+          style={{ width: 140 }}
+        />
         <MultiSelect
           label="Sensitive columns"
           size="sm"
@@ -244,9 +261,26 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
     <Table.Tr>
       <Table.Td>
         <Group gap={4} justify="center">
-          <Badge color={STATUS_COLOR[item.status] ?? "gray"} size="sm">
-            {item.status}
-          </Badge>
+          {item.error ? (
+            <Tooltip label={item.error} multiline>
+              <Badge color={STATUS_COLOR[item.status] ?? "gray"} size="sm">
+                {item.status}
+              </Badge>
+            </Tooltip>
+          ) : (
+            <Badge color={STATUS_COLOR[item.status] ?? "gray"} size="sm">
+              {item.status}
+            </Badge>
+          )}
+          {item.source === "Mcp" ? (
+            <Tooltip label="From MCP">
+              <IconPlugConnected size={14} color="var(--mantine-color-dimmed)" />
+            </Tooltip>
+          ) : (
+            <Tooltip label="From UI">
+              <IconDeviceDesktop size={14} color="var(--mantine-color-dimmed)" />
+            </Tooltip>
+          )}
           {item.sensitiveColumns.length > 0 && (
             <Tooltip label={item.sensitiveColumns.join(", ")} multiline>
               <IconShieldLock size={14} color="var(--mantine-color-yellow-6)" />

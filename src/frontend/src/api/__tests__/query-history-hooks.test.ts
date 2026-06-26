@@ -78,4 +78,11 @@ describe("useQueryHistory", () => {
     expect(calledUrl).toContain("from=2024-01-01");
     expect(calledUrl).not.toContain("status=");
   });
+
+  it("appends source filter to the URL", async () => {
+    vi.mocked(apiRequest).mockResolvedValue({ items: [] });
+    const { result } = renderHook(() => useQueryHistory({ source: "Mcp" }), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiRequest).toHaveBeenCalledWith("/api/query/history?source=Mcp");
+  });
 });

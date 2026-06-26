@@ -52,6 +52,7 @@ internal static class QueryEndpoints
         DateTimeOffset? to,
         string? databaseId,
         string? status,
+        string? source,
         [FromQuery] string[]? sensitiveColumn,
         AppDbContext db,
         ICurrentUserAccessor currentUser,
@@ -80,6 +81,11 @@ internal static class QueryEndpoints
             ? parsedStatus
             : null;
 
+        QuerySource? filterSource = source is not null
+            && Enum.TryParse<QuerySource>(source, ignoreCase: true, out var parsedSource)
+            ? parsedSource
+            : null;
+
         var hasSensitiveFilter = sensitiveColumn is { Length: > 0 };
         var sensitiveFilterAny = hasSensitiveFilter && sensitiveColumn!.Length == 1
             && string.Equals(sensitiveColumn[0], "any", StringComparison.OrdinalIgnoreCase);
@@ -92,7 +98,8 @@ internal static class QueryEndpoints
             .Where(q => @from == null || q.ExecutedAt >= @from)
             .Where(q => to == null || q.ExecutedAt <= to)
             .Where(q => filterDb == null || q.DatabaseId == filterDb)
-            .Where(q => filterStatus == null || q.Status == filterStatus);
+            .Where(q => filterStatus == null || q.Status == filterStatus)
+            .Where(q => filterSource == null || q.Source == filterSource);
 
         if (sensitiveFilterAny)
         {
@@ -118,7 +125,8 @@ internal static class QueryEndpoints
                 q.Error,
                 q.UserId,
                 db.Users.Where(u => u.Id == q.UserId).Select(u => u.Name ?? u.Email).FirstOrDefault(),
-                q.SensitiveColumns
+                q.SensitiveColumns,
+                q.Source
             ))
             .ToListAsync(ct);
 
@@ -146,7 +154,8 @@ internal static class QueryEndpoints
         string? Error,
         UserId? UserId,
         string? UserName,
-        string[] SensitiveColumns);
+        string[] SensitiveColumns,
+        QuerySource Source);
 
     public sealed record QueryHistoryResponse(IReadOnlyList<QueryHistoryItem> Items);
 }
