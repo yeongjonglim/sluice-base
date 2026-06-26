@@ -54,6 +54,9 @@ The Status cell already renders a `Group` containing the status `Badge` and (con
 
 Use a small size (`14`) consistent with the existing shield icon, and a muted/dimmed color so it doesn't compete with the status badge.
 
+**Error reason (tooltip on status badge):**
+`QueryHistoryItem.error` is already returned by the API but never rendered. When `item.status === "Error"` and `item.error` is non-empty, wrap the status `Badge` in a `Tooltip` whose label is `item.error` (use `multiline` so long messages wrap, matching the sensitive-column tooltip). When there is no error message, render the badge without a tooltip. No backend change is required — the data is already present.
+
 **Source filter (dropdown):**
 Add a `Select` to the filter `Group`, following the existing Status filter pattern exactly:
 
