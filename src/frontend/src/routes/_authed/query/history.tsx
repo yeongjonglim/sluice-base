@@ -85,7 +85,7 @@ function paramToDate(s: string | undefined): string | null {
   return s ?? null;
 }
 
-function QueryHistoryPage() {
+export function QueryHistoryPage() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const canAudit = useHasPermission("query:audit");
