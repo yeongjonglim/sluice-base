@@ -5,3 +5,8 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 };
+
+// jsdom doesn't implement scrollIntoView; Mantine's Combobox calls it on the
+// active option when a dropdown opens, which otherwise surfaces as an
+// unhandled async error.
+Element.prototype.scrollIntoView = () => {};
