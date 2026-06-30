@@ -84,6 +84,68 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
     }
 
     [Fact]
+    public async Task TargetEngine_Postgres_ExecuteQuery_ReadsIntervalWithMonths()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        // Intervals with non-zero months/years cannot be read as TimeSpan; the engine must
+        // read them as NpgsqlInterval instead of crashing.
+        var result = await _targetEngine.ExecuteQueryAsync(
+            connectionString,
+            "SELECT interval '1 year 2 months 3 days 04:05:06' AS span",
+            ct);
+
+        Assert.NotNull(result);
+        Assert.Single(result.Columns);
+        Assert.Equal("span", result.Columns[0]);
+        var value = Assert.Single(result.Rows)[0];
+        Assert.Equal("1 year 2 mons 3 days 04:05:06", value);
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_ExecuteQuery_ReadsIntervalArrayWithMonths()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        // interval[] hits the same interval -> TimeSpan crash element-wise; it is read as
+        // NpgsqlInterval[] and rendered as a JSON array of PostgreSQL-style interval strings.
+        var result = await _targetEngine.ExecuteQueryAsync(
+            connectionString,
+            "SELECT ARRAY[interval '1 year 2 months', interval '3 days 04:05:06'] AS spans",
+            ct);
+
+        Assert.NotNull(result);
+        var value = Assert.Single(result.Rows)[0];
+        Assert.Equal("[\"1 year 2 mons\",\"3 days 04:05:06\"]", value);
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_ExecuteQuery_ReadsMultiDimensionalArray()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        // System.Text.Json cannot serialize rank > 1 arrays; the engine reshapes them into
+        // nested JSON, matching how one-dimensional arrays already render.
+        var result = await _targetEngine.ExecuteQueryAsync(
+            connectionString,
+            "SELECT ARRAY[[1,2],[3,4]] AS grid",
+            ct);
+
+        Assert.NotNull(result);
+        var value = Assert.Single(result.Rows)[0];
+        Assert.Equal("[[1,2],[3,4]]", value);
+    }
+
+    [Fact]
     public async Task TargetEngine_Postgres_ExecuteQuery_ReturnsEmptyRows_ForNoResults()
     {
         var ct = TestContext.Current.CancellationToken;

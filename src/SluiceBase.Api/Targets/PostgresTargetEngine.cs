@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Npgsql;
+using NpgsqlTypes;
 using SluiceBase.Core.Queries;
 using SluiceBase.Core.Schemas;
 using SluiceBase.Core.Targets;
@@ -233,12 +234,27 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         {
             columns = [.. Enumerable.Range(0, reader.FieldCount).Select(reader.GetName)];
 
+            // PostgreSQL interval columns are read as NpgsqlInterval rather than via GetValue:
+            // Npgsql's default interval -> TimeSpan mapping throws for intervals carrying
+            // non-zero months or years, since TimeSpan has no concept of months. The same
+            // applies element-wise to interval[] columns.
+            var dataTypeNames = Enumerable.Range(0, reader.FieldCount)
+                .Select(reader.GetDataTypeName)
+                .ToArray();
+
             while (await reader.ReadAsync(ct))
             {
                 var row = new string?[reader.FieldCount];
                 for (var i = 0; i < reader.FieldCount; i++)
                 {
-                    row[i] = reader.IsDBNull(i) ? null : FormatValue(reader.GetValue(i));
+                    row[i] = reader.IsDBNull(i)
+                        ? null
+                        : dataTypeNames[i] switch
+                        {
+                            "interval" => FormatInterval(reader.GetFieldValue<NpgsqlInterval>(i)),
+                            "interval[]" => FormatIntervalArray(reader.GetFieldValue<NpgsqlInterval?[]>(i)),
+                            _ => FormatValue(reader.GetValue(i)),
+                        };
                 }
 
                 rows.Add(row);
@@ -266,9 +282,89 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         JsonElement el => el.GetRawText(),
         BitArray bits => FormatBitArray(bits),
         IDictionary dict => JsonSerializer.Serialize(dict, dict.GetType(), JsonOptions),
+        // System.Text.Json cannot serialize rank > 1 arrays (e.g. int[,] from a PostgreSQL
+        // int[][] column), so reshape them into nested jagged arrays first.
+        Array { Rank: > 1 } arr => JsonSerializer.Serialize(ToJagged(arr, []), JsonOptions),
         Array arr => JsonSerializer.Serialize(arr, arr.GetType(), JsonOptions),
         _ => value.ToString()!
     };
+
+    // Reshapes a rectangular multi-dimensional Array into nested object?[] so it serializes
+    // to nested JSON ([[1,2],[3,4]]), matching the JSON we already emit for one-dimensional
+    // arrays. PostgreSQL arrays are always rectangular, so a plain recursive walk is safe.
+    private static object?[] ToJagged(Array arr, int[] indices)
+    {
+        var dim = indices.Length;
+        var length = arr.GetLength(dim);
+        var result = new object?[length];
+        var isLeaf = dim == arr.Rank - 1;
+        for (var i = 0; i < length; i++)
+        {
+            int[] next = [.. indices, i];
+            result[i] = isLeaf ? arr.GetValue(next) : ToJagged(arr, next);
+        }
+
+        return result;
+    }
+
+    // Renders an interval[] as a JSON array of PostgreSQL-style interval strings, keeping the
+    // element-wise NpgsqlInterval read that avoids the interval -> TimeSpan crash.
+    private static string FormatIntervalArray(NpgsqlInterval?[] intervals) =>
+        JsonSerializer.Serialize(
+            Array.ConvertAll(intervals, v => v is { } interval ? FormatInterval(interval) : null),
+            JsonOptions);
+
+    // Renders an NpgsqlInterval the way PostgreSQL prints intervals by default, e.g.
+    // "1 year 2 mons 3 days 04:05:06". Months are split into years + months; the time
+    // component (microseconds) becomes a signed HH:MM:SS[.ffffff] field.
+    private static string FormatInterval(NpgsqlInterval interval)
+    {
+        var parts = new List<string>();
+
+        var years = interval.Months / 12;
+        var months = interval.Months % 12;
+
+        if (years != 0)
+        {
+            parts.Add($"{years} {(Math.Abs(years) == 1 ? "year" : "years")}");
+        }
+
+        if (months != 0)
+        {
+            parts.Add($"{months} {(Math.Abs(months) == 1 ? "mon" : "mons")}");
+        }
+
+        if (interval.Days != 0)
+        {
+            parts.Add($"{interval.Days} {(Math.Abs(interval.Days) == 1 ? "day" : "days")}");
+        }
+
+        if (interval.Time != 0 || parts.Count == 0)
+        {
+            var negative = interval.Time < 0;
+            var abs = Math.Abs(interval.Time);
+            var hours = abs / 3_600_000_000L;
+            var minutes = abs / 60_000_000L % 60;
+            var seconds = abs / 1_000_000L % 60;
+            var micros = abs % 1_000_000L;
+
+            var sb = new StringBuilder();
+            if (negative)
+            {
+                sb.Append('-');
+            }
+
+            sb.Append(CultureInfo.InvariantCulture, $"{hours:D2}:{minutes:D2}:{seconds:D2}");
+            if (micros != 0)
+            {
+                sb.Append('.').Append(micros.ToString("D6", CultureInfo.InvariantCulture).TrimEnd('0'));
+            }
+
+            parts.Add(sb.ToString());
+        }
+
+        return string.Join(' ', parts);
+    }
 
     private static string FormatBitArray(BitArray bits)
     {
