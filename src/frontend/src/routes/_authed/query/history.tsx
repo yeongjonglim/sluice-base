@@ -221,7 +221,7 @@ export function QueryHistoryPage() {
       )}
 
       {history.data && displayedItems.length > 0 && (
-        <Stack gap="sm">
+        <Stack gap="sm" data-testid="history-entries">
           {displayedItems.map((item) => (
             <HistoryEntry key={item.id} item={item} canAudit={canAudit} />
           ))}
