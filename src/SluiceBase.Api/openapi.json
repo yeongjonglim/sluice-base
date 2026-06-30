@@ -3017,6 +3017,7 @@
           "id",
           "databaseId",
           "databaseDisplayName",
+          "serverName",
           "queryText",
           "status",
           "executedAt",
@@ -3044,6 +3045,12 @@
             ]
           },
           "databaseDisplayName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "serverName": {
             "type": [
               "null",
               "string"

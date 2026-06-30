@@ -71,6 +71,7 @@ function makeItem(overrides: Partial<QueryHistoryItem> = {}): QueryHistoryItem {
     id: "1",
     databaseId: "db-1",
     databaseDisplayName: "Blue DB",
+    serverName: "Blue Server",
     queryText: "SELECT 1",
     status: "Success",
     executedAt: "2026-06-01T10:00:00Z",
@@ -119,16 +120,40 @@ function renderPage() {
 }
 
 describe("QueryHistoryPage", () => {
-  it("renders a row per history item with status, database, duration and rows", () => {
+  it("renders an entry per history item with status, database, duration and rows", () => {
     renderPage();
-    const table = within(screen.getByRole("table"));
-    expect(table.getByText("Success")).toBeInTheDocument();
-    expect(table.getByText("Error")).toBeInTheDocument();
-    expect(table.getByText("Timeout")).toBeInTheDocument();
-    expect(table.getAllByText("Blue DB").length).toBe(2);
-    expect(table.getAllByText("12 ms").length).toBeGreaterThan(0);
-    // null duration / rowCount render as an em dash
-    expect(table.getAllByText("—").length).toBeGreaterThan(0);
+    // Scope status assertions to the entries list; the status filter dropdown
+    // shares the same labels (Success/Error/Timeout).
+    const entries = within(screen.getByTestId("history-entries"));
+    expect(entries.getByText("Success")).toBeInTheDocument();
+    expect(entries.getByText("Error")).toBeInTheDocument();
+    expect(entries.getByText("Timeout")).toBeInTheDocument();
+    expect(screen.getAllByText("Blue DB").length).toBe(2);
+    // duration and rows are combined into a single metrics line
+    expect(screen.getAllByText("12 ms · 1 row").length).toBeGreaterThan(0);
+    // a null database name renders as an em dash
+    expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("shows the server name so same-named databases can be told apart", () => {
+    mockUseQueryHistory.mockReturnValue({
+      isPending: false, isError: false, data: {
+        items: [
+          makeItem({ id: "a", databaseDisplayName: "pricing", serverName: "prod" }),
+          makeItem({ id: "b", databaseDisplayName: "pricing", serverName: "staging" }),
+        ],
+      },
+    });
+    renderPage();
+    const entries = within(screen.getByTestId("history-entries"));
+    expect(entries.getByText("prod")).toBeInTheDocument();
+    expect(entries.getByText("staging")).toBeInTheDocument();
+  });
+
+  it("shows non-success error messages inline", () => {
+    renderPage();
+    expect(screen.getByText('syntax error at or near "SELCT"')).toBeInTheDocument();
+    expect(screen.getByText("Query timed out after 30s.")).toBeInTheDocument();
   });
 
   it("navigates with the chosen source when the source filter changes", async () => {
@@ -190,14 +215,13 @@ describe("QueryHistoryPage", () => {
     expect(mockNotify).not.toHaveBeenCalled();
   });
 
-  it("shows the User column and filters by user name when query:audit is granted", async () => {
+  it("shows user names and filters by user name when query:audit is granted", async () => {
     mockUseHasPermission.mockReturnValue(true);
     renderPage();
-    expect(screen.getByRole("columnheader", { name: "User" })).toBeInTheDocument();
     expect(screen.getByText("Alice")).toBeInTheDocument();
 
     await userEvent.type(screen.getByLabelText("User"), "bob");
-    // Only Bob's row remains; the empty/other rows are filtered out
+    // Only Bob's entry remains; the other entries are filtered out
     expect(screen.getByText("Bob")).toBeInTheDocument();
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();
   });
