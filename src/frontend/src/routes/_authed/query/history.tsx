@@ -1,13 +1,11 @@
 import {
   ActionIcon,
   Alert,
-  Badge,
   Group,
   MultiSelect,
-  ScrollArea,
+  Paper,
   Select,
   Stack,
-  Table,
   Text,
   TextInput,
   Title,
@@ -15,7 +13,7 @@ import {
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { notifications } from "@mantine/notifications";
-import { IconCopy, IconDeviceDesktop, IconPlugConnected, IconShieldLock } from "@tabler/icons-react";
+import { IconAlertTriangle, IconCopy, IconDeviceDesktop, IconPlugConnected, IconShieldLock } from "@tabler/icons-react";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import type { QueryHistoryFilters, QueryHistoryItem } from "@/api/hooks";
@@ -223,32 +221,17 @@ export function QueryHistoryPage() {
       )}
 
       {history.data && displayedItems.length > 0 && (
-        <ScrollArea type="auto">
-          <Table striped withTableBorder highlightOnHover fz="sm" style={{ tableLayout: "fixed", width: "100%" }}>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th style={{ width: 80 }}>Status</Table.Th>
-                <Table.Th style={{ width: 170 }}>Database</Table.Th>
-                {canAudit && <Table.Th style={{ width: 120 }}>User</Table.Th>}
-                <Table.Th>SQL</Table.Th>
-                <Table.Th style={{ width: 155 }}>Executed At</Table.Th>
-                <Table.Th style={{ width: 90 }}>Duration</Table.Th>
-                <Table.Th style={{ width: 60 }}>Rows</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {displayedItems.map((item) => (
-                <HistoryRow key={item.id} item={item} canAudit={canAudit} />
-              ))}
-            </Table.Tbody>
-          </Table>
-        </ScrollArea>
+        <Stack gap="sm">
+          {displayedItems.map((item) => (
+            <HistoryEntry key={item.id} item={item} canAudit={canAudit} />
+          ))}
+        </Stack>
       )}
     </Stack>
   );
 }
 
-function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: boolean }) {
+function HistoryEntry({ item, canAudit }: { item: QueryHistoryItem; canAudit: boolean }) {
   function copySql() {
     void navigator.clipboard.writeText(item.queryText).then(() => {
       notifications.show({ message: "SQL copied to clipboard", color: "teal" });
@@ -257,21 +240,29 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
     });
   }
 
+  const statusColor = STATUS_COLOR[item.status] ?? "gray";
+  const executedAt = new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" })
+    .format(new Date(item.executedAt));
+  const metrics = [
+    item.durationMs != null ? `${item.durationMs} ms` : null,
+    item.rowCount != null ? `${item.rowCount} ${item.rowCount === 1 ? "row" : "rows"}` : null,
+  ].filter(Boolean).join(" · ");
+
   return (
-    <Table.Tr>
-      <Table.Td>
-        <Group gap={4} justify="center">
-          {item.error ? (
-            <Tooltip label={item.error} multiline>
-              <Badge color={STATUS_COLOR[item.status] ?? "gray"} size="sm">
-                {item.status}
-              </Badge>
-            </Tooltip>
-          ) : (
-            <Badge color={STATUS_COLOR[item.status] ?? "gray"} size="sm">
-              {item.status}
-            </Badge>
-          )}
+    <Paper
+      withBorder
+      radius="md"
+      p="sm"
+      style={{ borderLeft: `3px solid var(--mantine-color-${statusColor}-6)` }}
+    >
+      <Group justify="space-between" gap="sm" mb="xs">
+        <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
+          <Text ff="monospace" fw={700} size="xs" tt="uppercase" c={statusColor}>
+            {item.status}
+          </Text>
+          <Text size="sm" fw={500} truncate>
+            {item.databaseDisplayName ?? "—"}
+          </Text>
           {item.source === "Mcp" ? (
             <Tooltip label="From MCP">
               <IconPlugConnected size={14} color="var(--mantine-color-dimmed)" />
@@ -282,46 +273,44 @@ function HistoryRow({ item, canAudit }: { item: QueryHistoryItem; canAudit: bool
             </Tooltip>
           )}
           {item.sensitiveColumns.length > 0 && (
-            <Tooltip label={item.sensitiveColumns.join(", ")} multiline>
+            <Tooltip label={item.sensitiveColumns.join(", ")} multiline maw={360}>
               <IconShieldLock size={14} color="var(--mantine-color-yellow-6)" />
             </Tooltip>
           )}
         </Group>
-      </Table.Td>
-      <Table.Td>{item.databaseDisplayName ?? "—"}</Table.Td>
-      {canAudit && <Table.Td>{item.userName ?? "—"}</Table.Td>}
-      <Table.Td>
-        <Group gap="xs" align="flex-start" wrap="nowrap">
-          <SqlEditor
-            value={item.queryText}
-            readOnly
-            editable={false}
-            lineNumbers={false}
-            height="auto"
-            maxHeight="120px"
-            style={{ flex: 1, minWidth: 0 }}
-          />
-          <ActionIcon size="sm" variant="subtle" onClick={copySql} aria-label="Copy SQL">
+        <Group gap="md" wrap="nowrap" style={{ flexShrink: 0 }}>
+          {canAudit && (
+            <Text size="xs" c="dimmed">{item.userName ?? "—"}</Text>
+          )}
+          <Text size="xs" c="dimmed">{executedAt}</Text>
+          {metrics && (
+            <Text size="xs" c="dimmed" ff="monospace">{metrics}</Text>
+          )}
+          <ActionIcon size="sm" variant="subtle" color="gray" onClick={copySql} aria-label="Copy SQL">
             <IconCopy size={14} />
           </ActionIcon>
         </Group>
-      </Table.Td>
-      <Table.Td>
-        <Text size="xs">
-          {new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" })
-            .format(new Date(item.executedAt))}
-        </Text>
-      </Table.Td>
-      <Table.Td>
-        {item.durationMs != null ? (
-          <Text size="xs">{item.durationMs} ms</Text>
-        ) : "—"}
-      </Table.Td>
-      <Table.Td>
-        {item.rowCount != null ? (
-          <Text size="xs">{item.rowCount}</Text>
-        ) : "—"}
-      </Table.Td>
-    </Table.Tr>
+      </Group>
+      {item.error && (
+        <Alert
+          variant="light"
+          color={statusColor}
+          icon={<IconAlertTriangle size={16} />}
+          p="xs"
+          mb="xs"
+        >
+          <Text size="xs" ff="monospace" style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+            {item.error}
+          </Text>
+        </Alert>
+      )}
+      <SqlEditor
+        value={item.queryText}
+        readOnly
+        editable={false}
+        height="auto"
+        maxHeight="240px"
+      />
+    </Paper>
   );
 }
