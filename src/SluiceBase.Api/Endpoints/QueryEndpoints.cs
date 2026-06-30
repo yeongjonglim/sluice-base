@@ -117,6 +117,10 @@ internal static class QueryEndpoints
                 q.Id,
                 q.DatabaseId,
                 db.Databases.Where(d => d.Id == q.DatabaseId).Select(d => d.DisplayName).FirstOrDefault(),
+                (from d in db.Databases
+                 join s in db.Servers on d.ServerId equals s.Id
+                 where d.Id == q.DatabaseId
+                 select s.Name).FirstOrDefault(),
                 q.QueryText,
                 q.Status,
                 q.ExecutedAt,
@@ -146,6 +150,7 @@ internal static class QueryEndpoints
         QueryLogId Id,
         DatabaseId? DatabaseId,
         string? DatabaseDisplayName,
+        string? ServerName,
         string QueryText,
         QueryLogStatus Status,
         DateTimeOffset ExecutedAt,

@@ -1063,6 +1063,7 @@ export interface components {
             id: components["schemas"]["QueryLogId"];
             databaseId: null | components["schemas"]["DatabaseId"];
             databaseDisplayName: null | string;
+            serverName: null | string;
             queryText: string;
             status: components["schemas"]["QueryLogStatus"];
             /** Format: date-time */

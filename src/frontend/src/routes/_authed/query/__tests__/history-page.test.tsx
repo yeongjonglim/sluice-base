@@ -71,6 +71,7 @@ function makeItem(overrides: Partial<QueryHistoryItem> = {}): QueryHistoryItem {
     id: "1",
     databaseId: "db-1",
     databaseDisplayName: "Blue DB",
+    serverName: "Blue Server",
     queryText: "SELECT 1",
     status: "Success",
     executedAt: "2026-06-01T10:00:00Z",
@@ -132,6 +133,21 @@ describe("QueryHistoryPage", () => {
     expect(screen.getAllByText("12 ms · 1 row").length).toBeGreaterThan(0);
     // a null database name renders as an em dash
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
+  });
+
+  it("shows the server name so same-named databases can be told apart", () => {
+    mockUseQueryHistory.mockReturnValue({
+      isPending: false, isError: false, data: {
+        items: [
+          makeItem({ id: "a", databaseDisplayName: "pricing", serverName: "prod" }),
+          makeItem({ id: "b", databaseDisplayName: "pricing", serverName: "staging" }),
+        ],
+      },
+    });
+    renderPage();
+    const entries = within(screen.getByTestId("history-entries"));
+    expect(entries.getByText("prod")).toBeInTheDocument();
+    expect(entries.getByText("staging")).toBeInTheDocument();
   });
 
   it("shows non-success error messages inline", () => {

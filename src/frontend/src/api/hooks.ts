@@ -921,6 +921,7 @@ export interface QueryHistoryItem {
   id: string;
   databaseId: string | null;
   databaseDisplayName: string | null;
+  serverName: string | null;
   queryText: string;
   status: string;
   executedAt: string;

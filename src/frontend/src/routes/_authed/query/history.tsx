@@ -262,6 +262,11 @@ function HistoryEntry({ item, canAudit }: { item: QueryHistoryItem; canAudit: bo
           </Text>
           <Text size="sm" fw={500} truncate>
             {item.databaseDisplayName ?? "—"}
+            {item.serverName && (
+              <Text span c="dimmed" fw={400} ml={6}>
+                {item.serverName}
+              </Text>
+            )}
           </Text>
           {item.source === "Mcp" ? (
             <Tooltip label="From MCP">
