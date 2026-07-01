@@ -119,6 +119,7 @@ function Disclosure({ open, expandable }: { open: boolean; expandable: boolean }
 function TreeRow({
   name,
   detail,
+  detailSuffix,
   icon,
   depth,
   expandable = false,
@@ -131,6 +132,9 @@ function TreeRow({
 }: {
   name: string;
   detail?: string;
+  // Inline node rendered after the detail with a `·` separator (e.g. a column sensitivity icon),
+  // so it stays next to the type rather than pinned to the far right edge.
+  detailSuffix?: ReactNode;
   icon: ReactNode;
   depth: number;
   expandable?: boolean;
@@ -179,6 +183,14 @@ function TreeRow({
                 <Text span fz="xs" c="dimmed" ff="monospace">
                   {detail}
                 </Text>
+              ) : null}
+              {detailSuffix ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 4, alignSelf: "center" }}>
+                  <Text span fz="xs" c="dimmed">
+                    ·
+                  </Text>
+                  {detailSuffix}
+                </span>
               ) : null}
             </span>
           }
@@ -299,9 +311,9 @@ function ColumnRows({
             depth={depth}
             name={c.name}
             detail={`${c.dataType}${c.isNullable ? " · null" : ""}`}
+            detailSuffix={sensitivityMarker(c)}
             icon={columnIcon(role)}
             faded={c.isRestricted}
-            trailing={sensitivityMarker(c)}
           />
         );
       })}
