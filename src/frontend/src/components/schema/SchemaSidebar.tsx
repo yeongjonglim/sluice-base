@@ -121,7 +121,8 @@ function TreeRow({
   open = false,
   onToggle,
   trailing,
-  faded = false,
+  leaf = false,
+  emphasis = false,
 }: {
   name: string;
   detail?: string;
@@ -131,7 +132,11 @@ function TreeRow({
   open?: boolean;
   onToggle?: () => void;
   trailing?: ReactNode;
-  faded?: boolean;
+  // Leaf rows (columns, indexes) sit one tier below object rows and use the smaller `xs` name
+  // size so a table's columns and indexes read as the same level.
+  leaf?: boolean;
+  // Emphasises the row as a container anchor (used for the schema node).
+  emphasis?: boolean;
 }) {
   const tooltip = detail ? `${name} · ${detail}` : name;
   return (
@@ -154,10 +159,9 @@ function TreeRow({
                 alignItems: "baseline",
                 gap: 8,
                 whiteSpace: "nowrap",
-                opacity: faded ? 0.55 : 1,
               }}
             >
-              <Text span fz="sm">
+              <Text span fz={leaf ? "xs" : "sm"} fw={emphasis ? 600 : undefined}>
                 {name}
               </Text>
               {detail ? (
@@ -243,9 +247,9 @@ function ColumnRows({
                 {c.name}
               </Text>
             </OverflowTooltip>
-            <Code fz={10}>{c.dataType}</Code>
+            <Code fz="xs">{c.dataType}</Code>
             {c.isNullable && (
-              <Text fz={10} c="dimmed">
+              <Text fz="xs" c="dimmed">
                 null
               </Text>
             )}
@@ -346,6 +350,7 @@ export function SchemaSidebar({
               icon={<IconDatabase size={15} color="var(--mantine-primary-color-filled)" />}
               depth={0}
               expandable
+              emphasis
               open={isOpen(schemaId)}
               onToggle={() => toggle(schemaId)}
             />
@@ -383,7 +388,7 @@ export function SchemaSidebar({
                                 detail={`${ix.columns.join(", ")}${ix.isPrimary ? " · pk" : ix.isUnique ? " · unique" : ""}`}
                                 icon={<IconKey size={13} color="var(--mantine-color-dimmed)" />}
                                 depth={3}
-                                faded
+                                leaf
                               />
                             ))}
                           </>
