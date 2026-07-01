@@ -150,7 +150,10 @@ function TreeRow({
         <NavLink
           onClick={onToggle}
           pl={4 + depth * STEP}
+          py={leaf ? 1 : undefined}
           active={false}
+          // Leaf rows (columns, indexes) pack tighter than the object rows above them.
+          styles={leaf ? { root: { minHeight: 0 } } : undefined}
           leftSection={
             <Group gap={4} wrap="nowrap">
               <Disclosure open={open} expandable={expandable} />
@@ -304,9 +307,8 @@ function ColumnRows({
   );
 }
 
-// Indexes sit under a plain, non-collapsible "Indexes" divider beneath a table's columns —
-// grouped so they never interleave with columns, but without a third accordion to click
-// through for the usual one or two entries. Nothing renders when there are none.
+// Index rows follow a table's columns in the same dense leaf list. Their b-tree icon and the
+// `· pk` / `· unique` detail set them apart from columns, so no separate heading is needed.
 function IndexRows({
   indexes,
   depth,
@@ -314,23 +316,8 @@ function IndexRows({
   indexes: Array<{ name: string; columns: Array<string>; isUnique: boolean; isPrimary: boolean; method: string }>;
   depth: number;
 }) {
-  if (indexes.length === 0) return null;
   return (
     <>
-      <Text
-        component="div"
-        ff="monospace"
-        fz={10}
-        fw={700}
-        tt="uppercase"
-        c="dimmed"
-        pl={4 + depth * STEP + CHEVRON_SLOT + 4}
-        pt={6}
-        pb={2}
-        style={{ letterSpacing: "0.06em", whiteSpace: "nowrap" }}
-      >
-        Indexes
-      </Text>
       {indexes.map((ix) => (
         <TreeRow
           key={ix.name}
