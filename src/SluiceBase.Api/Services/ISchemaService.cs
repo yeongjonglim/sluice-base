@@ -84,11 +84,17 @@ internal sealed class SchemaService(
                                     restrictedKeys.Contains(key));
                             }).ToList(),
                             t.PrimaryKey,
-                            t.ForeignKeys
-                        )).ToList()
+                            t.ForeignKeys,
+                            t.Indexes
+                        )).ToList(),
+                    s.Views,
+                    s.MaterializedViews,
+                    s.Routines,
+                    s.Sequences,
+                    s.Types
                 )).ToList();
 
-            return new SchemaResult(SchemaOutcome.Ok, new SchemaTree(annotatedSchemas), null);
+            return new SchemaResult(SchemaOutcome.Ok, new SchemaTree(annotatedSchemas, tree.Extensions), null);
         }
         catch (InvalidOperationException ex)
         {

@@ -14,6 +14,7 @@ const tree = {
           ],
           primaryKey: { columns: ["id"] },
           foreignKeys: [],
+          indexes: [],
         },
         {
           name: "orders",
@@ -31,10 +32,17 @@ const tree = {
               referencedColumns: ["id"],
             },
           ],
+          indexes: [],
         },
       ],
+      views: [],
+      materializedViews: [],
+      routines: [],
+      sequences: [],
+      types: [],
     },
   ],
+  extensions: [],
 };
 
 describe("buildErdModel", () => {

@@ -36,11 +36,22 @@ internal sealed class PostgresTargetEngine : ITargetEngine
 
     public async Task<SchemaTree> GetSchemaAsync(string connectionString, CancellationToken ct)
     {
+        // Columns come from pg_catalog rather than information_schema.columns: materialized
+        // views are absent from information_schema entirely, and relkind lets us classify each
+        // relation (table / view / matview) in one pass. pg_catalog is also not privilege-gated
+        // for read-only roles the way information_schema is.
         const string columnsSql = """
-                           SELECT table_schema, table_name, column_name, data_type, is_nullable
-                           FROM information_schema.columns
-                           WHERE table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
-                           ORDER BY table_schema, table_name, ordinal_position;
+                           SELECT n.nspname, c.relname, c.relkind,
+                                  a.attname, format_type(a.atttypid, a.atttypmod) AS data_type,
+                                  NOT a.attnotnull AS is_nullable
+                           FROM pg_attribute a
+                           JOIN pg_class c ON c.oid = a.attrelid
+                           JOIN pg_namespace n ON n.oid = c.relnamespace
+                           WHERE a.attnum > 0
+                             AND NOT a.attisdropped
+                             AND c.relkind IN ('r', 'p', 'f', 'v', 'm')
+                             AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY n.nspname, c.relname, a.attnum;
                            """;
 
         // Constraints are read from pg_catalog, not information_schema: information_schema's
@@ -80,11 +91,92 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                            ORDER BY con.conname, k.ord;
                            """;
 
+        // Index columns come from indkey; expression indexes have attnum 0, so those slots
+        // resolve to NULL and are rendered as "(expression)".
+        const string indexesSql = """
+                           SELECT n.nspname, t.relname, i.relname,
+                                  ix.indisunique, ix.indisprimary, am.amname,
+                                  a.attname
+                           FROM pg_index ix
+                           JOIN pg_class i ON i.oid = ix.indexrelid
+                           JOIN pg_class t ON t.oid = ix.indrelid
+                           JOIN pg_namespace n ON n.oid = t.relnamespace
+                           JOIN pg_am am ON am.oid = i.relam
+                           JOIN LATERAL unnest(ix.indkey) WITH ORDINALITY AS k(attnum, ord) ON true
+                           LEFT JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
+                           WHERE t.relkind IN ('r', 'p', 'm')
+                             AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY n.nspname, t.relname, i.relname, k.ord;
+                           """;
+
+        const string routinesSql = """
+                           SELECT n.nspname, p.proname, p.prokind, l.lanname,
+                                  pg_get_function_result(p.oid) AS return_type,
+                                  pg_get_function_arguments(p.oid) AS signature
+                           FROM pg_proc p
+                           JOIN pg_namespace n ON n.oid = p.pronamespace
+                           JOIN pg_language l ON l.oid = p.prolang
+                           WHERE p.prokind IN ('f', 'p')
+                             AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY n.nspname, p.proname;
+                           """;
+
+        // deptype 'a' (auto) links a sequence to the column that owns it, if any.
+        const string sequencesSql = """
+                           SELECT s.schemaname, s.sequencename, s.data_type::text,
+                                  s.start_value, s.increment_by, s.min_value, s.max_value, s.cycle,
+                                  ownr.owned_by
+                           FROM pg_sequences s
+                           LEFT JOIN LATERAL (
+                               SELECT tn.nspname || '.' || tc.relname || '.' || a.attname AS owned_by
+                               FROM pg_depend d
+                               JOIN pg_class sc ON sc.oid = d.objid AND sc.relkind = 'S'
+                               JOIN pg_namespace sn ON sn.oid = sc.relnamespace
+                               JOIN pg_class tc ON tc.oid = d.refobjid
+                               JOIN pg_namespace tn ON tn.oid = tc.relnamespace
+                               JOIN pg_attribute a ON a.attrelid = d.refobjid AND a.attnum = d.refobjsubid
+                               WHERE sn.nspname = s.schemaname AND sc.relname = s.sequencename AND d.deptype = 'a'
+                               LIMIT 1
+                           ) ownr ON true
+                           WHERE s.schemaname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY s.schemaname, s.sequencename;
+                           """;
+
+        // typtype: e=enum, c=composite, d=domain, r=range. The relkind <> 'c' guard drops the
+        // row-type composites that back every table/view, keeping only standalone CREATE TYPEs.
+        const string typesSql = """
+                           SELECT n.nspname, t.typname, t.typtype,
+                                  CASE WHEN t.typtype = 'e' THEN
+                                      (SELECT array_agg(e.enumlabel ORDER BY e.enumsortorder)
+                                       FROM pg_enum e WHERE e.enumtypid = t.oid)
+                                  END AS enum_labels,
+                                  CASE WHEN t.typtype = 'c' THEN
+                                      (SELECT array_agg(a.attname || ' ' || format_type(a.atttypid, a.atttypmod) ORDER BY a.attnum)
+                                       FROM pg_attribute a
+                                       WHERE a.attrelid = t.typrelid AND a.attnum > 0 AND NOT a.attisdropped)
+                                  END AS attributes,
+                                  CASE WHEN t.typtype = 'd' THEN format_type(t.typbasetype, t.typtypmod) END AS base_type
+                           FROM pg_type t
+                           JOIN pg_namespace n ON n.oid = t.typnamespace
+                           WHERE t.typtype IN ('e', 'c', 'd', 'r')
+                             AND NOT (t.typtype = 'c'
+                                      AND EXISTS (SELECT 1 FROM pg_class c WHERE c.oid = t.typrelid AND c.relkind <> 'c'))
+                             AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY n.nspname, t.typname;
+                           """;
+
+        const string extensionsSql = """
+                           SELECT e.extname, e.extversion, n.nspname
+                           FROM pg_extension e
+                           JOIN pg_namespace n ON n.oid = e.extnamespace
+                           ORDER BY e.extname;
+                           """;
+
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
         await using var connection = await dataSource.OpenConnectionAsync(ct);
 
-        // Columns
-        var columnRows = new List<(string Schema, string Table, string Column, string DataType, bool IsNullable)>();
+        // Columns (with relkind for classification)
+        var columnRows = new List<(string Schema, string Rel, char Kind, string Column, string DataType, bool IsNullable)>();
         await using (var command = new NpgsqlCommand(columnsSql, connection))
         await using (var reader = await command.ExecuteReaderAsync(ct))
         {
@@ -93,9 +185,10 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                 columnRows.Add((
                     reader.GetString(0),
                     reader.GetString(1),
-                    reader.GetString(2),
+                    reader.GetFieldValue<char>(2),
                     reader.GetString(3),
-                    reader.GetString(4) == "YES"));
+                    reader.GetString(4),
+                    reader.GetBoolean(5)));
             }
         }
 
@@ -123,6 +216,76 @@ internal sealed class PostgresTargetEngine : ITargetEngine
             }
         }
 
+        // Indexes
+        var indexRows = new List<(string Schema, string Rel, string Index, bool IsUnique, bool IsPrimary, string Method, string? Column)>();
+        await using (var command = new NpgsqlCommand(indexesSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                indexRows.Add((
+                    reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                    reader.GetBoolean(3), reader.GetBoolean(4), reader.GetString(5),
+                    reader.IsDBNull(6) ? null : reader.GetString(6)));
+            }
+        }
+
+        // Routines
+        var routineRows = new List<(string Schema, string Name, char Kind, string Language, string? ReturnType, string Signature)>();
+        await using (var command = new NpgsqlCommand(routinesSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                routineRows.Add((
+                    reader.GetString(0), reader.GetString(1), reader.GetFieldValue<char>(2),
+                    reader.GetString(3),
+                    reader.IsDBNull(4) ? null : reader.GetString(4),
+                    reader.GetString(5)));
+            }
+        }
+
+        // Sequences
+        var sequenceRows = new List<(string Schema, string Name, string DataType, long Start, long Increment, long MinValue, long MaxValue, bool Cycle, string? OwnedBy)>();
+        await using (var command = new NpgsqlCommand(sequencesSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                sequenceRows.Add((
+                    reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                    reader.GetInt64(3), reader.GetInt64(4), reader.GetInt64(5), reader.GetInt64(6),
+                    reader.GetBoolean(7),
+                    reader.IsDBNull(8) ? null : reader.GetString(8)));
+            }
+        }
+
+        // Types
+        var typeRows = new List<(string Schema, string Name, char TypType, string[]? EnumLabels, string[]? Attributes, string? BaseType)>();
+        await using (var command = new NpgsqlCommand(typesSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                typeRows.Add((
+                    reader.GetString(0), reader.GetString(1), reader.GetFieldValue<char>(2),
+                    reader.IsDBNull(3) ? null : reader.GetFieldValue<string[]>(3),
+                    reader.IsDBNull(4) ? null : reader.GetFieldValue<string[]>(4),
+                    reader.IsDBNull(5) ? null : reader.GetString(5)));
+            }
+        }
+
+        // Extensions (database-level)
+        var extensions = new List<ExtensionInfo>();
+        await using (var command = new NpgsqlCommand(extensionsSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                extensions.Add(new ExtensionInfo(reader.GetString(0), reader.GetString(1), reader.GetString(2)));
+            }
+        }
+
         var primaryKeyByTable = pkRows
             .GroupBy(r => (r.Schema, r.Table))
             .ToDictionary(g => g.Key, g => new PrimaryKey([.. g.Select(r => r.Column)]));
@@ -142,21 +305,105 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                 g => g.Key,
                 g => (IReadOnlyList<ForeignKey>)[.. g.Select(x => x.ForeignKey)]);
 
-        var schemas = columnRows
-            .GroupBy(r => r.Schema)
-            .Select(sg => new SchemaInfo(
-                sg.Key,
-                [
-                    .. sg.GroupBy(r => r.Table)
-                        .Select(tg => new TableInfo(
-                            tg.Key,
-                            [.. tg.Select(c => new ColumnInfo(c.Column, c.DataType, c.IsNullable))],
-                            primaryKeyByTable.GetValueOrDefault((sg.Key, tg.Key)),
-                            foreignKeysByTable.GetValueOrDefault((sg.Key, tg.Key), [])))
-                ]))
-            .ToList();
+        var indexesByRel = indexRows
+            .GroupBy(r => (r.Schema, r.Rel))
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<IndexInfo>)[.. g
+                    .GroupBy(r => r.Index)
+                    .Select(ig => new IndexInfo(
+                        ig.Key,
+                        [.. ig.Select(x => x.Column ?? "(expression)")],
+                        ig.First().IsUnique,
+                        ig.First().IsPrimary,
+                        ig.First().Method))]);
 
-        return new SchemaTree(schemas);
+        var routinesBySchema = routineRows
+            .GroupBy(r => r.Schema)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<RoutineInfo>)[.. g.Select(r => new RoutineInfo(
+                    r.Name,
+                    r.Kind == 'p' ? "procedure" : "function",
+                    r.ReturnType,
+                    r.Language,
+                    r.Signature))]);
+
+        var sequencesBySchema = sequenceRows
+            .GroupBy(r => r.Schema)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<SequenceInfo>)[.. g.Select(r => new SequenceInfo(
+                    r.Name, r.DataType, r.Start, r.Increment, r.MinValue, r.MaxValue, r.Cycle, r.OwnedBy))]);
+
+        var typesBySchema = typeRows
+            .GroupBy(r => r.Schema)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<TypeInfo>)[.. g.Select(r => new TypeInfo(
+                    r.Name,
+                    r.TypType switch { 'e' => "enum", 'c' => "composite", 'd' => "domain", _ => "range" },
+                    r.EnumLabels,
+                    r.Attributes,
+                    r.BaseType))]);
+
+        // Every schema that owns any object, whether or not it has relations with columns.
+        var schemaNames = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var r in columnRows) { schemaNames.Add(r.Schema); }
+        foreach (var r in routineRows) { schemaNames.Add(r.Schema); }
+        foreach (var r in sequenceRows) { schemaNames.Add(r.Schema); }
+        foreach (var r in typeRows) { schemaNames.Add(r.Schema); }
+
+        var columnsBySchema = columnRows
+            .GroupBy(r => r.Schema)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var schemas = new List<SchemaInfo>();
+        foreach (var schemaName in schemaNames)
+        {
+            var tables = new List<TableInfo>();
+            var views = new List<ViewInfo>();
+            var matViews = new List<MaterializedViewInfo>();
+
+            if (columnsBySchema.TryGetValue(schemaName, out var schemaColumns))
+            {
+                foreach (var rel in schemaColumns.GroupBy(r => r.Rel))
+                {
+                    var columns = rel.Select(c => new ColumnInfo(c.Column, c.DataType, c.IsNullable)).ToList();
+                    var kind = rel.First().Kind;
+                    var indexes = indexesByRel.GetValueOrDefault((schemaName, rel.Key), []);
+
+                    switch (kind)
+                    {
+                        case 'v':
+                            views.Add(new ViewInfo(rel.Key, columns));
+                            break;
+                        case 'm':
+                            matViews.Add(new MaterializedViewInfo(rel.Key, columns, indexes));
+                            break;
+                        default: // 'r', 'p', 'f'
+                            tables.Add(new TableInfo(
+                                rel.Key,
+                                columns,
+                                primaryKeyByTable.GetValueOrDefault((schemaName, rel.Key)),
+                                foreignKeysByTable.GetValueOrDefault((schemaName, rel.Key), []),
+                                indexes));
+                            break;
+                    }
+                }
+            }
+
+            schemas.Add(new SchemaInfo(
+                schemaName,
+                tables,
+                views,
+                matViews,
+                routinesBySchema.GetValueOrDefault(schemaName, []),
+                sequencesBySchema.GetValueOrDefault(schemaName, []),
+                typesBySchema.GetValueOrDefault(schemaName, [])));
+        }
+
+        return new SchemaTree(schemas, extensions);
     }
 
     public async Task<string> ExportSchemaDdlAsync(string connectionString, CancellationToken ct)

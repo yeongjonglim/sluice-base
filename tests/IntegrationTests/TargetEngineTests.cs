@@ -243,4 +243,78 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
         Assert.DoesNotContain("COPY ", ddl);
         Assert.DoesNotContain("INSERT INTO", ddl);
     }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_GetSchema_ClassifiesViewsAndMatviews()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var tree = await _targetEngine.GetSchemaAsync(connectionString, ct);
+        var pub = tree.Schemas.Single(s => s.Name == "public");
+
+        // Regression: tables still present and views/matviews are NOT in the tables list.
+        Assert.Contains(pub.Tables, t => t.Name == "orders");
+        Assert.DoesNotContain(pub.Tables, t => t.Name == "active_orders");
+        Assert.DoesNotContain(pub.Tables, t => t.Name == "order_totals");
+
+        var view = Assert.Single(pub.Views, v => v.Name == "active_orders");
+        Assert.NotEmpty(view.Columns);
+
+        var matview = Assert.Single(pub.MaterializedViews, m => m.Name == "order_totals");
+        Assert.Contains(matview.Indexes, i => i.Name == "idx_order_totals_user");
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_GetSchema_ReturnsTableIndexes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var tree = await _targetEngine.GetSchemaAsync(connectionString, ct);
+        var orders = tree.Schemas.Single(s => s.Name == "public").Tables.Single(t => t.Name == "orders");
+
+        Assert.Contains(orders.Indexes, i => i.Name == "idx_orders_status");
+        Assert.Contains(orders.Indexes, i => i.IsPrimary);
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_GetSchema_ReturnsRoutines()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var tree = await _targetEngine.GetSchemaAsync(connectionString, ct);
+        var routines = tree.Schemas.Single(s => s.Name == "public").Routines;
+
+        var fn = Assert.Single(routines, r => r.Name == "order_count");
+        Assert.Equal("function", fn.Kind);
+        Assert.Equal("bigint", fn.ReturnType);
+
+        Assert.Single(routines, r => r.Name == "touch_user" && r.Kind == "procedure");
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_GetSchema_ReturnsSequencesTypesAndExtensions()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var tree = await _targetEngine.GetSchemaAsync(connectionString, ct);
+        var pub = tree.Schemas.Single(s => s.Name == "public");
+
+        Assert.Single(pub.Sequences, s => s.Name == "ticket_seq" && s.Increment == 5);
+
+        var enumType = Assert.Single(pub.Types, t => t.Name == "order_status");
+        Assert.Equal("enum", enumType.Kind);
+        Assert.NotNull(enumType.EnumLabels);
+        Assert.Contains("shipped", enumType.EnumLabels!);
+        Assert.Single(pub.Types, t => t.Name == "address" && t.Kind == "composite");
+
+        Assert.Contains(tree.Extensions, e => e.Name == "citext");
+    }
 }

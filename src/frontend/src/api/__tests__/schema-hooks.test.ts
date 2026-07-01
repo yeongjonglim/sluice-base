@@ -159,6 +159,23 @@ describe("schemaToCompletions", () => {
   it("returns empty object for empty schema tree", () => {
     expect(schemaToCompletions({ schemas: [] })).toEqual({});
   });
+
+  it("includes view columns alongside table columns", () => {
+    const tree = {
+      schemas: [
+        {
+          name: "public",
+          tables: [{ name: "orders", columns: [{ name: "id", isRestricted: false }] }],
+          views: [{ name: "active_orders", columns: [{ name: "id", isRestricted: false }] }],
+        },
+      ],
+    };
+
+    const result = schemaToCompletions(tree);
+
+    expect(result["public.orders"]).toEqual(["id"]);
+    expect(result["public.active_orders"]).toEqual(["id"]);
+  });
 });
 
 describe("useSchemaCompletions", () => {
