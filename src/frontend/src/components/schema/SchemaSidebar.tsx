@@ -2,7 +2,6 @@ import {
   ActionIcon,
   Alert,
   Box,
-  Button,
   Code,
   Flex,
   Group,
@@ -14,7 +13,6 @@ import {
 } from "@mantine/core";
 import {
   IconBraces,
-  IconChevronDown,
   IconChevronRight,
   IconDatabase,
   IconEye,
@@ -38,6 +36,12 @@ export type TableClickHandler = (
   tableName: string,
   columns: Array<{ name: string; isSensitive: boolean; isRestricted: boolean }>,
 ) => void;
+
+// One indent step per tree level (schema → group → object → detail).
+const STEP = 12;
+// Fixed gutter for the disclosure chevron, so expandable and leaf rows align on the same
+// left edge whether or not they can open.
+const CHEVRON_SLOT = 14;
 
 // Shows a floating tooltip with the full label, but only while the wrapped element is wider
 // than the visible (scrollable) panel area. The names sit in a max-content container, so they
@@ -72,8 +76,8 @@ function OverflowTooltip({
   );
 }
 
-// Pins the chevron / action controls to the right edge of the scroll viewport so they stay
-// visible at the panel width while long names scroll underneath them.
+// Pins trailing controls to the right edge of the scroll viewport so they stay visible while a
+// long name scrolls horizontally underneath them.
 const stickyRight: CSSProperties = {
   position: "sticky",
   right: 0,
@@ -83,117 +87,210 @@ const stickyRight: CSSProperties = {
   background: "var(--mantine-color-body)",
 };
 
-function Row({
-  label,
-  icon,
-  indent,
-  onClick,
-  right,
-}: {
-  label: string;
-  icon: ReactNode;
-  indent?: string | number;
-  onClick?: () => void;
-  right?: ReactNode;
-}) {
+// The single disclosure affordance used across the whole tree: a chevron that rotates from
+// pointing-right (closed) to pointing-down (open). Leaf rows render an empty slot of the same
+// width so their icons line up with expandable siblings.
+function Disclosure({ open, expandable }: { open: boolean; expandable: boolean }) {
   return (
-    <Flex wrap="nowrap" align="center" w="100%">
-      <OverflowTooltip label={label}>
+    <Box
+      w={CHEVRON_SLOT}
+      style={{ display: "flex", justifyContent: "center", flexShrink: 0 }}
+    >
+      {expandable ? (
+        <IconChevronRight
+          size={12}
+          color="var(--mantine-color-dimmed)"
+          style={{
+            transform: open ? "rotate(90deg)" : "none",
+            transition: "transform 120ms ease",
+          }}
+        />
+      ) : null}
+    </Box>
+  );
+}
+
+// A single tree row. The entire row is the click target — clicking anywhere toggles when the
+// row is expandable. `detail` is secondary metadata rendered dimmed/mono after the name.
+function TreeRow({
+  name,
+  detail,
+  icon,
+  depth,
+  expandable = false,
+  open = false,
+  onToggle,
+  trailing,
+  faded = false,
+}: {
+  name: string;
+  detail?: string;
+  icon: ReactNode;
+  depth: number;
+  expandable?: boolean;
+  open?: boolean;
+  onToggle?: () => void;
+  trailing?: ReactNode;
+  faded?: boolean;
+}) {
+  const tooltip = detail ? `${name} · ${detail}` : name;
+  return (
+    <Flex wrap="nowrap" align="center" miw="100%">
+      <OverflowTooltip label={tooltip}>
         <NavLink
-          label={label}
-          leftSection={icon}
-          onClick={onClick}
-          pl={indent}
+          onClick={onToggle}
+          pl={4 + depth * STEP}
           active={false}
-          style={{ width: "max-content", flexShrink: 0 }}
-          styles={{ label: { whiteSpace: "nowrap" } }}
+          leftSection={
+            <Group gap={4} wrap="nowrap">
+              <Disclosure open={open} expandable={expandable} />
+              {icon}
+            </Group>
+          }
+          label={
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "baseline",
+                gap: 8,
+                whiteSpace: "nowrap",
+                opacity: faded ? 0.55 : 1,
+              }}
+            >
+              <Text span fz="sm">
+                {name}
+              </Text>
+              {detail ? (
+                <Text span fz="xs" c="dimmed" ff="monospace">
+                  {detail}
+                </Text>
+              ) : null}
+            </span>
+          }
+          style={{ minWidth: "100%", width: "max-content", flexShrink: 0 }}
         />
       </OverflowTooltip>
-      {right ? (
+      {trailing ? (
         <Group gap={2} wrap="nowrap" pl={4} style={stickyRight}>
-          {right}
+          {trailing}
         </Group>
       ) : null}
     </Flex>
   );
 }
 
-// A collapsible "folder" grouping objects of one kind under a schema. Rendered only when the
-// group is non-empty so schemas stay tidy.
-function Group_({
-  id,
+// A collapsible category divider (Tables, Views, …). Rendered as a quiet uppercase eyebrow so
+// the grouping structure reads distinctly from the object rows it contains. Hidden when empty.
+function GroupHeader({
   title,
   count,
-  expanded,
+  depth,
+  open,
   onToggle,
-  children,
 }: {
-  id: string;
   title: string;
   count: number;
-  expanded: Array<string>;
-  onToggle: (id: string) => void;
-  children: ReactNode;
+  depth: number;
+  open: boolean;
+  onToggle: () => void;
 }) {
   if (count === 0) return null;
-  const isOpen = expanded.includes(id);
   return (
-    <div>
-      <Flex wrap="nowrap" align="center" w="100%">
-        <NavLink
-          label={`${title} (${count})`}
-          leftSection={isOpen ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
-          onClick={() => onToggle(id)}
-          pl="lg"
-          active={false}
-          style={{ width: "max-content", flexShrink: 0 }}
-          styles={{ label: { whiteSpace: "nowrap", fontWeight: 600 } }}
-        />
-      </Flex>
-      {isOpen ? <Box>{children}</Box> : null}
-    </div>
+    <NavLink
+      onClick={onToggle}
+      pl={4 + depth * STEP}
+      active={false}
+      leftSection={<Disclosure open={open} expandable />}
+      label={
+        <Text
+          span
+          ff="monospace"
+          fz={10}
+          fw={700}
+          tt="uppercase"
+          c="dimmed"
+          style={{ letterSpacing: "0.06em", whiteSpace: "nowrap" }}
+        >
+          {title} · {count}
+        </Text>
+      }
+      style={{ minWidth: "100%", width: "max-content", flexShrink: 0 }}
+    />
   );
 }
 
-function ColumnList({
+function ColumnRows({
   columns,
+  depth,
 }: {
   columns: Array<{ name: string; dataType: string; isNullable: boolean; isSensitive: boolean; isRestricted: boolean }>;
+  depth: number;
 }) {
   return (
-    <Stack gap={0} pl="calc(var(--mantine-spacing-xl) + var(--mantine-spacing-lg))">
+    <>
       {columns.map((c) => (
-        <Group
-          key={c.name}
-          gap="xs"
-          px="xs"
-          py={2}
-          wrap="nowrap"
-          style={c.isRestricted ? { opacity: 0.45 } : undefined}
-        >
-          <OverflowTooltip label={`${c.name} · ${c.dataType}`}>
-            <Text size="xs" style={{ minWidth: 0 }}>
-              {c.name}
-            </Text>
-          </OverflowTooltip>
-          <Code fz="xs">{c.dataType}</Code>
-          {c.isNullable && (
-            <Text size="xs" c="dimmed">
-              null
-            </Text>
-          )}
-          {c.isRestricted ? (
-            <Tooltip label="Restricted — you cannot access this column" withArrow>
-              <IconLock size={10} color="var(--mantine-color-red-6)" />
-            </Tooltip>
-          ) : c.isSensitive ? (
-            <Tooltip label="Sensitive — excluded from generated queries" withArrow>
-              <IconShieldLock size={10} color="var(--mantine-color-yellow-6)" />
-            </Tooltip>
-          ) : null}
-        </Group>
+        <Flex key={c.name} wrap="nowrap" align="center" miw="100%">
+          <Group
+            gap="xs"
+            wrap="nowrap"
+            py={3}
+            pr="xs"
+            pl={4 + depth * STEP + CHEVRON_SLOT + 4}
+            style={{ width: "max-content", flexShrink: 0, opacity: c.isRestricted ? 0.45 : 1 }}
+          >
+            <OverflowTooltip label={`${c.name} · ${c.dataType}`}>
+              <Text fz="xs" style={{ whiteSpace: "nowrap" }}>
+                {c.name}
+              </Text>
+            </OverflowTooltip>
+            <Code fz={10}>{c.dataType}</Code>
+            {c.isNullable && (
+              <Text fz={10} c="dimmed">
+                null
+              </Text>
+            )}
+            {c.isRestricted ? (
+              <Tooltip label="Restricted — you can't query this column" withArrow>
+                <IconLock size={11} color="var(--mantine-color-red-6)" />
+              </Tooltip>
+            ) : c.isSensitive ? (
+              <Tooltip label="Sensitive — left out of generated queries" withArrow>
+                <IconShieldLock size={11} color="var(--mantine-color-yellow-6)" />
+              </Tooltip>
+            ) : null}
+          </Group>
+        </Flex>
       ))}
-    </Stack>
+    </>
+  );
+}
+
+// A trailing "append SELECT" control for the queryable objects (tables and views). Disabled
+// when every column is sensitive, since there'd be nothing to select.
+function AppendSelectButton({
+  onClick,
+  disabled,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+}) {
+  return (
+    <Tooltip
+      label={disabled ? "All columns are sensitive" : "Append SELECT to the editor"}
+      position="left"
+      withArrow
+    >
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        size="sm"
+        disabled={disabled}
+        onClick={onClick}
+        aria-label="Append SELECT to the editor"
+      >
+        <IconPlaylistAdd size={15} />
+      </ActionIcon>
+    </Tooltip>
   );
 }
 
@@ -205,10 +302,9 @@ export function SchemaSidebar({
   onTableClick: TableClickHandler;
 }) {
   const [expanded, setExpanded] = useSessionState<Array<string>>("sluice:query:expanded", []);
-
-  function toggle(id: string) {
+  const isOpen = (id: string) => expanded.includes(id);
+  const toggle = (id: string) =>
     setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
-  }
 
   if (schema.isLoading) {
     return (
@@ -222,8 +318,8 @@ export function SchemaSidebar({
 
   if (schema.isError) {
     return (
-      <Alert color="red" title="Schema load failed" mt="xs">
-        Could not connect to the server.
+      <Alert color="red" title="Couldn't load schema" mt="xs">
+        Check the connection and try again.
       </Alert>
     );
   }
@@ -242,142 +338,157 @@ export function SchemaSidebar({
     <Stack gap={0}>
       {tree.schemas.map((s) => {
         const schemaId = `schema:${s.name}`;
-        const schemaOpen = expanded.includes(schemaId);
+        const gid = (kind: string) => `${schemaId}:${kind}`;
         return (
           <div key={s.name}>
-            <Flex wrap="nowrap" align="center" w="100%">
-              <NavLink
-                label={s.name}
-                leftSection={<IconDatabase size={14} />}
-                onClick={() => toggle(schemaId)}
-                active={false}
-                style={{ width: "max-content", flexShrink: 0 }}
-                styles={{ label: { whiteSpace: "nowrap" } }}
-              />
-              <Box
-                px={4}
-                onClick={() => toggle(schemaId)}
-                style={{ ...stickyRight, display: "flex", cursor: "pointer" }}
-              >
-                {schemaOpen ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
-              </Box>
-            </Flex>
+            <TreeRow
+              name={s.name}
+              icon={<IconDatabase size={15} color="var(--mantine-primary-color-filled)" />}
+              depth={0}
+              expandable
+              open={isOpen(schemaId)}
+              onToggle={() => toggle(schemaId)}
+            />
 
-            {schemaOpen && (
+            {isOpen(schemaId) && (
               <>
-                <Group_ id={`${schemaId}:tables`} title="Tables" count={s.tables.length} expanded={expanded} onToggle={toggle}>
-                  {s.tables.map((t) => {
+                <GroupHeader title="Tables" count={s.tables.length} depth={1} open={isOpen(gid("tables"))} onToggle={() => toggle(gid("tables"))} />
+                {isOpen(gid("tables")) &&
+                  s.tables.map((t) => {
                     const id = `table:${s.name}.${t.name}`;
-                    const open = expanded.includes(id);
+                    const allSensitive = t.columns.every((c) => c.isSensitive);
                     return (
                       <div key={t.name}>
-                        <Row
-                          label={t.name}
-                          icon={<IconTable size={14} />}
-                          indent="xl"
-                          onClick={() => toggle(id)}
-                          right={
-                            <>
-                              <ActionIcon variant="subtle" color="gray" size="sm" onClick={() => toggle(id)} aria-label={open ? "Collapse" : "Expand"}>
-                                {open ? <IconChevronDown size={12} /> : <IconChevronRight size={12} />}
-                              </ActionIcon>
-                              <Tooltip label="Append SELECT query" position="right" withArrow>
-                                <Button onClick={() => onTableClick(s.name, t.name, t.columns)} size="xs" variant="subtle" disabled={t.columns.every((c) => c.isSensitive)}>
-                                  <IconPlaylistAdd />
-                                </Button>
-                              </Tooltip>
-                            </>
+                        <TreeRow
+                          name={t.name}
+                          icon={<IconTable size={14} color="var(--mantine-color-dimmed)" />}
+                          depth={2}
+                          expandable
+                          open={isOpen(id)}
+                          onToggle={() => toggle(id)}
+                          trailing={
+                            <AppendSelectButton
+                              disabled={allSensitive}
+                              onClick={() => onTableClick(s.name, t.name, t.columns)}
+                            />
                           }
                         />
-                        {open && (
+                        {isOpen(id) && (
                           <>
-                            <ColumnList columns={t.columns} />
+                            <ColumnRows columns={t.columns} depth={3} />
                             {t.indexes.map((ix) => (
-                              <Row key={ix.name} label={`${ix.name} (${ix.columns.join(", ")})`} icon={<IconKey size={12} />} indent="calc(var(--mantine-spacing-xl) + var(--mantine-spacing-md))" />
+                              <TreeRow
+                                key={ix.name}
+                                name={ix.name}
+                                detail={`${ix.columns.join(", ")}${ix.isPrimary ? " · pk" : ix.isUnique ? " · unique" : ""}`}
+                                icon={<IconKey size={13} color="var(--mantine-color-dimmed)" />}
+                                depth={3}
+                                faded
+                              />
                             ))}
                           </>
                         )}
                       </div>
                     );
                   })}
-                </Group_>
 
-                <Group_ id={`${schemaId}:views`} title="Views" count={s.views.length} expanded={expanded} onToggle={toggle}>
-                  {s.views.map((v) => {
+                <GroupHeader title="Views" count={s.views.length} depth={1} open={isOpen(gid("views"))} onToggle={() => toggle(gid("views"))} />
+                {isOpen(gid("views")) &&
+                  s.views.map((v) => {
                     const id = `view:${s.name}.${v.name}`;
-                    const open = expanded.includes(id);
+                    const allSensitive = v.columns.every((c) => c.isSensitive);
                     return (
                       <div key={v.name}>
-                        <Row
-                          label={v.name}
-                          icon={<IconEye size={14} />}
-                          indent="xl"
-                          onClick={() => toggle(id)}
-                          right={
-                            <Tooltip label="Append SELECT query" position="right" withArrow>
-                              <Button onClick={() => onTableClick(s.name, v.name, v.columns)} size="xs" variant="subtle" disabled={v.columns.every((c) => c.isSensitive)}>
-                                <IconPlaylistAdd />
-                              </Button>
-                            </Tooltip>
+                        <TreeRow
+                          name={v.name}
+                          icon={<IconEye size={14} color="var(--mantine-color-dimmed)" />}
+                          depth={2}
+                          expandable
+                          open={isOpen(id)}
+                          onToggle={() => toggle(id)}
+                          trailing={
+                            <AppendSelectButton
+                              disabled={allSensitive}
+                              onClick={() => onTableClick(s.name, v.name, v.columns)}
+                            />
                           }
                         />
-                        {open && <ColumnList columns={v.columns} />}
+                        {isOpen(id) && <ColumnRows columns={v.columns} depth={3} />}
                       </div>
                     );
                   })}
-                </Group_>
 
-                <Group_ id={`${schemaId}:matviews`} title="Materialized Views" count={s.materializedViews.length} expanded={expanded} onToggle={toggle}>
-                  {s.materializedViews.map((m) => {
+                <GroupHeader title="Materialized Views" count={s.materializedViews.length} depth={1} open={isOpen(gid("matviews"))} onToggle={() => toggle(gid("matviews"))} />
+                {isOpen(gid("matviews")) &&
+                  s.materializedViews.map((m) => {
                     const id = `matview:${s.name}.${m.name}`;
-                    const open = expanded.includes(id);
                     return (
                       <div key={m.name}>
-                        <Row label={m.name} icon={<IconStack2 size={14} />} indent="xl" onClick={() => toggle(id)} />
-                        {open && <ColumnList columns={m.columns} />}
+                        <TreeRow
+                          name={m.name}
+                          icon={<IconStack2 size={14} color="var(--mantine-color-dimmed)" />}
+                          depth={2}
+                          expandable
+                          open={isOpen(id)}
+                          onToggle={() => toggle(id)}
+                        />
+                        {isOpen(id) && <ColumnRows columns={m.columns} depth={3} />}
                       </div>
                     );
                   })}
-                </Group_>
 
-                <Group_ id={`${schemaId}:functions`} title="Functions" count={s.routines.length} expanded={expanded} onToggle={toggle}>
-                  {s.routines.map((r) => (
-                    <Row
+                <GroupHeader title="Functions" count={s.routines.length} depth={1} open={isOpen(gid("functions"))} onToggle={() => toggle(gid("functions"))} />
+                {isOpen(gid("functions")) &&
+                  s.routines.map((r) => (
+                    <TreeRow
                       key={`${r.name}(${r.signature})`}
-                      label={`${r.name}(${r.signature})${r.returnType ? ` → ${r.returnType}` : ""}`}
-                      icon={<IconMathFunction size={14} />}
-                      indent="xl"
+                      name={r.name}
+                      detail={`(${r.signature})${r.returnType ? ` → ${r.returnType}` : ""}`}
+                      icon={<IconMathFunction size={14} color="var(--mantine-color-dimmed)" />}
+                      depth={2}
                     />
                   ))}
-                </Group_>
 
-                <Group_ id={`${schemaId}:sequences`} title="Sequences" count={s.sequences.length} expanded={expanded} onToggle={toggle}>
-                  {s.sequences.map((seq) => (
-                    <Row key={seq.name} label={`${seq.name} (${seq.dataType})`} icon={<IconListNumbers size={14} />} indent="xl" />
+                <GroupHeader title="Sequences" count={s.sequences.length} depth={1} open={isOpen(gid("sequences"))} onToggle={() => toggle(gid("sequences"))} />
+                {isOpen(gid("sequences")) &&
+                  s.sequences.map((seq) => (
+                    <TreeRow
+                      key={seq.name}
+                      name={seq.name}
+                      detail={seq.dataType}
+                      icon={<IconListNumbers size={14} color="var(--mantine-color-dimmed)" />}
+                      depth={2}
+                    />
                   ))}
-                </Group_>
 
-                <Group_ id={`${schemaId}:types`} title="Types" count={s.types.length} expanded={expanded} onToggle={toggle}>
-                  {s.types.map((ty) => (
-                    <Row
+                <GroupHeader title="Types" count={s.types.length} depth={1} open={isOpen(gid("types"))} onToggle={() => toggle(gid("types"))} />
+                {isOpen(gid("types")) &&
+                  s.types.map((ty) => (
+                    <TreeRow
                       key={ty.name}
-                      label={`${ty.name} {${ty.kind}}${ty.enumLabels ? `: ${ty.enumLabels.join(", ")}` : ""}`}
-                      icon={<IconBraces size={14} />}
-                      indent="xl"
+                      name={ty.name}
+                      detail={ty.enumLabels ? `${ty.kind} · ${ty.enumLabels.join(", ")}` : ty.kind}
+                      icon={<IconBraces size={14} color="var(--mantine-color-dimmed)" />}
+                      depth={2}
                     />
                   ))}
-                </Group_>
               </>
             )}
           </div>
         );
       })}
 
-      <Group_ id="extensions" title="Extensions" count={tree.extensions.length} expanded={expanded} onToggle={toggle}>
-        {tree.extensions.map((e) => (
-          <Row key={e.name} label={`${e.name} ${e.version}`} icon={<IconPuzzle size={14} />} indent="xl" />
+      <GroupHeader title="Extensions" count={tree.extensions.length} depth={0} open={isOpen("extensions")} onToggle={() => toggle("extensions")} />
+      {isOpen("extensions") &&
+        tree.extensions.map((e) => (
+          <TreeRow
+            key={e.name}
+            name={e.name}
+            detail={e.version}
+            icon={<IconPuzzle size={14} color="var(--mantine-color-dimmed)" />}
+            depth={1}
+          />
         ))}
-      </Group_>
     </Stack>
   );
 }

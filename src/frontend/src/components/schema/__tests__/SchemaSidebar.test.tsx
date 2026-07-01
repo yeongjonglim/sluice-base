@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { SchemaSidebar } from "@/components/schema/SchemaSidebar";
 
 function makeSchema() {
@@ -41,22 +41,32 @@ function renderSidebar() {
 }
 
 describe("SchemaSidebar", () => {
-  it("shows grouped object folders after expanding the schema", () => {
-    renderSidebar();
-    fireEvent.click(screen.getByText("public"));
-
-    expect(screen.getByText(/Tables/)).toBeInTheDocument();
-    expect(screen.getByText(/^Views/)).toBeInTheDocument();
-    expect(screen.getByText(/Materialized Views/)).toBeInTheDocument();
-    expect(screen.getByText(/Functions/)).toBeInTheDocument();
-    expect(screen.getByText(/Sequences/)).toBeInTheDocument();
-    expect(screen.getByText(/Types/)).toBeInTheDocument();
+  beforeEach(() => {
+    // Expanded state persists in sessionStorage; clear it so each test starts collapsed.
+    sessionStorage.clear();
   });
 
-  it("lists extensions at the database level", () => {
+  it("shows grouped object folders after expanding the schema", () => {
     renderSidebar();
-    expect(screen.getByText(/Extensions/)).toBeInTheDocument();
-    fireEvent.click(screen.getByText(/Extensions/));
-    expect(screen.getAllByText("citext 1.6")[0]).toBeInTheDocument();
+    // The schema name also appears in its overflow-tooltip portal, so match the first.
+    fireEvent.click(screen.getAllByText("public")[0]);
+
+    expect(screen.getByText(/^Tables/)).toBeInTheDocument();
+    expect(screen.getByText(/^Views/)).toBeInTheDocument();
+    expect(screen.getByText(/^Materialized Views/)).toBeInTheDocument();
+    expect(screen.getByText(/^Functions/)).toBeInTheDocument();
+    expect(screen.getByText(/^Sequences/)).toBeInTheDocument();
+    expect(screen.getByText(/^Types/)).toBeInTheDocument();
+  });
+
+  it("lists extensions with their version at the database level", () => {
+    renderSidebar();
+    const header = screen.getByText(/^Extensions/);
+    expect(header).toBeInTheDocument();
+
+    fireEvent.click(header);
+    // Name and version render as separate nodes now.
+    expect(screen.getByText("citext", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("1.6", { exact: true })).toBeInTheDocument();
   });
 });
