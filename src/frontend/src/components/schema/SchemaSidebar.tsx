@@ -304,34 +304,43 @@ function ColumnRows({
   );
 }
 
-// Indexes fold into their own collapsible subgroup under a table/matview, so they never sit
-// interleaved with columns. Hidden when there are none.
+// Indexes sit under a plain, non-collapsible "Indexes" divider beneath a table's columns —
+// grouped so they never interleave with columns, but without a third accordion to click
+// through for the usual one or two entries. Nothing renders when there are none.
 function IndexRows({
   indexes,
-  groupId,
-  isOpen,
-  toggle,
+  depth,
 }: {
   indexes: Array<{ name: string; columns: Array<string>; isUnique: boolean; isPrimary: boolean; method: string }>;
-  groupId: string;
-  isOpen: (id: string) => boolean;
-  toggle: (id: string) => void;
+  depth: number;
 }) {
   if (indexes.length === 0) return null;
   return (
     <>
-      <GroupHeader title="Indexes" count={indexes.length} depth={3} open={isOpen(groupId)} onToggle={() => toggle(groupId)} />
-      {isOpen(groupId) &&
-        indexes.map((ix) => (
-          <TreeRow
-            key={ix.name}
-            leaf
-            depth={4}
-            name={ix.name}
-            detail={`${ix.columns.join(", ")}${ix.isPrimary ? " · pk" : ix.isUnique ? " · unique" : ""}`}
-            icon={<IconBinaryTree2 size={13} color="var(--mantine-color-dimmed)" />}
-          />
-        ))}
+      <Text
+        component="div"
+        ff="monospace"
+        fz={10}
+        fw={700}
+        tt="uppercase"
+        c="dimmed"
+        pl={4 + depth * STEP + CHEVRON_SLOT + 4}
+        pt={6}
+        pb={2}
+        style={{ letterSpacing: "0.06em", whiteSpace: "nowrap" }}
+      >
+        Indexes
+      </Text>
+      {indexes.map((ix) => (
+        <TreeRow
+          key={ix.name}
+          leaf
+          depth={depth}
+          name={ix.name}
+          detail={`${ix.columns.join(", ")}${ix.isPrimary ? " · pk" : ix.isUnique ? " · unique" : ""}`}
+          icon={<IconBinaryTree2 size={13} color="var(--mantine-color-dimmed)" />}
+        />
+      ))}
     </>
   );
 }
@@ -453,7 +462,7 @@ export function SchemaSidebar({
                               primaryKey={t.primaryKey?.columns}
                               foreignKeys={t.foreignKeys.flatMap((fk) => fk.columns)}
                             />
-                            <IndexRows indexes={t.indexes} groupId={`${id}:indexes`} isOpen={isOpen} toggle={toggle} />
+                            <IndexRows indexes={t.indexes} depth={3} />
                           </>
                         )}
                       </div>
@@ -503,7 +512,7 @@ export function SchemaSidebar({
                         {isOpen(id) && (
                           <>
                             <ColumnRows columns={m.columns} depth={3} />
-                            <IndexRows indexes={m.indexes} groupId={`${id}:indexes`} isOpen={isOpen} toggle={toggle} />
+                            <IndexRows indexes={m.indexes} depth={3} />
                           </>
                         )}
                       </div>
