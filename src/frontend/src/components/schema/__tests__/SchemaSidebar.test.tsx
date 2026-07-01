@@ -56,6 +56,7 @@ describe("SchemaSidebar", () => {
   it("lists extensions at the database level", () => {
     renderSidebar();
     expect(screen.getByText(/Extensions/)).toBeInTheDocument();
-    expect(screen.getByText("citext")).toBeInTheDocument();
+    fireEvent.click(screen.getByText(/Extensions/));
+    expect(screen.getAllByText("citext 1.6")[0]).toBeInTheDocument();
   });
 });

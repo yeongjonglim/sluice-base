@@ -373,37 +373,11 @@ export function SchemaSidebar({
         );
       })}
 
-      {tree.extensions.length > 0 && (
-        // Extensions are a database-level concept and typically few; show them expanded by
-        // default so the names are always visible without requiring a click. Render entries
-        // as plain NavLinks (not via Row/OverflowTooltip) since extension names are short.
-        <div>
-          <Flex wrap="nowrap" align="center" w="100%">
-            <NavLink
-              label={`Extensions (${tree.extensions.length})`}
-              leftSection={<IconChevronDown size={12} />}
-              pl="lg"
-              active={false}
-              style={{ width: "max-content", flexShrink: 0 }}
-              styles={{ label: { whiteSpace: "nowrap", fontWeight: 600 } }}
-            />
-          </Flex>
-          <Box>
-            {tree.extensions.map((e) => (
-              <Flex key={e.name} wrap="nowrap" align="center" w="100%">
-                <NavLink
-                  label={e.name}
-                  leftSection={<IconPuzzle size={14} />}
-                  pl="xl"
-                  active={false}
-                  style={{ width: "max-content", flexShrink: 0 }}
-                  styles={{ label: { whiteSpace: "nowrap" } }}
-                />
-              </Flex>
-            ))}
-          </Box>
-        </div>
-      )}
+      <Group_ id="extensions" title="Extensions" count={tree.extensions.length} expanded={expanded} onToggle={toggle}>
+        {tree.extensions.map((e) => (
+          <Row key={e.name} label={`${e.name} ${e.version}`} icon={<IconPuzzle size={14} />} indent="xl" />
+        ))}
+      </Group_>
     </Stack>
   );
 }
