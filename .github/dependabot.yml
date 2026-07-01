@@ -7,6 +7,13 @@ updates:
       day: saturday
     reviewers:
       - yeongjonglim
+    ignore:
+      # Microsoft.OpenApi is pinned to v2 (see SluiceBase.Api.csproj): .NET 10's OpenAPI
+      # stack targets v2, and v3 is a breaking change. Allow minor/patch bumps within v2
+      # but block the v2 -> v3 major jump. Remove this ignore when moving to .NET 11,
+      # which adopts Microsoft.OpenApi v3.
+      - dependency-name: "Microsoft.OpenApi"
+        update-types: ["version-update:semver-major"]
     groups:
       aspire:
         patterns:
