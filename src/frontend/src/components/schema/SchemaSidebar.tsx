@@ -2,7 +2,6 @@ import {
   ActionIcon,
   Alert,
   Box,
-  Code,
   Flex,
   Group,
   NavLink,
@@ -12,15 +11,18 @@ import {
   Tooltip,
 } from "@mantine/core";
 import {
+  IconBinaryTree2,
   IconBraces,
   IconChevronRight,
   IconDatabase,
   IconEye,
   IconKey,
+  IconLink,
   IconListNumbers,
   IconLock,
   IconMathFunction,
   IconPlaylistAdd,
+  IconPointFilled,
   IconPuzzle,
   IconShieldLock,
   IconStack2,
@@ -123,6 +125,7 @@ function TreeRow({
   trailing,
   leaf = false,
   emphasis = false,
+  faded = false,
 }: {
   name: string;
   detail?: string;
@@ -137,6 +140,8 @@ function TreeRow({
   leaf?: boolean;
   // Emphasises the row as a container anchor (used for the schema node).
   emphasis?: boolean;
+  // Dims the row (used for columns the current user can't access).
+  faded?: boolean;
 }) {
   const tooltip = detail ? `${name} · ${detail}` : name;
   return (
@@ -159,6 +164,7 @@ function TreeRow({
                 alignItems: "baseline",
                 gap: 8,
                 whiteSpace: "nowrap",
+                opacity: faded ? 0.55 : 1,
               }}
             >
               <Text span fz={leaf ? "xs" : "sm"} fw={emphasis ? 600 : undefined}>
@@ -223,48 +229,109 @@ function GroupHeader({
   );
 }
 
+type Column = { name: string; dataType: string; isNullable: boolean; isSensitive: boolean; isRestricted: boolean };
+
+// Leading icon that encodes a column's role, so every column row has the same aligned marker:
+// a key for the primary key, a link for foreign keys, a quiet dot otherwise.
+function columnIcon(role: "pk" | "fk" | "plain") {
+  if (role === "pk") {
+    return (
+      <Tooltip label="Primary key" withArrow>
+        <IconKey size={13} color="var(--mantine-color-yellow-6)" />
+      </Tooltip>
+    );
+  }
+  if (role === "fk") {
+    return (
+      <Tooltip label="Foreign key" withArrow>
+        <IconLink size={12} color="var(--mantine-color-dimmed)" />
+      </Tooltip>
+    );
+  }
+  return <IconPointFilled size={9} color="var(--mantine-color-dimmed)" />;
+}
+
+// A trailing lock/shield when a column is restricted or sensitive; nothing otherwise.
+function sensitivityMarker(c: Column) {
+  if (c.isRestricted) {
+    return (
+      <Tooltip label="Restricted — you can't query this column" withArrow>
+        <IconLock size={12} color="var(--mantine-color-red-6)" />
+      </Tooltip>
+    );
+  }
+  if (c.isSensitive) {
+    return (
+      <Tooltip label="Sensitive — left out of generated queries" withArrow>
+        <IconShieldLock size={12} color="var(--mantine-color-yellow-6)" />
+      </Tooltip>
+    );
+  }
+  return null;
+}
+
 function ColumnRows({
   columns,
   depth,
+  primaryKey = [],
+  foreignKeys = [],
 }: {
-  columns: Array<{ name: string; dataType: string; isNullable: boolean; isSensitive: boolean; isRestricted: boolean }>;
+  columns: Array<Column>;
   depth: number;
+  primaryKey?: Array<string>;
+  foreignKeys?: Array<string>;
 }) {
+  const pk = new Set(primaryKey);
+  const fk = new Set(foreignKeys);
   return (
     <>
-      {columns.map((c) => (
-        <Flex key={c.name} wrap="nowrap" align="center" miw="100%">
-          <Group
-            gap="xs"
-            wrap="nowrap"
-            py={3}
-            pr="xs"
-            pl={4 + depth * STEP + CHEVRON_SLOT + 4}
-            style={{ width: "max-content", flexShrink: 0, opacity: c.isRestricted ? 0.45 : 1 }}
-          >
-            <OverflowTooltip label={`${c.name} · ${c.dataType}`}>
-              <Text fz="xs" style={{ whiteSpace: "nowrap" }}>
-                {c.name}
-              </Text>
-            </OverflowTooltip>
-            <Code fz="xs">{c.dataType}</Code>
-            {c.isNullable && (
-              <Text fz="xs" c="dimmed">
-                null
-              </Text>
-            )}
-            {c.isRestricted ? (
-              <Tooltip label="Restricted — you can't query this column" withArrow>
-                <IconLock size={11} color="var(--mantine-color-red-6)" />
-              </Tooltip>
-            ) : c.isSensitive ? (
-              <Tooltip label="Sensitive — left out of generated queries" withArrow>
-                <IconShieldLock size={11} color="var(--mantine-color-yellow-6)" />
-              </Tooltip>
-            ) : null}
-          </Group>
-        </Flex>
-      ))}
+      {columns.map((c) => {
+        const role = pk.has(c.name) ? "pk" : fk.has(c.name) ? "fk" : "plain";
+        return (
+          <TreeRow
+            key={c.name}
+            leaf
+            depth={depth}
+            name={c.name}
+            detail={`${c.dataType}${c.isNullable ? " · null" : ""}`}
+            icon={columnIcon(role)}
+            faded={c.isRestricted}
+            trailing={sensitivityMarker(c)}
+          />
+        );
+      })}
+    </>
+  );
+}
+
+// Indexes fold into their own collapsible subgroup under a table/matview, so they never sit
+// interleaved with columns. Hidden when there are none.
+function IndexRows({
+  indexes,
+  groupId,
+  isOpen,
+  toggle,
+}: {
+  indexes: Array<{ name: string; columns: Array<string>; isUnique: boolean; isPrimary: boolean; method: string }>;
+  groupId: string;
+  isOpen: (id: string) => boolean;
+  toggle: (id: string) => void;
+}) {
+  if (indexes.length === 0) return null;
+  return (
+    <>
+      <GroupHeader title="Indexes" count={indexes.length} depth={3} open={isOpen(groupId)} onToggle={() => toggle(groupId)} />
+      {isOpen(groupId) &&
+        indexes.map((ix) => (
+          <TreeRow
+            key={ix.name}
+            leaf
+            depth={4}
+            name={ix.name}
+            detail={`${ix.columns.join(", ")}${ix.isPrimary ? " · pk" : ix.isUnique ? " · unique" : ""}`}
+            icon={<IconBinaryTree2 size={13} color="var(--mantine-color-dimmed)" />}
+          />
+        ))}
     </>
   );
 }
@@ -380,17 +447,13 @@ export function SchemaSidebar({
                         />
                         {isOpen(id) && (
                           <>
-                            <ColumnRows columns={t.columns} depth={3} />
-                            {t.indexes.map((ix) => (
-                              <TreeRow
-                                key={ix.name}
-                                name={ix.name}
-                                detail={`${ix.columns.join(", ")}${ix.isPrimary ? " · pk" : ix.isUnique ? " · unique" : ""}`}
-                                icon={<IconKey size={13} color="var(--mantine-color-dimmed)" />}
-                                depth={3}
-                                leaf
-                              />
-                            ))}
+                            <ColumnRows
+                              columns={t.columns}
+                              depth={3}
+                              primaryKey={t.primaryKey?.columns}
+                              foreignKeys={t.foreignKeys.flatMap((fk) => fk.columns)}
+                            />
+                            <IndexRows indexes={t.indexes} groupId={`${id}:indexes`} isOpen={isOpen} toggle={toggle} />
                           </>
                         )}
                       </div>
@@ -437,7 +500,12 @@ export function SchemaSidebar({
                           open={isOpen(id)}
                           onToggle={() => toggle(id)}
                         />
-                        {isOpen(id) && <ColumnRows columns={m.columns} depth={3} />}
+                        {isOpen(id) && (
+                          <>
+                            <ColumnRows columns={m.columns} depth={3} />
+                            <IndexRows indexes={m.indexes} groupId={`${id}:indexes`} isOpen={isOpen} toggle={toggle} />
+                          </>
+                        )}
                       </div>
                     );
                   })}
