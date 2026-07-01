@@ -86,6 +86,8 @@ const stickyRight: CSSProperties = {
   marginLeft: "auto",
   flexShrink: 0,
   alignItems: "center",
+  // Keep the controls off the splitter/scrollbar edge so they stay fully clickable.
+  paddingRight: 6,
   background: "var(--mantine-color-body)",
 };
 

@@ -131,8 +131,10 @@ function QueryPage() {
         <Box p="xs" style={{ flexShrink: 0 }}>
           <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
         </Box>
-        {/* Schema tree scrolls on its own — long table/column names extend horizontally here. */}
-        <Box data-schema-scroll style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        {/* Schema tree scrolls on its own — long table/column names extend horizontally here.
+            scrollbarGutter keeps the (hover-revealed) scrollbar from overlapping the sticky
+            right-edge controls; the gutter is always reserved so nothing hides under it. */}
+        <Box data-schema-scroll style={{ flex: 1, minHeight: 0, overflow: "auto", scrollbarGutter: "stable" }}>
           <Box miw="max-content" px="xs" pb="xs">
             <SchemaSidebar schema={schema} onTableClick={handleTableClick} />
           </Box>
