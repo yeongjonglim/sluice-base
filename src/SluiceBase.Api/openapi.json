@@ -2610,6 +2610,25 @@
           }
         }
       },
+      "ExtensionInfo": {
+        "required": [
+          "name",
+          "version",
+          "schema"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "schema": {
+            "type": "string"
+          }
+        }
+      },
       "ForeignKey": {
         "required": [
           "constraintName",
@@ -2891,6 +2910,36 @@
           }
         }
       },
+      "IndexInfo": {
+        "required": [
+          "name",
+          "columns",
+          "isUnique",
+          "isPrimary",
+          "method"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "isUnique": {
+            "type": "boolean"
+          },
+          "isPrimary": {
+            "type": "boolean"
+          },
+          "method": {
+            "type": "string"
+          }
+        }
+      },
       "ListServersResponse": {
         "required": [
           "servers"
@@ -2949,6 +2998,31 @@
           },
           "columnName": {
             "type": "string"
+          }
+        }
+      },
+      "MaterializedViewInfo": {
+        "required": [
+          "name",
+          "columns",
+          "indexes"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnInfo"
+            }
+          },
+          "indexes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IndexInfo"
+            }
           }
         }
       },
@@ -3257,10 +3331,45 @@
           }
         }
       },
+      "RoutineInfo": {
+        "required": [
+          "name",
+          "kind",
+          "returnType",
+          "language",
+          "signature"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "returnType": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "language": {
+            "type": "string"
+          },
+          "signature": {
+            "type": "string"
+          }
+        }
+      },
       "SchemaInfo": {
         "required": [
           "name",
-          "tables"
+          "tables",
+          "views",
+          "materializedViews",
+          "routines",
+          "sequences",
+          "types"
         ],
         "type": "object",
         "properties": {
@@ -3272,12 +3381,43 @@
             "items": {
               "$ref": "#/components/schemas/TableInfo"
             }
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ViewInfo"
+            }
+          },
+          "materializedViews": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MaterializedViewInfo"
+            }
+          },
+          "routines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RoutineInfo"
+            }
+          },
+          "sequences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SequenceInfo"
+            }
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TypeInfo"
+            }
           }
         }
       },
       "SchemaTree": {
         "required": [
-          "schemas"
+          "schemas",
+          "extensions"
         ],
         "type": "object",
         "properties": {
@@ -3285,6 +3425,12 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/SchemaInfo"
+            }
+          },
+          "extensions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ExtensionInfo"
             }
           }
         }
@@ -3347,6 +3493,68 @@
             "items": {
               "$ref": "#/components/schemas/SensitiveColumnItem"
             }
+          }
+        }
+      },
+      "SequenceInfo": {
+        "required": [
+          "name",
+          "dataType",
+          "start",
+          "increment",
+          "minValue",
+          "maxValue",
+          "cycle",
+          "ownedByColumn"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "dataType": {
+            "type": "string"
+          },
+          "start": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "increment": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "minValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "maxValue": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int64"
+          },
+          "cycle": {
+            "type": "boolean"
+          },
+          "ownedByColumn": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -3449,7 +3657,8 @@
           "name",
           "columns",
           "primaryKey",
-          "foreignKeys"
+          "foreignKeys",
+          "indexes"
         ],
         "type": "object",
         "properties": {
@@ -3477,6 +3686,12 @@
             "items": {
               "$ref": "#/components/schemas/ForeignKey"
             }
+          },
+          "indexes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IndexInfo"
+            }
           }
         }
       },
@@ -3498,6 +3713,48 @@
               {
                 "$ref": "#/components/schemas/ConnectivityResult"
               }
+            ]
+          }
+        }
+      },
+      "TypeInfo": {
+        "required": [
+          "name",
+          "kind",
+          "enumLabels",
+          "attributes",
+          "baseType"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "enumLabels": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "attributes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "baseType": {
+            "type": [
+              "null",
+              "string"
             ]
           }
         }
@@ -3922,6 +4179,24 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/EffectivePermission"
+            }
+          }
+        }
+      },
+      "ViewInfo": {
+        "required": [
+          "name",
+          "columns"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ColumnInfo"
             }
           }
         }
