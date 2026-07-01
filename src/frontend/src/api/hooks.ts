@@ -337,13 +337,18 @@ export function schemaToCompletions(
         name: string;
         columns: Array<{ name: string; isRestricted: boolean }>;
       }>;
+      views?: Array<{
+        name: string;
+        columns: Array<{ name: string; isRestricted: boolean }>;
+      }>;
     }>;
   },
 ): Record<string, Array<string>> {
   const result: Record<string, Array<string>> = {};
   for (const schema of tree.schemas) {
-    for (const table of schema.tables) {
-      result[`${schema.name}.${table.name}`] = table.columns
+    const relations = [...schema.tables, ...(schema.views ?? [])];
+    for (const relation of relations) {
+      result[`${schema.name}.${relation.name}`] = relation.columns
         .filter((c) => !c.isRestricted)
         .map((c) => c.name);
     }
