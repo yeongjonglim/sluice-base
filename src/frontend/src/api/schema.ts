@@ -970,6 +970,11 @@ export interface components {
             fromDirect: boolean;
             fromGroups: components["schemas"]["GroupRef"][];
         };
+        ExtensionInfo: {
+            name: string;
+            version: string;
+            schema: string;
+        };
         ForeignKey: {
             constraintName: string;
             columns: string[];
@@ -1033,6 +1038,13 @@ export interface components {
                 [key: string]: string[];
             };
         };
+        IndexInfo: {
+            name: string;
+            columns: string[];
+            isUnique: boolean;
+            isPrimary: boolean;
+            method: string;
+        };
         ListServersResponse: {
             servers: components["schemas"]["ServerResponse"][];
         };
@@ -1046,6 +1058,11 @@ export interface components {
             schemaName: string;
             tableName: string;
             columnName: string;
+        };
+        MaterializedViewInfo: {
+            name: string;
+            columns: components["schemas"]["ColumnInfo"][];
+            indexes: components["schemas"]["IndexInfo"][];
         };
         MeResponse: {
             id: components["schemas"]["UserId"];
@@ -1106,12 +1123,25 @@ export interface components {
         ReviewUpdateRequest: {
             note: string;
         };
+        RoutineInfo: {
+            name: string;
+            kind: string;
+            returnType: null | string;
+            language: string;
+            signature: string;
+        };
         SchemaInfo: {
             name: string;
             tables: components["schemas"]["TableInfo"][];
+            views: components["schemas"]["ViewInfo"][];
+            materializedViews: components["schemas"]["MaterializedViewInfo"][];
+            routines: components["schemas"]["RoutineInfo"][];
+            sequences: components["schemas"]["SequenceInfo"][];
+            types: components["schemas"]["TypeInfo"][];
         };
         SchemaTree: {
             schemas: components["schemas"]["SchemaInfo"][];
+            extensions: components["schemas"]["ExtensionInfo"][];
         };
         SensitiveColumnId: unknown;
         SensitiveColumnItem: {
@@ -1126,6 +1156,20 @@ export interface components {
         };
         SensitiveColumnListResponse: {
             columns: components["schemas"]["SensitiveColumnItem"][];
+        };
+        SequenceInfo: {
+            name: string;
+            dataType: string;
+            /** Format: int64 */
+            start: number | string;
+            /** Format: int64 */
+            increment: number | string;
+            /** Format: int64 */
+            minValue: number | string;
+            /** Format: int64 */
+            maxValue: number | string;
+            cycle: boolean;
+            ownedByColumn: null | string;
         };
         /** Format: uuid */
         ServerId: string;
@@ -1156,10 +1200,18 @@ export interface components {
             columns: components["schemas"]["ColumnInfo"][];
             primaryKey: null | components["schemas"]["PrimaryKey"];
             foreignKeys: components["schemas"]["ForeignKey"][];
+            indexes: components["schemas"]["IndexInfo"][];
         };
         TestConnectionResponse: {
             read: components["schemas"]["ConnectivityResult"];
             write: null | components["schemas"]["ConnectivityResult"];
+        };
+        TypeInfo: {
+            name: string;
+            kind: string;
+            enumLabels: null | string[];
+            attributes: null | string[];
+            baseType: null | string;
         };
         UpdateCredentialRequest: {
             label: string;
@@ -1246,6 +1298,10 @@ export interface components {
             /** Format: date-time */
             lastLoginAt: null | string;
             permissions: components["schemas"]["EffectivePermission"][];
+        };
+        ViewInfo: {
+            name: string;
+            columns: components["schemas"]["ColumnInfo"][];
         };
     };
     responses: never;
