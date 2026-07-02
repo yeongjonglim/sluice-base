@@ -92,6 +92,7 @@ The app is available at `http://localhost:8080`.
 | `Branding__FaviconUrl` | | — | URL to a custom favicon — see [using local files](#using-local-branding-files) |
 | `Query__TimeoutSeconds` | | `30` | Maximum query execution time in seconds |
 | `Mcp__Enabled` | | `true` | Enable the MCP server and its OAuth endpoints (see [Connecting AI tools](#connecting-ai-tools-mcp)) |
+| `Mcp__ServerName` | | `sluicebase` | Client alias shown in connect snippets (letters, digits, `-`, `_`; falls back to `sluicebase` if invalid) |
 | `Mcp__AccessTokenMinutes` | | `60` | Lifetime of an MCP access token in minutes |
 | `Mcp__RefreshTokenDays` | | `30` | Lifetime of an MCP refresh token in days |
 | `Mcp__AuthCodeSeconds` | | `120` | Lifetime of an MCP OAuth authorization code in seconds |
@@ -152,6 +153,8 @@ The ID token must include the `sub`, `email`, and `name` claims.
 SluiceBase exposes a [Model Context Protocol](https://modelcontextprotocol.io) server so AI coding tools (Claude Code, Codex) can list databases, browse schema, and run read-only queries **as the authenticated user** — reusing the same per-database permissions, sensitive-column screening, and audit logging as the web UI.
 
 The MCP endpoint is served at `https://your-domain/mcp` (streamable HTTP). Authentication uses OAuth 2.1: SluiceBase acts as the authorization server and brokers login to your existing OIDC provider, so users sign in with the **same login page they already use** — no extra credentials, and tokens are user-scoped and revocable.
+
+Signed-in users can also open **Connect AI tools** (the ✨ icon in the app header) for copy-ready, per-client setup snippets pre-filled with this instance's URL and server name.
 
 ### Claude Code
 
