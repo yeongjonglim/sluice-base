@@ -51,7 +51,16 @@ export function ConnectMcpModal({
   );
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Connect AI tools" size="lg">
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title="Connect AI tools"
+      size="lg"
+      closeButtonProps={{ size: "sm" }}
+      // Trim the header's extra height and align the close button to the same
+      // 12px margin as the body so the top band matches the modal's rhythm.
+      styles={{ header: { minHeight: 0, paddingInlineEnd: "var(--mantine-spacing-md)" } }}
+    >
       <Stack gap="md">
         <Text size="sm" c="dimmed">
           Point your AI coding agent at {window.location.host}. The agent connects with your
