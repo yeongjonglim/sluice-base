@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
+using SluiceBase.Api.Mcp;
 using SluiceBase.Core.Branding;
 
 namespace SluiceBase.Api.Middleware;
@@ -9,6 +10,7 @@ namespace SluiceBase.Api.Middleware;
 internal sealed partial class BrandingHtmlMiddleware(
     RequestDelegate next,
     IOptions<BrandingOptions> options,
+    IOptions<McpOptions> mcpOptions,
     IWebHostEnvironment env,
     IHttpClientFactory httpClientFactory,
     ILogger<BrandingHtmlMiddleware> logger)
@@ -60,9 +62,18 @@ internal sealed partial class BrandingHtmlMiddleware(
         var logoUrl = ResolveAssetUrl(branding.LogoUrl);
         var faviconUrl = ResolveAssetUrl(branding.FaviconUrl);
         var primaryColor = branding.GetValidatedPrimaryColor(logger);
+        var mcp = mcpOptions.Value;
 
         var brandingJson = JsonSerializer.Serialize(
-            new { branding.AppName, primaryColor, logoUrl, faviconUrl },
+            new
+            {
+                branding.AppName,
+                primaryColor,
+                logoUrl,
+                faviconUrl,
+                mcpEnabled = mcp.Enabled,
+                mcpServerName = mcp.GetValidatedServerName(logger),
+            },
             JsonOptions);
 
         html = TitleRegex().Replace(

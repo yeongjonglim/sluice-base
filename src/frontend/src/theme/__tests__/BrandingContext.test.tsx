@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, renderHook, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { BrandingContext, useBranding } from '@/theme/BrandingContext';
 
@@ -20,7 +20,13 @@ describe("BrandingContext", () => {
   });
 
   it("provides custom branding values", () => {
-    const value = { appName: "Acme", logoUrl: "https://example.com/logo.png", faviconUrl: null };
+    const value = {
+      appName: "Acme",
+      logoUrl: "https://example.com/logo.png",
+      faviconUrl: null,
+      mcpEnabled: true,
+      mcpServerName: "acme-db",
+    };
 
     render(
       <BrandingContext value={value}>
@@ -32,5 +38,14 @@ describe("BrandingContext", () => {
     expect(result.appName).toBe("Acme");
     expect(result.logoUrl).toBe("https://example.com/logo.png");
     expect(result.faviconUrl).toBeNull();
+    expect(result.mcpEnabled).toBe(true);
+    expect(result.mcpServerName).toBe("acme-db");
+  });
+
+  it("defaults mcpEnabled to false and mcpServerName to sluicebase", () => {
+    const { result } = renderHook(() => useBranding());
+
+    expect(result.current.mcpEnabled).toBe(false);
+    expect(result.current.mcpServerName).toBe("sluicebase");
   });
 });
