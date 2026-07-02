@@ -25,6 +25,8 @@ declare global {
       primaryColor: string;
       logoUrl: string | null;
       faviconUrl: string | null;
+      mcpEnabled?: boolean;
+      mcpServerName?: string;
     };
   }
 }
@@ -35,6 +37,8 @@ const brandingValue: BrandingValue = {
   appName: branding?.appName ?? "SluiceBase",
   logoUrl: branding?.logoUrl ?? null,
   faviconUrl: branding?.faviconUrl ?? null,
+  mcpEnabled: branding?.mcpEnabled ?? false,
+  mcpServerName: branding?.mcpServerName ?? "sluicebase",
 };
 
 const appTheme = createAppTheme(branding?.primaryColor ?? "teal");
