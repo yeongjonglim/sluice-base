@@ -76,4 +76,16 @@ describe("ConnectMcpModal", () => {
     expect(screen.getByText(/get_schema/)).toBeInTheDocument();
     expect(screen.getByText(/run_query/)).toBeInTheDocument();
   });
+
+  it("shows an Add to Cursor deeplink only on the Cursor tab, not on Claude Code", async () => {
+    renderModal();
+    const user = userEvent.setup();
+
+    expect(screen.queryByRole("link", { name: /add to cursor/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /cursor/i }));
+
+    const link = await screen.findByRole("link", { name: /add to cursor/i });
+    expect(link).toHaveAttribute("href", expect.stringMatching(/^cursor:\/\//));
+  });
 });

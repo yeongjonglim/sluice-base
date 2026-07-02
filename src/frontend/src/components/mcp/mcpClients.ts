@@ -50,7 +50,7 @@ export const MCP_CLIENTS: Array<McpClient> = [
       const config = btoa(JSON.stringify({ url: endpoint }));
       return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(
         serverName,
-      )}&config=${config}`;
+      )}&config=${encodeURIComponent(config)}`;
     },
     deeplinkLabel: "Add to Cursor",
     authNote: "Cursor runs the sign-in flow on first use — your usual login opens in the browser.",
