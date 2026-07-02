@@ -30,6 +30,7 @@ import { useState } from "react";
 import { useMe } from "@/api/hooks.ts";
 import { AuthProvider } from "@/auth/AuthProvider.tsx";
 import { useHasPermission } from "@/auth/permission.ts";
+import { ConnectMcpTrigger } from "@/components/mcp/ConnectMcpTrigger";
 import { useBranding } from "@/theme/BrandingContext";
 
 export const Route = createFileRoute("/_authed")({
@@ -94,6 +95,7 @@ function AuthedLayout() {
               </Link>
             </Group>
             <Group gap="xs">
+              <ConnectMcpTrigger />
               <ActionIcon
                 variant="subtle"
                 onClick={() => toggleColorScheme()}
