@@ -54,7 +54,10 @@ var api = builder.AddProject<Projects.SluiceBase_Api>("api")
         ReferenceExpression.Create($"{keycloak.GetEndpoint("http")}/realms/sluicebase"))
     .WithEnvironment("Oidc__ClientId", "sluicebase-app")
     .WithEnvironment("Oidc__ClientSecret", "dev-secret")
-    .WithEnvironment("Frontend__BaseUrl", web.GetEndpoint("http"));
+    .WithEnvironment("Frontend__BaseUrl", web.GetEndpoint("http"))
+    // Example override for the client alias shown in the Connect AI tools snippets.
+    // Operators set Mcp__ServerName per instance; defaults to "sluicebase" if unset.
+    .WithEnvironment("Mcp__ServerName", "db-local");
 
 builder.AddYarp("gateway")
     .WithHostHttpsPort(5443)
