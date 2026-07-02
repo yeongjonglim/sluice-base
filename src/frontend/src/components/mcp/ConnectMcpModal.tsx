@@ -92,7 +92,14 @@ export function ConnectMcpModal({
                     1. Add the server
                   </Text>
                   <Group align="flex-start" wrap="nowrap" gap="xs">
-                    <Code style={{ flex: 1, display: "block", whiteSpace: "pre-wrap" }}>
+                    <Code
+                      style={{
+                        flex: 1,
+                        display: "block",
+                        whiteSpace: "pre-wrap",
+                        padding: "var(--mantine-spacing-xs) var(--mantine-spacing-sm)",
+                      }}
+                    >
                       {snippet}
                     </Code>
                     <CopyButton value={snippet}>
