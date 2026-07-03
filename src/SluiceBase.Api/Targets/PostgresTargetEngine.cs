@@ -112,7 +112,8 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         const string routinesSql = """
                            SELECT n.nspname, p.proname, p.prokind, l.lanname,
                                   pg_get_function_result(p.oid) AS return_type,
-                                  pg_get_function_arguments(p.oid) AS signature
+                                  pg_get_function_arguments(p.oid) AS signature,
+                                  pg_get_functiondef(p.oid) AS definition
                            FROM pg_proc p
                            JOIN pg_namespace n ON n.oid = p.pronamespace
                            JOIN pg_language l ON l.oid = p.prolang
@@ -170,6 +171,18 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                            FROM pg_extension e
                            JOIN pg_namespace n ON n.oid = e.extnamespace
                            ORDER BY e.extname;
+                           """;
+
+        // View and materialized-view definitions. pg_get_viewdef(oid, true) pretty-prints the
+        // stored SELECT the same way psql's \d+ does; keyed back onto each relation by (schema,
+        // name). relkind 'v' = view, 'm' = materialized view.
+        const string relationDefinitionsSql = """
+                           SELECT n.nspname, c.relname, pg_get_viewdef(c.oid, true)
+                           FROM pg_class c
+                           JOIN pg_namespace n ON n.oid = c.relnamespace
+                           WHERE c.relkind IN ('v', 'm')
+                             AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_toast')
+                           ORDER BY n.nspname, c.relname;
                            """;
 
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
@@ -231,7 +244,7 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         }
 
         // Routines
-        var routineRows = new List<(string Schema, string Name, char Kind, string Language, string? ReturnType, string Signature)>();
+        var routineRows = new List<(string Schema, string Name, char Kind, string Language, string? ReturnType, string Signature, string? Definition)>();
         await using (var command = new NpgsqlCommand(routinesSql, connection))
         await using (var reader = await command.ExecuteReaderAsync(ct))
         {
@@ -241,7 +254,8 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                     reader.GetString(0), reader.GetString(1), reader.GetFieldValue<char>(2),
                     reader.GetString(3),
                     reader.IsDBNull(4) ? null : reader.GetString(4),
-                    reader.GetString(5)));
+                    reader.GetString(5),
+                    reader.IsDBNull(6) ? null : reader.GetString(6)));
             }
         }
 
@@ -286,6 +300,18 @@ internal sealed class PostgresTargetEngine : ITargetEngine
             }
         }
 
+        // Relation definitions (views + materialized views), keyed by (schema, name).
+        var definitionByRelation = new Dictionary<(string Schema, string Rel), string>();
+        await using (var command = new NpgsqlCommand(relationDefinitionsSql, connection))
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                definitionByRelation[(reader.GetString(0), reader.GetString(1))] =
+                    reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
+            }
+        }
+
         var primaryKeyByTable = pkRows
             .GroupBy(r => (r.Schema, r.Table))
             .ToDictionary(g => g.Key, g => new PrimaryKey([.. g.Select(r => r.Column)]));
@@ -327,7 +353,8 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                     r.Kind == 'p' ? "procedure" : "function",
                     r.ReturnType,
                     r.Language,
-                    r.Signature))]);
+                    r.Signature,
+                    r.Definition))]);
 
         var sequencesBySchema = sequenceRows
             .GroupBy(r => r.Schema)
@@ -376,10 +403,17 @@ internal sealed class PostgresTargetEngine : ITargetEngine
                     switch (kind)
                     {
                         case 'v':
-                            views.Add(new ViewInfo(rel.Key, columns));
+                            views.Add(new ViewInfo(
+                                rel.Key,
+                                columns,
+                                definitionByRelation.GetValueOrDefault((schemaName, rel.Key))));
                             break;
                         case 'm':
-                            matViews.Add(new MaterializedViewInfo(rel.Key, columns, indexes));
+                            matViews.Add(new MaterializedViewInfo(
+                                rel.Key,
+                                columns,
+                                indexes,
+                                definitionByRelation.GetValueOrDefault((schemaName, rel.Key))));
                             break;
                         default: // 'r', 'p', 'f'
                             tables.Add(new TableInfo(

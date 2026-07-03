@@ -35,21 +35,24 @@ public sealed record ForeignKey(
     string ReferencedTable,
     IReadOnlyList<string> ReferencedColumns);
 
-public sealed record ViewInfo(string Name, IReadOnlyList<ColumnInfo> Columns);
+public sealed record ViewInfo(string Name, IReadOnlyList<ColumnInfo> Columns, string? Definition = null);
 
 public sealed record MaterializedViewInfo(
     string Name,
     IReadOnlyList<ColumnInfo> Columns,
-    IReadOnlyList<IndexInfo> Indexes);
+    IReadOnlyList<IndexInfo> Indexes,
+    string? Definition = null);
 
 // A function or procedure. Signature is the rendered argument list (e.g. "uid integer");
 // it carries the parameter metadata directly, so no separate parameter records are needed.
+// Definition is the full CREATE ... statement from pg_get_functiondef, or null if unavailable.
 public sealed record RoutineInfo(
     string Name,
     string Kind,
     string? ReturnType,
     string Language,
-    string Signature);
+    string Signature,
+    string? Definition = null);
 
 public sealed record SequenceInfo(
     string Name,
