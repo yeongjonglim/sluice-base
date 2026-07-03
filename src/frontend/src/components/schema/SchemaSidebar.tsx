@@ -16,6 +16,7 @@ import {
   IconChevronRight,
   IconDatabase,
   IconEye,
+  IconInfoCircle,
   IconKey,
   IconLink,
   IconListNumbers,
@@ -31,7 +32,9 @@ import {
 import { cloneElement, useRef, useState } from "react";
 import type { CSSProperties, MouseEvent, ReactElement, ReactNode, Ref } from "react";
 import type { useSchema } from "@/api/hooks";
+import type { SchemaObjectSelection } from "@/components/schema/SchemaObjectDrawer";
 import { useSessionState } from "@/utils/useSessionState";
+import { SchemaObjectDrawer } from "@/components/schema/SchemaObjectDrawer";
 
 export type TableClickHandler = (
   schemaName: string,
@@ -387,6 +390,24 @@ function AppendSelectButton({
   );
 }
 
+// A trailing button that opens the metadata drawer for objects whose metadata doesn't fit a
+// single inline detail line (views, matviews, functions, sequences, types).
+function InfoButton({ onClick }: { onClick: () => void }) {
+  return (
+    <Tooltip label="View metadata" position="left" withArrow>
+      <ActionIcon
+        variant="subtle"
+        color="gray"
+        size="sm"
+        onClick={onClick}
+        aria-label="View metadata"
+      >
+        <IconInfoCircle size={15} />
+      </ActionIcon>
+    </Tooltip>
+  );
+}
+
 export function SchemaSidebar({
   schema,
   onTableClick,
@@ -395,6 +416,7 @@ export function SchemaSidebar({
   onTableClick: TableClickHandler;
 }) {
   const [expanded, setExpanded] = useSessionState<Array<string>>("sluice:query:expanded", []);
+  const [selected, setSelected] = useState<SchemaObjectSelection | null>(null);
   const isOpen = (id: string) => expanded.includes(id);
   const toggle = (id: string) =>
     setExpanded((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -497,10 +519,15 @@ export function SchemaSidebar({
                           open={isOpen(id)}
                           onToggle={() => toggle(id)}
                           trailing={
-                            <AppendSelectButton
-                              disabled={allSensitive}
-                              onClick={() => onTableClick(s.name, v.name, v.columns)}
-                            />
+                            <>
+                              <InfoButton
+                                onClick={() => setSelected({ kind: "view", schemaName: s.name, object: v })}
+                              />
+                              <AppendSelectButton
+                                disabled={allSensitive}
+                                onClick={() => onTableClick(s.name, v.name, v.columns)}
+                              />
+                            </>
                           }
                         />
                         {isOpen(id) && <ColumnRows columns={v.columns} depth={3} />}
@@ -521,6 +548,11 @@ export function SchemaSidebar({
                           expandable
                           open={isOpen(id)}
                           onToggle={() => toggle(id)}
+                          trailing={
+                            <InfoButton
+                              onClick={() => setSelected({ kind: "matview", schemaName: s.name, object: m })}
+                            />
+                          }
                         />
                         {isOpen(id) && (
                           <>
@@ -541,6 +573,11 @@ export function SchemaSidebar({
                       detail={`(${r.signature})${r.returnType ? ` → ${r.returnType}` : ""}`}
                       icon={<IconMathFunction size={14} color="var(--mantine-color-dimmed)" />}
                       depth={2}
+                      trailing={
+                        <InfoButton
+                          onClick={() => setSelected({ kind: "function", schemaName: s.name, object: r })}
+                        />
+                      }
                     />
                   ))}
 
@@ -553,6 +590,11 @@ export function SchemaSidebar({
                       detail={seq.dataType}
                       icon={<IconListNumbers size={14} color="var(--mantine-color-dimmed)" />}
                       depth={2}
+                      trailing={
+                        <InfoButton
+                          onClick={() => setSelected({ kind: "sequence", schemaName: s.name, object: seq })}
+                        />
+                      }
                     />
                   ))}
 
@@ -565,6 +607,11 @@ export function SchemaSidebar({
                       detail={ty.enumLabels ? `${ty.kind} · ${ty.enumLabels.join(", ")}` : ty.kind}
                       icon={<IconBraces size={14} color="var(--mantine-color-dimmed)" />}
                       depth={2}
+                      trailing={
+                        <InfoButton
+                          onClick={() => setSelected({ kind: "type", schemaName: s.name, object: ty })}
+                        />
+                      }
                     />
                   ))}
               </>
@@ -584,6 +631,8 @@ export function SchemaSidebar({
             depth={1}
           />
         ))}
+
+      <SchemaObjectDrawer selection={selected} onClose={() => setSelected(null)} />
     </Stack>
   );
 }

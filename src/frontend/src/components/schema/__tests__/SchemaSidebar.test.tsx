@@ -1,7 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { SchemaSidebar } from "@/components/schema/SchemaSidebar";
+
+// The drawer renders SqlEditor for view/matview/function definitions, which calls
+// useSchemaCompletions (a react-query hook). Stub it so the sidebar test doesn't need a
+// QueryClientProvider — same approach as SqlEditor.test.tsx.
+vi.mock("@/api/hooks", () => ({
+  useSchemaCompletions: () => ({ data: undefined }),
+}));
 
 type Col = { name: string; dataType: string; isNullable: boolean; isSensitive: boolean; isRestricted: boolean };
 const col = (name: string, dataType: string, extra: Partial<Col> = {}): Col => ({
@@ -43,19 +50,20 @@ function fullTree() {
           },
         ],
         views: [
-          { name: "active_orders", columns: [col("id", "integer", { isNullable: true })] },
-          { name: "masked", columns: [col("x", "text", { isNullable: true, isSensitive: true })] },
+          { name: "active_orders", columns: [col("id", "integer", { isNullable: true })], definition: "SELECT id FROM orders WHERE active" },
+          { name: "masked", columns: [col("x", "text", { isNullable: true, isSensitive: true })], definition: "SELECT x FROM secrets" },
         ],
         materializedViews: [
           {
             name: "order_totals",
             columns: [col("user_id", "integer", { isNullable: true })],
             indexes: [{ name: "mv_idx", columns: ["user_id"], isUnique: false, isPrimary: false, method: "btree" }],
+            definition: "SELECT user_id FROM orders",
           },
         ],
         routines: [
-          { name: "order_count", kind: "function", returnType: "bigint", language: "sql", signature: "uid integer" },
-          { name: "refresh_it", kind: "procedure", returnType: null, language: "plpgsql", signature: "" },
+          { name: "order_count", kind: "function", returnType: "bigint", language: "sql", signature: "uid integer", definition: "CREATE OR REPLACE FUNCTION order_count(uid integer) RETURNS bigint AS $$ $$" },
+          { name: "refresh_it", kind: "procedure", returnType: null, language: "plpgsql", signature: "", definition: "CREATE OR REPLACE PROCEDURE refresh_it() AS $$ $$" },
         ],
         sequences: [
           { name: "ticket_seq", dataType: "bigint", start: 1000, increment: 5, minValue: 1, maxValue: 9007199254740991, cycle: false, ownedByColumn: null },
@@ -259,5 +267,38 @@ describe("SchemaSidebar", () => {
     renderSidebar(makeSchema(tree));
 
     expect(screen.getByRole("button", { name: "Append SELECT to the editor" })).toBeDisabled();
+  });
+
+  it("opens the metadata drawer for a sequence", async () => {
+    seedExpanded(["schema:public", "schema:public:sequences"]);
+    renderSidebar();
+
+    fireEvent.click(screen.getByRole("button", { name: "View metadata" }));
+
+    // Mantine Drawer renders into a portal and mounts its content after a transition —
+    // wait for it rather than asserting synchronously (see ConnectMcpTrigger.test.tsx).
+    await waitFor(() => expect(screen.getByText(/^Sequence$/)).toBeInTheDocument());
+    expect(screen.getByText("1000")).toBeInTheDocument(); // start
+    expect(screen.getByText("5")).toBeInTheDocument(); // increment
+  });
+
+  it("shows composite attributes in the drawer for a type", async () => {
+    seedExpanded(["schema:public", "schema:public:types"]);
+    renderSidebar();
+
+    // order_status (enum) has no attributes; address (composite) does. Both rows have a button.
+    const buttons = screen.getAllByRole("button", { name: "View metadata" });
+    fireEvent.click(buttons[1]); // address
+
+    await waitFor(() => expect(screen.getByText("street text")).toBeInTheDocument());
+  });
+
+  it("renders a view definition in the drawer", async () => {
+    seedExpanded(["schema:public", "schema:public:views"]);
+    renderSidebar();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "View metadata" })[0]);
+
+    await waitFor(() => expect(screen.getByText("Definition")).toBeInTheDocument());
   });
 });
