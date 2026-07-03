@@ -38,7 +38,7 @@ function fullTree() {
             ],
             indexes: [
               { name: "orders_pkey", columns: ["id"], isUnique: true, isPrimary: true, method: "btree" },
-              { name: "idx_orders_status", columns: ["status"], isUnique: false, isPrimary: false, method: "btree" },
+              { name: "idx_orders_status", columns: ["status"], isUnique: true, isPrimary: false, method: "btree" },
             ],
           },
         ],
@@ -175,10 +175,16 @@ describe("SchemaSidebar", () => {
     expect(screen.getAllByText(/enum · pending, shipped/)[0]).toBeInTheDocument();
     expect(screen.getAllByText("address")[0]).toBeInTheDocument();
     expect(screen.getAllByText("citext")[0]).toBeInTheDocument();
-    expect(screen.getAllByText("1.8")[0]).toBeInTheDocument();
 
     // Exercise the overflow-tooltip mouse handler.
     fireEvent.mouseEnter(screen.getAllByText("id")[0].closest("a") ?? screen.getAllByText("id")[0]);
+
+    // Index method is shown inline after the columns/uniqueness.
+    expect(screen.getAllByText(/status · unique · btree/)[0]).toBeInTheDocument();
+    // Foreign-key columns show their reference target inline.
+    expect(screen.getAllByText(/→ users\.id/)[0]).toBeInTheDocument();
+    // Extensions show their owning schema after the version.
+    expect(screen.getAllByText(/1\.8 · public/)[0]).toBeInTheDocument();
   });
 
   it("expands and collapses a schema on click", () => {

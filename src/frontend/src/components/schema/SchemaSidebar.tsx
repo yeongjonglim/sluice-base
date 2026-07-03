@@ -296,21 +296,33 @@ function ColumnRows({
   columns: Array<Column>;
   depth: number;
   primaryKey?: Array<string>;
-  foreignKeys?: Array<string>;
+  foreignKeys?: Array<{ columns: Array<string>; referencedTable: string; referencedColumns: Array<string> }>;
 }) {
   const pk = new Set(primaryKey);
-  const fk = new Set(foreignKeys);
+  const fk = new Set(foreignKeys.flatMap((f) => f.columns));
+  // A FK column references its parent column by position within the same constraint.
+  const targetOf = (name: string): string | undefined => {
+    for (const f of foreignKeys) {
+      const i = f.columns.indexOf(name);
+      if (i !== -1) {
+        const refCol = f.referencedColumns[i] ?? f.referencedColumns[0];
+        return refCol ? `${f.referencedTable}.${refCol}` : f.referencedTable;
+      }
+    }
+    return undefined;
+  };
   return (
     <>
       {columns.map((c) => {
         const role = pk.has(c.name) ? "pk" : fk.has(c.name) ? "fk" : "plain";
+        const target = role === "fk" ? targetOf(c.name) : undefined;
         return (
           <TreeRow
             key={c.name}
             leaf
             depth={depth}
             name={c.name}
-            detail={`${c.dataType}${c.isNullable ? " · null" : ""}`}
+            detail={`${c.dataType}${c.isNullable ? " · null" : ""}${target ? ` · → ${target}` : ""}`}
             detailSuffix={sensitivityMarker(c)}
             icon={columnIcon(role)}
             faded={c.isRestricted}
@@ -338,7 +350,7 @@ function IndexRows({
           leaf
           depth={depth}
           name={ix.name}
-          detail={`${ix.columns.join(", ")}${ix.isPrimary ? " · pk" : ix.isUnique ? " · unique" : ""}`}
+          detail={`${ix.columns.join(", ")}${ix.isPrimary ? " · pk" : ix.isUnique ? " · unique" : ""} · ${ix.method}`}
           icon={<IconBinaryTree2 size={13} color="var(--mantine-color-dimmed)" />}
         />
       ))}
@@ -461,7 +473,7 @@ export function SchemaSidebar({
                               columns={t.columns}
                               depth={3}
                               primaryKey={t.primaryKey?.columns}
-                              foreignKeys={t.foreignKeys.flatMap((fk) => fk.columns)}
+                              foreignKeys={t.foreignKeys}
                             />
                             <IndexRows indexes={t.indexes} depth={3} />
                           </>
@@ -567,7 +579,7 @@ export function SchemaSidebar({
           <TreeRow
             key={e.name}
             name={e.name}
-            detail={e.version}
+            detail={`${e.version} · ${e.schema}`}
             icon={<IconPuzzle size={14} color="var(--mantine-color-dimmed)" />}
             depth={1}
           />
