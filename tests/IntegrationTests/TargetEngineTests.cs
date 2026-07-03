@@ -317,4 +317,38 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
 
         Assert.Contains(tree.Extensions, e => e.Name == "citext");
     }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_GetSchema_ReturnsViewAndMatviewDefinitions()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var tree = await _targetEngine.GetSchemaAsync(connectionString, ct);
+        var pub = tree.Schemas.Single(s => s.Name == "public");
+
+        var view = pub.Views.Single(v => v.Name == "active_orders");
+        Assert.NotNull(view.Definition);
+        Assert.Contains("SELECT", view.Definition!, StringComparison.OrdinalIgnoreCase);
+
+        var matview = pub.MaterializedViews.Single(m => m.Name == "order_totals");
+        Assert.NotNull(matview.Definition);
+        Assert.Contains("SELECT", matview.Definition!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_GetSchema_ReturnsRoutineDefinitions()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var tree = await _targetEngine.GetSchemaAsync(connectionString, ct);
+        var routines = tree.Schemas.Single(s => s.Name == "public").Routines;
+
+        var fn = routines.Single(r => r.Name == "order_count");
+        Assert.NotNull(fn.Definition);
+        Assert.Contains("CREATE OR REPLACE FUNCTION", fn.Definition!, StringComparison.OrdinalIgnoreCase);
+    }
 }

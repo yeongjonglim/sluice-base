@@ -3023,6 +3023,12 @@
             "items": {
               "$ref": "#/components/schemas/IndexInfo"
             }
+          },
+          "definition": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -3358,6 +3364,12 @@
           },
           "signature": {
             "type": "string"
+          },
+          "definition": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       },
@@ -4198,6 +4210,12 @@
             "items": {
               "$ref": "#/components/schemas/ColumnInfo"
             }
+          },
+          "definition": {
+            "type": [
+              "null",
+              "string"
+            ]
           }
         }
       }

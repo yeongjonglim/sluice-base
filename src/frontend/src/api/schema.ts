@@ -1063,6 +1063,7 @@ export interface components {
             name: string;
             columns: components["schemas"]["ColumnInfo"][];
             indexes: components["schemas"]["IndexInfo"][];
+            definition?: null | string;
         };
         MeResponse: {
             id: components["schemas"]["UserId"];
@@ -1129,6 +1130,7 @@ export interface components {
             returnType: null | string;
             language: string;
             signature: string;
+            definition?: null | string;
         };
         SchemaInfo: {
             name: string;
@@ -1302,6 +1304,7 @@ export interface components {
         ViewInfo: {
             name: string;
             columns: components["schemas"]["ColumnInfo"][];
+            definition?: null | string;
         };
     };
     responses: never;
