@@ -392,7 +392,7 @@ function AppendSelectButton({
 
 // A trailing button that opens the metadata drawer for objects whose metadata doesn't fit a
 // single inline detail line (views, matviews, functions, sequences, types).
-function InfoButton({ onClick }: { onClick: () => void }) {
+function InfoButton({ name, onClick }: { name: string; onClick: () => void }) {
   return (
     <Tooltip label="View metadata" position="left" withArrow>
       <ActionIcon
@@ -400,7 +400,7 @@ function InfoButton({ onClick }: { onClick: () => void }) {
         color="gray"
         size="sm"
         onClick={onClick}
-        aria-label="View metadata"
+        aria-label={`View metadata for ${name}`}
       >
         <IconInfoCircle size={15} />
       </ActionIcon>
@@ -521,6 +521,7 @@ export function SchemaSidebar({
                           trailing={
                             <>
                               <InfoButton
+                                name={v.name}
                                 onClick={() => setSelected({ kind: "view", schemaName: s.name, object: v })}
                               />
                               <AppendSelectButton
@@ -550,6 +551,7 @@ export function SchemaSidebar({
                           onToggle={() => toggle(id)}
                           trailing={
                             <InfoButton
+                              name={m.name}
                               onClick={() => setSelected({ kind: "matview", schemaName: s.name, object: m })}
                             />
                           }
@@ -575,6 +577,7 @@ export function SchemaSidebar({
                       depth={2}
                       trailing={
                         <InfoButton
+                          name={r.name}
                           onClick={() => setSelected({ kind: "function", schemaName: s.name, object: r })}
                         />
                       }
@@ -592,6 +595,7 @@ export function SchemaSidebar({
                       depth={2}
                       trailing={
                         <InfoButton
+                          name={seq.name}
                           onClick={() => setSelected({ kind: "sequence", schemaName: s.name, object: seq })}
                         />
                       }
@@ -609,6 +613,7 @@ export function SchemaSidebar({
                       depth={2}
                       trailing={
                         <InfoButton
+                          name={ty.name}
                           onClick={() => setSelected({ kind: "type", schemaName: s.name, object: ty })}
                         />
                       }

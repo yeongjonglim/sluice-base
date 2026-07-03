@@ -273,7 +273,7 @@ describe("SchemaSidebar", () => {
     seedExpanded(["schema:public", "schema:public:sequences"]);
     renderSidebar();
 
-    fireEvent.click(screen.getByRole("button", { name: "View metadata" }));
+    fireEvent.click(screen.getByRole("button", { name: "View metadata for ticket_seq" }));
 
     // Mantine Drawer renders into a portal and mounts its content after a transition —
     // wait for it rather than asserting synchronously (see ConnectMcpTrigger.test.tsx).
@@ -287,8 +287,7 @@ describe("SchemaSidebar", () => {
     renderSidebar();
 
     // order_status (enum) has no attributes; address (composite) does. Both rows have a button.
-    const buttons = screen.getAllByRole("button", { name: "View metadata" });
-    fireEvent.click(buttons[1]); // address
+    fireEvent.click(screen.getByRole("button", { name: "View metadata for address" }));
 
     await waitFor(() => expect(screen.getByText("street text")).toBeInTheDocument());
   });
@@ -297,7 +296,7 @@ describe("SchemaSidebar", () => {
     seedExpanded(["schema:public", "schema:public:views"]);
     renderSidebar();
 
-    fireEvent.click(screen.getAllByRole("button", { name: "View metadata" })[0]);
+    fireEvent.click(screen.getByRole("button", { name: "View metadata for active_orders" }));
 
     await waitFor(() => expect(screen.getByText("Definition")).toBeInTheDocument());
   });
