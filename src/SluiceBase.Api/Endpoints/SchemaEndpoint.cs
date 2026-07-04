@@ -77,7 +77,7 @@ internal static class SchemaEndpoints
             var fileName = $"{SanitizeFileName(database.DisplayName)}-schema-{DateTime.UtcNow:yyyyMMdd-HHmmss}.sql";
             return TypedResults.File(bytes, "application/sql", fileName);
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
         {
             return TypedResults.BadRequest(ex.Message);
         }
