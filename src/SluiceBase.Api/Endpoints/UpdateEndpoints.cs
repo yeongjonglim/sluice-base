@@ -313,7 +313,7 @@ internal static class UpdateEndpoints
         ICurrentUserAccessor currentUser,
         IAccessResolver resolver,
         IServerConnectionFactory connectionFactory,
-        ITargetEngine targetEngine,
+        ITargetEngineRegistry engineRegistry,
         TimeProvider timeProvider,
         IConfiguration configuration,
         CancellationToken ct)
@@ -335,6 +335,7 @@ internal static class UpdateEndpoints
         }
 
         var database = await db.Databases.AsNoTracking()
+            .Include(d => d.Server)
             .SingleOrDefaultAsync(s => s.Id == request.DatabaseId, ct);
         if (database is null || !database.CanWrite)
         {
@@ -369,6 +370,7 @@ internal static class UpdateEndpoints
         {
             var connectionString = await connectionFactory
                 .GetConnectionStringAsync(database.Id, CredentialKind.Write, ct);
+            var targetEngine = engineRegistry.Resolve(database.Server!.Kind);
             var raw = await targetEngine.ExecuteUpdateAsync(
                 connectionString,
                 request.SqlText,

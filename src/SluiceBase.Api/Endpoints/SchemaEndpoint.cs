@@ -48,12 +48,13 @@ internal static class SchemaEndpoints
         ICurrentUserAccessor currentUser,
         IAccessResolver resolver,
         IServerConnectionFactory connectionFactory,
-        ITargetEngine targetEngine,
+        ITargetEngineRegistry engineRegistry,
         CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct);
 
         var database = await db.Databases.AsNoTracking()
+            .Include(d => d.Server)
             .SingleOrDefaultAsync(d => d.Id == databaseId, ct);
         if (database is null)
         {
@@ -69,6 +70,7 @@ internal static class SchemaEndpoints
         try
         {
             var connectionString = await connectionFactory.GetConnectionStringAsync(databaseId, CredentialKind.Read, ct);
+            var targetEngine = engineRegistry.Resolve(database.Server!.Kind);
             var ddl = await targetEngine.ExportSchemaDdlAsync(connectionString, ct);
 
             var bytes = Encoding.UTF8.GetBytes(ddl);
