@@ -905,6 +905,8 @@ export interface components {
             /** @default false */
             isRestricted: boolean;
         };
+        /** @enum {string} */
+        ConnectionMode: "Standard" | "Srv";
         ConnectivityResult: {
             ok: boolean;
             error: null | string;
@@ -919,6 +921,11 @@ export interface components {
             host: string;
             /** Format: int32 */
             port: number | string;
+            connectionMode?: components["schemas"]["ConnectionMode"];
+            authSource?: null | string;
+            replicaSet?: null | string;
+            /** @default false */
+            useTls: boolean;
         };
         /** Format: uuid */
         CredentialId: string;
@@ -1182,6 +1189,10 @@ export interface components {
             host: string;
             /** Format: int32 */
             port: number | string;
+            connectionMode: components["schemas"]["ConnectionMode"];
+            authSource: null | string;
+            replicaSet: null | string;
+            useTls: boolean;
             isDisabled: boolean;
             credentials: components["schemas"]["CredentialResponse"][];
             databases: components["schemas"]["DatabaseResponse"][];
@@ -1276,6 +1287,11 @@ export interface components {
             kind: string;
             /** @default false */
             isDisabled: boolean;
+            connectionMode?: components["schemas"]["ConnectionMode"];
+            authSource?: null | string;
+            replicaSet?: null | string;
+            /** @default false */
+            useTls: boolean;
         };
         UpdateSummaryItem: {
             id: components["schemas"]["UpdateRequestId"];

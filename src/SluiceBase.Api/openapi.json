@@ -2347,6 +2347,13 @@
           }
         }
       },
+      "ConnectionMode": {
+        "enum": [
+          "Standard",
+          "Srv"
+        ],
+        "type": "string"
+      },
       "ConnectivityResult": {
         "required": [
           "ok",
@@ -2408,6 +2415,25 @@
               "string"
             ],
             "format": "int32"
+          },
+          "connectionMode": {
+            "$ref": "#/components/schemas/ConnectionMode"
+          },
+          "authSource": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "replicaSet": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "useTls": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -3581,6 +3607,10 @@
           "kind",
           "host",
           "port",
+          "connectionMode",
+          "authSource",
+          "replicaSet",
+          "useTls",
           "isDisabled",
           "credentials",
           "databases",
@@ -3608,6 +3638,24 @@
               "string"
             ],
             "format": "int32"
+          },
+          "connectionMode": {
+            "$ref": "#/components/schemas/ConnectionMode"
+          },
+          "authSource": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "replicaSet": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "useTls": {
+            "type": "boolean"
           },
           "isDisabled": {
             "type": "boolean"
@@ -4086,6 +4134,25 @@
             "type": "string"
           },
           "isDisabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "connectionMode": {
+            "$ref": "#/components/schemas/ConnectionMode"
+          },
+          "authSource": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "replicaSet": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "useTls": {
             "type": "boolean",
             "default": false
           }

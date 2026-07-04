@@ -54,6 +54,10 @@ internal sealed class ServerConnectionFactory(
             database.Server.Port,
             database.DatabaseName,
             credential.Username,
-            password));
+            password,
+            database.Server.ConnectionMode,
+            database.Server.AuthSource,
+            database.Server.ReplicaSet,
+            database.Server.UseTls));
     }
 }
