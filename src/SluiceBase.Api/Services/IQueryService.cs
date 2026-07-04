@@ -30,7 +30,7 @@ internal interface IQueryService
 internal sealed class QueryService(
     AppDbContext db,
     IServerConnectionFactory connectionFactory,
-    ITargetEngine targetEngine,
+    ITargetEngineRegistry engineRegistry,
     TimeProvider timeProvider,
     IConfiguration configuration,
     IAccessResolver resolver) : IQueryService
@@ -40,6 +40,7 @@ internal sealed class QueryService(
         var startedAt = timeProvider.GetUtcNow();
 
         var database = await db.Databases.AsNoTracking()
+            .Include(d => d.Server)
             .SingleOrDefaultAsync(d => d.Id == databaseId, ct);
         if (database is null)
         {
@@ -123,6 +124,7 @@ internal sealed class QueryService(
             var connectionString = await connectionFactory
                 .GetConnectionStringAsync(database.Id, CredentialKind.Read, ct);
 
+            var targetEngine = engineRegistry.Resolve(database.Server!.Kind);
             var data = await targetEngine.ExecuteQueryAsync(connectionString, sql, linkedCts.Token);
             var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
             rowCount = data.Rows.Length;

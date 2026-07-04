@@ -22,12 +22,13 @@ internal interface ISchemaService
 internal sealed class SchemaService(
     AppDbContext db,
     IServerConnectionFactory connectionFactory,
-    ITargetEngine targetEngine,
+    ITargetEngineRegistry engineRegistry,
     IAccessResolver resolver) : ISchemaService
 {
     public async Task<SchemaResult> GetAnnotatedSchemaAsync(User user, DatabaseId databaseId, CancellationToken ct)
     {
         var database = await db.Databases.AsNoTracking()
+            .Include(d => d.Server)
             .SingleOrDefaultAsync(d => d.Id == databaseId, ct);
         if (database is null)
         {
@@ -43,6 +44,7 @@ internal sealed class SchemaService(
         try
         {
             var connectionString = await connectionFactory.GetConnectionStringAsync(databaseId, CredentialKind.Read, ct);
+            var targetEngine = engineRegistry.Resolve(database.Server!.Kind);
             var tree = await targetEngine.GetSchemaAsync(connectionString, ct);
 
             var sensitiveColumns = await db.SensitiveColumns
