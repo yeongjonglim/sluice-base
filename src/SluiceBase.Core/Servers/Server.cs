@@ -11,6 +11,10 @@ public sealed class Server
     public string Kind { get; private set; }
     public string Host { get; private set; }
     public int Port { get; private set; }
+    public ConnectionMode ConnectionMode { get; private set; }
+    public string? AuthSource { get; private set; }
+    public string? ReplicaSet { get; private set; }
+    public bool UseTls { get; private set; }
     public bool IsDisabled { get; private set; }
     public DateTimeOffset? DeletedAt { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
@@ -19,7 +23,16 @@ public sealed class Server
     public IList<Credential> Credentials { get; private set; } = [];
     public IList<Database> Databases { get; private set; } = [];
 
-    public static Server Create(string name, string kind, string host, int port, DateTimeOffset at) =>
+    public static Server Create(
+        string name,
+        string kind,
+        string host,
+        int port,
+        DateTimeOffset at,
+        ConnectionMode connectionMode = ConnectionMode.Standard,
+        string? authSource = null,
+        string? replicaSet = null,
+        bool useTls = false) =>
         new()
         {
             Id = ServerId.FromNewVersion7Guid(),
@@ -27,17 +40,35 @@ public sealed class Server
             Kind = kind,
             Host = host,
             Port = port,
+            ConnectionMode = connectionMode,
+            AuthSource = authSource,
+            ReplicaSet = replicaSet,
+            UseTls = useTls,
             IsDisabled = false,
             CreatedAt = at,
             UpdatedAt = at,
         };
 
-    public void Update(string name, string host, int port, string kind, bool isDisabled, DateTimeOffset at)
+    public void Update(
+        string name,
+        string host,
+        int port,
+        string kind,
+        bool isDisabled,
+        DateTimeOffset at,
+        ConnectionMode connectionMode = ConnectionMode.Standard,
+        string? authSource = null,
+        string? replicaSet = null,
+        bool useTls = false)
     {
         Name = name;
         Host = host;
         Port = port;
         Kind = kind;
+        ConnectionMode = connectionMode;
+        AuthSource = authSource;
+        ReplicaSet = replicaSet;
+        UseTls = useTls;
         IsDisabled = isDisabled;
         UpdatedAt = at;
     }
