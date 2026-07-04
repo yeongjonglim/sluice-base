@@ -16,6 +16,16 @@ internal sealed class PostgresTargetEngine : ITargetEngine
 {
     public string Kind => "postgres";
 
+    public string BuildConnectionString(ConnectionParameters p) =>
+        new NpgsqlConnectionStringBuilder
+        {
+            Host = p.Host,
+            Port = p.Port,
+            Database = p.Database,
+            Username = p.Username,
+            Password = p.Password,
+        }.ConnectionString;
+
     public async Task<ConnectivityResult> TestConnectionAsync(
         string connectionString,
         CancellationToken ct)

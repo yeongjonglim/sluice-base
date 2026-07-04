@@ -7,6 +7,8 @@ public interface ITargetEngine
 {
     string Kind { get; }
 
+    string BuildConnectionString(ConnectionParameters parameters);
+
     Task<ConnectivityResult> TestConnectionAsync(
         string connectionString,
         CancellationToken ct);
