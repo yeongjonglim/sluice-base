@@ -1,14 +1,15 @@
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using SluiceBase.Api.Data;
 using SluiceBase.Core.Servers;
+using SluiceBase.Core.Targets;
 
 namespace SluiceBase.Api.Servers;
 
 internal sealed class ServerConnectionFactory(
     AppDbContext db,
-    IDataProtectionProvider dataProtection) : IServerConnectionFactory
+    IDataProtectionProvider dataProtection,
+    ITargetEngineRegistry engineRegistry) : IServerConnectionFactory
 {
     private readonly IDataProtector _protector =
         dataProtection.CreateProtector(ProtectorPurpose);
@@ -46,13 +47,13 @@ internal sealed class ServerConnectionFactory(
 
         var password = _protector.Unprotect(credential.EncryptedPassword);
 
-        return new NpgsqlConnectionStringBuilder
-        {
-            Host = database.Server.Host,
-            Port = database.Server.Port,
-            Database = database.DatabaseName,
-            Username = credential.Username,
-            Password = password,
-        }.ConnectionString;
+        var engine = engineRegistry.Resolve(database.Server!.Kind);
+
+        return engine.BuildConnectionString(new ConnectionParameters(
+            database.Server.Host,
+            database.Server.Port,
+            database.DatabaseName,
+            credential.Username,
+            password));
     }
 }

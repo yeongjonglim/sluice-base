@@ -89,15 +89,18 @@ internal static class DatabaseEndpoints
         DatabaseId databaseId,
         AppDbContext db,
         IServerConnectionFactory factory,
-        ITargetEngine targetEngine,
+        ITargetEngineRegistry engineRegistry,
         CancellationToken ct)
     {
         var dbRecord = await db.Databases.AsNoTracking()
+            .Include(d => d.Server)
             .SingleOrDefaultAsync(d => d.Id == databaseId && d.ServerId == serverId && d.DeletedAt == null, ct);
         if (dbRecord is null)
         {
             return TypedResults.NotFound();
         }
+
+        var targetEngine = engineRegistry.Resolve(dbRecord.Server!.Kind);
 
         var readCs = await factory.GetConnectionStringAsync(databaseId, CredentialKind.Read, ct);
         var readResult = await targetEngine.TestConnectionAsync(readCs, ct);
