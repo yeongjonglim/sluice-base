@@ -137,6 +137,7 @@ describe("useCreateServer", () => {
       kind: "postgres",
       host: "localhost",
       port: 5432,
+      useTls: false,
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -235,7 +236,7 @@ describe("useUpdateServer", () => {
     });
 
     const { result } = renderHook(() => useUpdateServer(), { wrapper });
-    result.current.mutate({ id: "srv-1", body: { name: "Updated", kind: "postgres", host: "localhost", port: 5432, isDisabled: false } });
+    result.current.mutate({ id: "srv-1", body: { name: "Updated", kind: "postgres", host: "localhost", port: 5432, isDisabled: false, useTls: false } });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(apiRequest).toHaveBeenCalledWith(
