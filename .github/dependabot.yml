@@ -41,6 +41,13 @@ updates:
       day: saturday
     reviewers:
       - yeongjonglim
+    ignore:
+      # TypeScript is pinned to v5: openapi-typescript is not yet compatible with
+      # TS v6, so the v5 -> v6 major jump breaks the openapi.json -> schema.ts
+      # codegen. Allow minor/patch bumps within v5 but block the major. Remove this
+      # ignore once openapi-typescript ships TS v6 support.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       mantine:
         patterns:
