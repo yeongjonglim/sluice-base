@@ -1,3 +1,4 @@
+using IntegrationTests.Supports;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -8,14 +9,20 @@ namespace IntegrationTests;
 
 public sealed class MigrationSeedingTests : IAsyncLifetime
 {
-    // Image tag sourced from https://github.com/microsoft/aspire/blob/main/src/Aspire.Hosting.PostgreSQL/PostgresContainerImageTags.cs
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:18.3")
-        .WithDatabase("sluice_test")
-        .WithUsername("postgres")
-        .WithPassword("postgres")
-        .Build();
+    private PostgreSqlContainer _postgres = null!;
 
-    public async ValueTask InitializeAsync() => await _postgres.StartAsync();
+    // Image tag sourced from https://github.com/microsoft/aspire/blob/main/src/Aspire.Hosting.PostgreSQL/PostgresContainerImageTags.cs
+    private static PostgreSqlContainer BuildContainer() =>
+        new PostgreSqlBuilder("postgres:18.3")
+            .WithDatabase("sluice_test")
+            .WithUsername("postgres")
+            .WithPassword("postgres")
+            .Build();
+
+    public async ValueTask InitializeAsync() =>
+        _postgres = await ContainerStartup.StartWithRetryAsync(
+            BuildContainer, ct: TestContext.Current.CancellationToken);
+
     public async ValueTask DisposeAsync() => await _postgres.DisposeAsync();
 
     private AppDbContext CreateContext() =>
