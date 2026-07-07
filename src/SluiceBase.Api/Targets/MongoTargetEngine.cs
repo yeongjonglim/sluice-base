@@ -13,25 +13,29 @@ internal sealed class MongoTargetEngine : ITargetEngine
 
     public string BuildConnectionString(ConnectionParameters p)
     {
-        var scheme = p.Mode == ConnectionMode.Srv ? "mongodb+srv" : "mongodb";
+        var mongo = p.Options as MongoConnectionOptions
+            ?? throw new InvalidOperationException(
+                "A MongoDB connection requires MongoConnectionOptions.");
+
+        var scheme = mongo.Mode == ConnectionMode.Srv ? "mongodb+srv" : "mongodb";
         var user = Uri.EscapeDataString(p.Username);
         var pass = Uri.EscapeDataString(p.Password);
         // SRV derives the host list (and ports) from DNS, so the port is not emitted.
-        var hostPart = p.Mode == ConnectionMode.Srv ? p.Host : $"{p.Host}:{p.Port}";
+        var hostPart = mongo.Mode == ConnectionMode.Srv ? p.Host : $"{p.Host}:{p.Port}";
         var db = Uri.EscapeDataString(p.Database);
 
         var options = new List<string>();
-        if (!string.IsNullOrWhiteSpace(p.AuthSource))
+        if (!string.IsNullOrWhiteSpace(mongo.AuthSource))
         {
-            options.Add($"authSource={Uri.EscapeDataString(p.AuthSource)}");
+            options.Add($"authSource={Uri.EscapeDataString(mongo.AuthSource)}");
         }
 
-        if (!string.IsNullOrWhiteSpace(p.ReplicaSet))
+        if (!string.IsNullOrWhiteSpace(mongo.ReplicaSet))
         {
-            options.Add($"replicaSet={Uri.EscapeDataString(p.ReplicaSet)}");
+            options.Add($"replicaSet={Uri.EscapeDataString(mongo.ReplicaSet)}");
         }
 
-        if (p.UseTls)
+        if (mongo.UseTls)
         {
             options.Add("tls=true");
         }

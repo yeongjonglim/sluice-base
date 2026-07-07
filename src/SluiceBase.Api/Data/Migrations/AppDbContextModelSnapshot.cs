@@ -693,19 +693,6 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<string>("AuthSource")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("auth_source");
-
-                    b.Property<string>("ConnectionMode")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)")
-                        .HasDefaultValue("Standard")
-                        .HasColumnName("connection_mode");
-
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -724,12 +711,6 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("is_disabled");
 
-                    b.Property<string>("Kind")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
-                        .HasColumnName("kind");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -740,18 +721,15 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("port");
 
-                    b.Property<string>("ReplicaSet")
-                        .HasMaxLength(128)
-                        .HasColumnType("character varying(128)")
-                        .HasColumnName("replica_set");
-
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
 
-                    b.Property<bool>("UseTls")
-                        .HasColumnType("boolean")
-                        .HasColumnName("use_tls");
+                    b.Property<string>("kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
 
                     b.HasKey("Id")
                         .HasName("pk_server");
@@ -762,6 +740,10 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasFilter("deleted_at IS NULL");
 
                     b.ToTable("server", (string)null);
+
+                    b.HasDiscriminator<string>("kind").HasValue("Server");
+
+                    b.UseTphMappingStrategy();
                 });
 
             modelBuilder.Entity("SluiceBase.Core.Updates.UpdateRequest", b =>
@@ -947,6 +929,44 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasName("pk_user");
 
                     b.ToTable("user", (string)null);
+                });
+
+            modelBuilder.Entity("SluiceBase.Core.Servers.MongoServer", b =>
+                {
+                    b.HasBaseType("SluiceBase.Core.Servers.Server");
+
+                    b.Property<string>("AuthSource")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("auth_source");
+
+                    b.Property<string>("ConnectionMode")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("connection_mode");
+
+                    b.Property<string>("ReplicaSet")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("replica_set");
+
+                    b.Property<bool>("UseTls")
+                        .HasColumnType("boolean")
+                        .HasColumnName("use_tls");
+
+                    b.ToTable("server", (string)null);
+
+                    b.HasDiscriminator().HasValue("mongodb");
+                });
+
+            modelBuilder.Entity("SluiceBase.Core.Servers.PostgresServer", b =>
+                {
+                    b.HasBaseType("SluiceBase.Core.Servers.Server");
+
+                    b.ToTable("server", (string)null);
+
+                    b.HasDiscriminator().HasValue("postgres");
                 });
 
             modelBuilder.Entity("SluiceBase.Core.Mcp.McpAuthCode", b =>

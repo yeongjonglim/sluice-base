@@ -22,8 +22,7 @@ namespace SluiceBase.Api.Data.Migrations
                 table: "server",
                 type: "character varying(16)",
                 maxLength: 16,
-                nullable: false,
-                defaultValue: "Standard");
+                nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "replica_set",
@@ -36,8 +35,7 @@ namespace SluiceBase.Api.Data.Migrations
                 name: "use_tls",
                 table: "server",
                 type: "boolean",
-                nullable: false,
-                defaultValue: false);
+                nullable: true);
         }
 
         /// <inheritdoc />

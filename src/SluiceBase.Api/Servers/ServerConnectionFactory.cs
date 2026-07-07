@@ -47,17 +47,19 @@ internal sealed class ServerConnectionFactory(
 
         var password = _protector.Unprotect(credential.EncryptedPassword);
 
-        var engine = engineRegistry.Resolve(database.Server!.Kind);
+        var server = database.Server!;
+        IConnectionOptions? options = server is MongoServer mongo
+            ? new MongoConnectionOptions(mongo.ConnectionMode, mongo.AuthSource, mongo.ReplicaSet, mongo.UseTls)
+            : null;
+
+        var engine = engineRegistry.Resolve(server.Kind);
 
         return engine.BuildConnectionString(new ConnectionParameters(
-            database.Server.Host,
-            database.Server.Port,
+            server.Host,
+            server.Port,
             database.DatabaseName,
             credential.Username,
             password,
-            database.Server.ConnectionMode,
-            database.Server.AuthSource,
-            database.Server.ReplicaSet,
-            database.Server.UseTls));
+            options));
     }
 }

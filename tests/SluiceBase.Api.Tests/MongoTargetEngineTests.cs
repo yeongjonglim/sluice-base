@@ -21,7 +21,7 @@ public class MongoTargetEngineTests
     {
         var cs = Engine.BuildConnectionString(new ConnectionParameters(
             "db.example.com", 27018, "shop", "reader", "s3cret",
-            ConnectionMode.Standard));
+            new MongoConnectionOptions(ConnectionMode.Standard, null, null, false)));
 
         var url = MongoUrl.Create(cs);
         Assert.Equal(ConnectionStringScheme.MongoDB, url.Scheme);
@@ -37,7 +37,7 @@ public class MongoTargetEngineTests
     {
         var cs = Engine.BuildConnectionString(new ConnectionParameters(
             "cluster0.ab12.mongodb.net", 27017, "shop", "reader", "s3cret",
-            ConnectionMode.Srv));
+            new MongoConnectionOptions(ConnectionMode.Srv, null, null, false)));
 
         Assert.StartsWith("mongodb+srv://", cs);
         var url = MongoUrl.Create(cs);
@@ -51,7 +51,7 @@ public class MongoTargetEngineTests
     {
         var cs = Engine.BuildConnectionString(new ConnectionParameters(
             "h", 27017, "shop", "u", "p",
-            ConnectionMode.Standard, AuthSource: "admin", ReplicaSet: "rs0", UseTls: true));
+            new MongoConnectionOptions(ConnectionMode.Standard, AuthSource: "admin", ReplicaSet: "rs0", UseTls: true)));
 
         var url = MongoUrl.Create(cs);
         Assert.Equal("admin", url.AuthenticationSource);
@@ -64,7 +64,7 @@ public class MongoTargetEngineTests
     {
         var cs = Engine.BuildConnectionString(new ConnectionParameters(
             "h", 27017, "shop", "user name", "p@ss:word/!",
-            ConnectionMode.Standard));
+            new MongoConnectionOptions(ConnectionMode.Standard, null, null, false)));
 
         // MongoUrl.Create round-trips the percent-encoded credentials back to originals.
         var url = MongoUrl.Create(cs);
