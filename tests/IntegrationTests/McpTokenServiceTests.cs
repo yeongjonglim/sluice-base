@@ -1,3 +1,4 @@
+using IntegrationTests.Supports;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SluiceBase.Api.Data;
@@ -14,14 +15,20 @@ namespace IntegrationTests;
 /// </summary>
 public sealed class McpTokenServiceTests : IAsyncLifetime
 {
-    // Pinned to the Postgres major version the app runs against (Aspire default / docker-compose postgres:17).
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:17")
-        .WithDatabase("sluice_test_mcp")
-        .WithUsername("postgres")
-        .WithPassword("postgres")
-        .Build();
+    private PostgreSqlContainer _postgres = null!;
 
-    public async ValueTask InitializeAsync() => await _postgres.StartAsync();
+    // Pinned to the Postgres major version the app runs against (Aspire default / docker-compose postgres:17).
+    private static PostgreSqlContainer BuildContainer() =>
+        new PostgreSqlBuilder("postgres:17")
+            .WithDatabase("sluice_test_mcp")
+            .WithUsername("postgres")
+            .WithPassword("postgres")
+            .Build();
+
+    public async ValueTask InitializeAsync() =>
+        _postgres = await ContainerStartup.StartWithRetryAsync(
+            BuildContainer, ct: TestContext.Current.CancellationToken);
+
     public async ValueTask DisposeAsync() => await _postgres.DisposeAsync();
 
     private AppDbContext CreateContext() =>
