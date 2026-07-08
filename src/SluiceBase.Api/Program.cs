@@ -46,6 +46,7 @@ builder.Services.AddOpenApi(x =>
 });
 
 builder.Services.AddSingleton<ITargetEngine, PostgresTargetEngine>();
+builder.Services.AddSingleton<ITargetEngine, MongoTargetEngine>();
 builder.Services.AddSingleton<ITargetEngineRegistry, TargetEngineRegistry>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();

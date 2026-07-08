@@ -1338,6 +1338,16 @@
           },
           "409": {
             "description": "Conflict"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -1384,6 +1394,16 @@
           },
           "409": {
             "description": "Conflict"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -2347,6 +2367,13 @@
           }
         }
       },
+      "ConnectionMode": {
+        "enum": [
+          "Standard",
+          "Srv",
+          null
+        ]
+      },
       "ConnectivityResult": {
         "required": [
           "ok",
@@ -2408,6 +2435,25 @@
               "string"
             ],
             "format": "int32"
+          },
+          "connectionMode": {
+            "$ref": "#/components/schemas/ConnectionMode"
+          },
+          "authSource": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "replicaSet": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "useTls": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -3581,6 +3627,10 @@
           "kind",
           "host",
           "port",
+          "connectionMode",
+          "authSource",
+          "replicaSet",
+          "useTls",
           "isDisabled",
           "credentials",
           "databases",
@@ -3608,6 +3658,34 @@
               "string"
             ],
             "format": "int32"
+          },
+          "connectionMode": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/ConnectionMode"
+              }
+            ]
+          },
+          "authSource": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "replicaSet": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "useTls": {
+            "type": [
+              "null",
+              "boolean"
+            ]
           },
           "isDisabled": {
             "type": "boolean"
@@ -4086,6 +4164,25 @@
             "type": "string"
           },
           "isDisabled": {
+            "type": "boolean",
+            "default": false
+          },
+          "connectionMode": {
+            "$ref": "#/components/schemas/ConnectionMode"
+          },
+          "authSource": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "replicaSet": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "useTls": {
             "type": "boolean",
             "default": false
           }

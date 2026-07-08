@@ -47,13 +47,26 @@ internal sealed class ServerConnectionFactory(
 
         var password = _protector.Unprotect(credential.EncryptedPassword);
 
-        var engine = engineRegistry.Resolve(database.Server!.Kind);
+        var server = database.Server!;
+        IConnectionOptions options = server switch
+        {
+            // SRV derives hosts and ports from DNS, so the configured port is not applied.
+            MongoServer mongo => new MongoConnectionOptions(
+                mongo.Host,
+                mongo.ConnectionMode,
+                mongo.ConnectionMode == ConnectionMode.Srv ? null : mongo.Port,
+                mongo.AuthSource,
+                mongo.ReplicaSet,
+                mongo.UseTls),
+            _ => new PostgresConnectionOptions(server.Host, server.Port),
+        };
+
+        var engine = engineRegistry.Resolve(server.Kind);
 
         return engine.BuildConnectionString(new ConnectionParameters(
-            database.Server.Host,
-            database.Server.Port,
             database.DatabaseName,
             credential.Username,
-            password));
+            password,
+            options));
     }
 }

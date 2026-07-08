@@ -16,15 +16,21 @@ internal sealed class PostgresTargetEngine : ITargetEngine
 {
     public string Kind => "postgres";
 
-    public string BuildConnectionString(ConnectionParameters p) =>
-        new NpgsqlConnectionStringBuilder
+    public string BuildConnectionString(ConnectionParameters p)
+    {
+        var pg = p.Options as PostgresConnectionOptions
+            ?? throw new InvalidOperationException(
+                "A PostgreSQL connection requires PostgresConnectionOptions.");
+
+        return new NpgsqlConnectionStringBuilder
         {
-            Host = p.Host,
-            Port = p.Port,
+            Host = pg.Host,
+            Port = pg.Port,
             Database = p.Database,
             Username = p.Username,
             Password = p.Password,
         }.ConnectionString;
+    }
 
     public async Task<ConnectivityResult> TestConnectionAsync(
         string connectionString,

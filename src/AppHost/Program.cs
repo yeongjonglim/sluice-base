@@ -33,6 +33,10 @@ var greenDbInstance = builder.AddPostgres("target-green-pg")
 // Add the default database to the application model so that it can be referenced by other resources.
 var greenDb = greenDbInstance.AddDatabase("green-appdb", appDbName);
 
+// MongoDB target for testing the Mongo target engine; not referenced by api (see blue/green above).
+var targetMongo = builder.AddMongoDB("target-mongo");
+var mongoAppDb = targetMongo.AddDatabase("mongo-appdb");
+
 var keycloak = builder.AddKeycloak("keycloak", port: 9080)
     .WithRealmImport("seed/keycloak")
     .WithOtlpExporter()
