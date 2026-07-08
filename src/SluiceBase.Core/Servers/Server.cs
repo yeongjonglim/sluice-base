@@ -6,17 +6,31 @@ namespace SluiceBase.Core.Servers;
 public abstract class Server
 {
 #pragma warning disable CS8618
+    // Used by EF Core when materialising rows; properties are set from the row.
     protected Server() { }
 #pragma warning restore CS8618
 
-    public ServerId Id { get; protected set; }
-    public string Name { get; protected set; }
-    public string Host { get; protected set; }
-    public int Port { get; protected set; }
-    public bool IsDisabled { get; protected set; }
+    // Shared construction of the properties common to every server kind. Subclass
+    // constructors chain to this via `: base(...)` and then set their own fields.
+    protected Server(string name, string host, int port, DateTimeOffset at)
+    {
+        Id = ServerId.FromNewVersion7Guid();
+        Name = name;
+        Host = host;
+        Port = port;
+        IsDisabled = false;
+        CreatedAt = at;
+        UpdatedAt = at;
+    }
+
+    public ServerId Id { get; private set; }
+    public string Name { get; private set; }
+    public string Host { get; private set; }
+    public int Port { get; private set; }
+    public bool IsDisabled { get; private set; }
     public DateTimeOffset? DeletedAt { get; private set; }
-    public DateTimeOffset CreatedAt { get; protected set; }
-    public DateTimeOffset UpdatedAt { get; protected set; }
+    public DateTimeOffset CreatedAt { get; private set; }
+    public DateTimeOffset UpdatedAt { get; private set; }
 
     public IList<Credential> Credentials { get; private set; } = [];
     public IList<Database> Databases { get; private set; } = [];
