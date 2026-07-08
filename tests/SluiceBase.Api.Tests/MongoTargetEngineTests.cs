@@ -20,8 +20,8 @@ public class MongoTargetEngineTests
     public void BuildConnectionString_Standard_UsesHostAndPort()
     {
         var cs = Engine.BuildConnectionString(new ConnectionParameters(
-            "db.example.com", 27018, "shop", "reader", "s3cret",
-            new MongoConnectionOptions(ConnectionMode.Standard, null, null, false)));
+            "shop", "reader", "s3cret",
+            new MongoConnectionOptions("db.example.com", ConnectionMode.Standard, 27018, null, null, false)));
 
         var url = MongoUrl.Create(cs);
         Assert.Equal(ConnectionStringScheme.MongoDB, url.Scheme);
@@ -36,8 +36,8 @@ public class MongoTargetEngineTests
     public void BuildConnectionString_Srv_UsesSrvSchemeAndNoPort()
     {
         var cs = Engine.BuildConnectionString(new ConnectionParameters(
-            "cluster0.ab12.mongodb.net", 27017, "shop", "reader", "s3cret",
-            new MongoConnectionOptions(ConnectionMode.Srv, null, null, false)));
+            "shop", "reader", "s3cret",
+            new MongoConnectionOptions("cluster0.ab12.mongodb.net", ConnectionMode.Srv, null, null, null, false)));
 
         Assert.StartsWith("mongodb+srv://", cs);
         var url = MongoUrl.Create(cs);
@@ -50,8 +50,8 @@ public class MongoTargetEngineTests
     public void BuildConnectionString_IncludesOptionsWhenSet()
     {
         var cs = Engine.BuildConnectionString(new ConnectionParameters(
-            "h", 27017, "shop", "u", "p",
-            new MongoConnectionOptions(ConnectionMode.Standard, AuthSource: "admin", ReplicaSet: "rs0", UseTls: true)));
+            "shop", "u", "p",
+            new MongoConnectionOptions("h", ConnectionMode.Standard, 27017, AuthSource: "admin", ReplicaSet: "rs0", UseTls: true)));
 
         var url = MongoUrl.Create(cs);
         Assert.Equal("admin", url.AuthenticationSource);
@@ -63,8 +63,8 @@ public class MongoTargetEngineTests
     public void BuildConnectionString_EscapesCredentials()
     {
         var cs = Engine.BuildConnectionString(new ConnectionParameters(
-            "h", 27017, "shop", "user name", "p@ss:word/!",
-            new MongoConnectionOptions(ConnectionMode.Standard, null, null, false)));
+            "shop", "user name", "p@ss:word/!",
+            new MongoConnectionOptions("h", ConnectionMode.Standard, 27017, null, null, false)));
 
         // MongoUrl.Create round-trips the percent-encoded credentials back to originals.
         var url = MongoUrl.Create(cs);

@@ -21,7 +21,7 @@ internal sealed class MongoTargetEngine : ITargetEngine
         var user = Uri.EscapeDataString(p.Username);
         var pass = Uri.EscapeDataString(p.Password);
         // SRV derives the host list (and ports) from DNS, so the port is not emitted.
-        var hostPart = mongo.Mode == ConnectionMode.Srv ? p.Host : $"{p.Host}:{p.Port}";
+        var hostPart = mongo.Mode == ConnectionMode.Srv ? mongo.Host : $"{mongo.Host}:{mongo.Port}";
         var db = Uri.EscapeDataString(p.Database);
 
         var options = new List<string>();
