@@ -37,25 +37,13 @@ internal static class ServerEndpoints
 
     // ── create ────────────────────────────────────────────────────────────────
 
-    private static async Task<Results<Created<ServerResponse>, Conflict, BadRequest<string>>> CreateServer(
+    private static async Task<Results<Created<ServerResponse>, Conflict>> CreateServer(
         CreateServerRequest req,
         AppDbContext db,
         TimeProvider clock,
         CancellationToken ct)
     {
-        var now = clock.GetUtcNow();
-        Server? server = req.Kind switch
-        {
-            "postgres" => PostgresServer.Create(req.Name, req.Host, req.Port, now),
-            "mongodb" => MongoServer.Create(req.Name, req.Host, req.Port, now,
-                req.ConnectionMode, req.AuthSource, req.ReplicaSet, req.UseTls),
-            _ => null,
-        };
-        if (server is null)
-        {
-            return TypedResults.BadRequest($"Unsupported server kind '{req.Kind}'.");
-        }
-
+        var server = Server.Create(req.Name, req.Kind, req.Host, req.Port, clock.GetUtcNow());
         db.Servers.Add(server);
         try
         {
@@ -71,7 +59,7 @@ internal static class ServerEndpoints
 
     // ── update ────────────────────────────────────────────────────────────────
 
-    private static async Task<Results<Ok<ServerResponse>, NotFound, Conflict, BadRequest<string>>> UpdateServer(
+    private static async Task<Results<Ok<ServerResponse>, NotFound, Conflict>> UpdateServer(
         ServerId id,
         UpdateServerRequest req,
         AppDbContext db,
@@ -87,18 +75,7 @@ internal static class ServerEndpoints
             return TypedResults.NotFound();
         }
 
-        // Kind is immutable — a server cannot change engine after creation.
-        if (!string.Equals(req.Kind, server.Kind, StringComparison.OrdinalIgnoreCase))
-        {
-            return TypedResults.BadRequest("A server's kind cannot be changed.");
-        }
-
-        server.UpdateCore(req.Name, req.Host, req.Port, req.IsDisabled, clock.GetUtcNow());
-        if (server is MongoServer mongo)
-        {
-            mongo.UpdateMongo(req.ConnectionMode, req.AuthSource, req.ReplicaSet, req.UseTls);
-        }
-
+        server.Update(req.Name, req.Host, req.Port, req.Kind, req.IsDisabled, clock.GetUtcNow());
         try
         {
             await db.SaveChangesAsync(ct);
@@ -135,12 +112,8 @@ internal static class ServerEndpoints
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
-    private static ServerResponse ToResponse(Server s)
-    {
-        var mongo = s as MongoServer;
-        return new(s.Id, s.Name, s.Kind, s.Host, s.Port,
-            mongo?.ConnectionMode, mongo?.AuthSource, mongo?.ReplicaSet, mongo?.UseTls,
-            s.IsDisabled,
+    private static ServerResponse ToResponse(Server s) =>
+        new(s.Id, s.Name, s.Kind, s.Host, s.Port, s.IsDisabled,
             s.Credentials.Select(c => new CredentialResponse(c.Id, c.Label, c.Username, c.CreatedAt, c.UpdatedAt)).ToList(),
             [
                 .. s.Databases.Select(d => new DatabaseResponse(d.Id,
@@ -155,7 +128,6 @@ internal static class ServerEndpoints
                 ).OrderBy(x => x.DisplayName)
             ],
             s.CreatedAt, s.UpdatedAt);
-    }
 
     // ── request / response records ────────────────────────────────────────────
 
@@ -167,10 +139,6 @@ internal static class ServerEndpoints
         string Kind,
         string Host,
         int Port,
-        ConnectionMode? ConnectionMode,
-        string? AuthSource,
-        string? ReplicaSet,
-        bool? UseTls,
         bool IsDisabled,
         IReadOnlyList<CredentialResponse> Credentials, // Should credential be returned at all?
         IReadOnlyList<DatabaseResponse> Databases,
@@ -195,24 +163,12 @@ internal static class ServerEndpoints
         DateTimeOffset CreatedAt,
         DateTimeOffset UpdatedAt);
 
-    public sealed record CreateServerRequest(
-        string Name,
-        string Kind,
-        string Host,
-        int Port,
-        ConnectionMode ConnectionMode = ConnectionMode.Standard,
-        string? AuthSource = null,
-        string? ReplicaSet = null,
-        bool UseTls = false);
+    public sealed record CreateServerRequest(string Name, string Kind, string Host, int Port);
 
     public sealed record UpdateServerRequest(
         string Name,
         string Host,
         int Port,
         string Kind,
-        bool IsDisabled = false,
-        ConnectionMode ConnectionMode = ConnectionMode.Standard,
-        string? AuthSource = null,
-        string? ReplicaSet = null,
-        bool UseTls = false);
+        bool IsDisabled = false);
 }

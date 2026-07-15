@@ -98,7 +98,7 @@ internal sealed class SchemaService(
 
             return new SchemaResult(SchemaOutcome.Ok, new SchemaTree(annotatedSchemas, tree.Extensions), null);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or NotSupportedException)
+        catch (InvalidOperationException ex)
         {
             return new SchemaResult(SchemaOutcome.Error, null, ex.Message);
         }

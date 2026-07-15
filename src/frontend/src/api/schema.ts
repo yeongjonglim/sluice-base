@@ -905,8 +905,6 @@ export interface components {
             /** @default false */
             isRestricted: boolean;
         };
-        /** @enum {unknown} */
-        ConnectionMode: "Standard" | "Srv" | null;
         ConnectivityResult: {
             ok: boolean;
             error: null | string;
@@ -921,11 +919,6 @@ export interface components {
             host: string;
             /** Format: int32 */
             port: number | string;
-            connectionMode?: components["schemas"]["ConnectionMode"];
-            authSource?: null | string;
-            replicaSet?: null | string;
-            /** @default false */
-            useTls: boolean;
         };
         /** Format: uuid */
         CredentialId: string;
@@ -1189,10 +1182,6 @@ export interface components {
             host: string;
             /** Format: int32 */
             port: number | string;
-            connectionMode: null | components["schemas"]["ConnectionMode"];
-            authSource: null | string;
-            replicaSet: null | string;
-            useTls: null | boolean;
             isDisabled: boolean;
             credentials: components["schemas"]["CredentialResponse"][];
             databases: components["schemas"]["DatabaseResponse"][];
@@ -1287,11 +1276,6 @@ export interface components {
             kind: string;
             /** @default false */
             isDisabled: boolean;
-            connectionMode?: components["schemas"]["ConnectionMode"];
-            authSource?: null | string;
-            replicaSet?: null | string;
-            /** @default false */
-            useTls: boolean;
         };
         UpdateSummaryItem: {
             id: components["schemas"]["UpdateRequestId"];
@@ -2401,15 +2385,6 @@ export interface operations {
                     "application/json": components["schemas"]["ServerResponse"];
                 };
             };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string;
-                };
-            };
             /** @description Conflict */
             409: {
                 headers: {
@@ -2441,15 +2416,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServerResponse"];
-                };
-            };
-            /** @description Bad Request */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string;
                 };
             };
             /** @description Not Found */
