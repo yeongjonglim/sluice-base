@@ -3,7 +3,7 @@ import { EditorView } from "@codemirror/view";
 import { EditorState } from "@codemirror/state";
 import { highlightStatementInEditor } from "@/utils/editorHighlight";
 
-let view: EditorView;
+let view: EditorView | undefined;
 afterEach(() => view?.destroy());
 
 describe("highlightStatementInEditor", () => {

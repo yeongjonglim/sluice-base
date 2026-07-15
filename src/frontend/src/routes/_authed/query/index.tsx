@@ -1,23 +1,16 @@
 import {
   ActionIcon,
-  Alert,
   Box,
   Button,
-  Code,
-  Flex,
   Group,
   Kbd,
   Popover,
-  ScrollArea,
-  Skeleton,
   Splitter,
   Stack,
-  Table,
   Text,
 } from "@mantine/core";
 import { useOs } from "@mantine/hooks";
 import {
-  IconDownload,
   IconPlayerPlay,
   IconQuestionMark,
 } from "@tabler/icons-react";
@@ -25,15 +18,18 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef } from "react";
 import { keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
-import type { ExecuteQueryResponse } from "@/api/hooks";
-import { ApiError } from "@/api/client";
-import { exportToCsv } from "@/utils/csv.ts";
 import { SqlEditor } from "@/components/SqlEditor";
 import { useSessionState } from "@/utils/useSessionState";
-import { meQueryOptions, useExecuteQuery, useSchema } from "@/api/hooks";
+import { meQueryOptions, useSchema } from "@/api/hooks";
 import { DatabaseSelect } from "@/components/DatabaseSelect";
 import { SchemaSidebar } from "@/components/schema/SchemaSidebar";
+import { useQueryRuns } from "@/api/useQueryRuns";
+import { splitSqlStatements } from "@/utils/splitSqlStatements";
+import { selectStatements } from "@/utils/selectStatements";
+import { highlightStatementInEditor } from "@/utils/editorHighlight";
+import { ResultTabs } from "@/components/query/ResultTabs";
 
 const noIndentKeymap = Prec.highest(
   keymap.of([
@@ -72,7 +68,7 @@ function QueryPage() {
   const schema = useSchema(selectedDatabaseId);
   const [editorContent, setEditorContent] = useSessionState("sluice:query:editor", "");
   const editorRef = useRef<ReactCodeMirrorRef>(null);
-  const executeQuery = useExecuteQuery();
+  const { runs, run, isRunning } = useQueryRuns();
 
   const handleTableClick = useCallback(
     (schemaName: string, tableName: string, columns: Array<{ name: string; isSensitive: boolean; isRestricted: boolean }>) => {
@@ -87,19 +83,44 @@ function QueryPage() {
     [setEditorContent],
   );
 
-  const handleRun = useCallback(() => {
-    if (selectedDatabaseId && editorContent.trim()) {
-      executeQuery.mutate({ databaseId: selectedDatabaseId, sql: editorContent.trim() });
-    }
-  }, [selectedDatabaseId, editorContent, executeQuery]);
+  const statements = useMemo(() => splitSqlStatements(editorContent), [editorContent]);
+
+  const handleRun = useCallback(
+    (runAll: boolean, view: EditorView | null | undefined) => {
+      if (!selectedDatabaseId || statements.length === 0) return;
+      const sel = view
+        ? {
+            from: view.state.selection.main.from,
+            to: view.state.selection.main.to,
+            empty: view.state.selection.main.empty,
+          }
+        : { from: 0, to: 0, empty: true };
+      const targets = selectStatements(statements, sel, runAll);
+      if (targets.length > 0) run(selectedDatabaseId, targets);
+    },
+    [selectedDatabaseId, statements, run],
+  );
+
+  const handleHighlight = useCallback((entry: { fromPos: number; toPos: number }) => {
+    const view = editorRef.current?.view;
+    if (view) highlightStatementInEditor(view, entry.fromPos, entry.toPos);
+  }, []);
 
   const runKeymap = Prec.highest(
     keymap.of([
       {
         key: "Ctrl-Enter",
         mac: "Cmd-Enter",
-        run: () => {
-          handleRun();
+        run: (view) => {
+          handleRun(false, view);
+          return true;
+        },
+      },
+      {
+        key: "Shift-Ctrl-Enter",
+        mac: "Shift-Cmd-Enter",
+        run: (view) => {
+          handleRun(true, view);
           return true;
         },
       },
@@ -180,9 +201,9 @@ function QueryPage() {
                   leftSection={<IconPlayerPlay size={14} />}
                   rightSection={<Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Enter</Kbd>}
                   size="sm"
-                  onClick={handleRun}
-                  loading={executeQuery.isPending}
-                  disabled={!selectedDatabaseId || !editorContent.trim()}
+                  onClick={() => handleRun(false, editorRef.current?.view)}
+                  loading={isRunning}
+                  disabled={!selectedDatabaseId || statements.length === 0}
                 >
                   Run
                 </Button>
@@ -196,6 +217,7 @@ function QueryPage() {
                     <Stack gap={4}>
                       <Text size="sm" fw={600} mb={2}>Keyboard shortcuts</Text>
                       <Group gap="xs" justify="space-between"><Text size="xs">Run query</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Enter</Kbd></Group>
+                      <Group gap="xs" justify="space-between"><Text size="xs">Run all statements</Text><Kbd size="xs">Shift+{isMac ? "⌘" : "Ctrl"}+Enter</Kbd></Group>
                       <Group gap="xs" justify="space-between"><Text size="xs">Toggle comment</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+/</Kbd></Group>
                       <Group gap="xs" justify="space-between"><Text size="xs">Move line up/down</Text><Kbd size="xs">Alt+↑/↓</Kbd></Group>
                       <Group gap="xs" justify="space-between"><Text size="xs">Copy line up/down</Text><Kbd size="xs">Shift+Alt+↑/↓</Kbd></Group>
@@ -215,149 +237,11 @@ function QueryPage() {
           </Splitter.Pane>
 
           <Splitter.Pane defaultSize={65} min={15} style={{ overflow: "hidden" }}>
-            <QueryResults
-              result={executeQuery.data ?? null}
-              isPending={executeQuery.isPending}
-              isError={executeQuery.isError}
-              error={executeQuery.error}
-            />
+            <ResultTabs runs={runs} onHighlight={handleHighlight} />
           </Splitter.Pane>
         </Splitter>
       </Splitter.Pane>
     </Splitter>
-  );
-}
-
-function QueryResults({
-  result,
-  isPending,
-  isError,
-  error,
-}: {
-  result: ExecuteQueryResponse | null;
-  isPending: boolean;
-  isError: boolean;
-  error: unknown;
-}) {
-  if (isPending) {
-    return (
-      <Stack p="xs" gap="xs">
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} h={24} radius="sm" />
-        ))}
-      </Stack>
-    );
-  }
-
-  if (isError) {
-    const apiErr = error instanceof ApiError ? error : null;
-    if (apiErr?.status === 403) {
-      const body = apiErr.body as {
-        type?: string;
-        columns?: Array<{ schema: string; table: string; column: string }>;
-      } | null;
-      if (body?.type === "sensitive_columns") {
-        return (
-          <Alert color="orange" title="Query blocked — restricted columns" m="xs">
-            <Text size="sm" mb="xs">
-              Your query references columns you are not authorised to access:
-            </Text>
-            {(body.columns ?? []).map((c, i) => (
-              <Code key={i} display="block" fz="xs">
-                {c.schema}.{c.table}.{c.column}
-              </Code>
-            ))}
-          </Alert>
-        );
-      }
-    }
-    return (
-      <Alert color="red" title="Request failed" m="xs">
-        Could not reach the server. Check your connection and try again.
-      </Alert>
-    );
-  }
-
-  if (!result) {
-    return (
-      <Text p="xs" size="sm" c="dimmed">
-        Run a query to see results.
-      </Text>
-    );
-  }
-
-  if (result.error) {
-    return (
-      <Stack p="xs" gap="xs">
-        <Text size="xs" c="dimmed">
-          Error · {result.durationMs} ms
-        </Text>
-        <Alert color="red" title="Query error">
-          {result.error}
-        </Alert>
-      </Stack>
-    );
-  }
-
-  const columns = result.columns ?? [];
-  const rows = result.rows ?? [];
-
-  return (
-    <Flex direction="column" style={{ height: "100%" }}>
-      <Group
-        justify="space-between"
-        align="center"
-        px="xs"
-        style={{
-          flexShrink: 0,
-          height: 32,
-          borderBottom: "1px solid var(--mantine-color-default-border)",
-        }}
-      >
-        <Text size="xs" c="dimmed">
-          {result.rowCount} {result.rowCount === 1 ? "row" : "rows"} · {result.durationMs} ms
-        </Text>
-        <Button
-          size="xs"
-          variant="subtle"
-          leftSection={<IconDownload size={12} />}
-          onClick={() => exportToCsv(columns, rows, `query-results-${Date.now()}.csv`)}
-        >
-          CSV
-        </Button>
-      </Group>
-      <ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto">
-        <Table
-          stickyHeader
-          striped
-          withTableBorder
-          withColumnBorders
-          fz="xs"
-          style={{ whiteSpace: "nowrap" }}
-        >
-          <Table.Thead>
-            <Table.Tr>
-              {columns.map((col) => (
-                <Table.Th key={col}>{col}</Table.Th>
-              ))}
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {rows.map((row, i) => (
-              <Table.Tr key={i}>
-                {row.map((cell, j) => (
-                  <Table.Td key={j}>
-                    {cell === null ? (
-                      <Text size="xs" c="dimmed" fs="italic">NULL</Text>
-                    ) : cell}
-                  </Table.Td>
-                ))}
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </ScrollArea>
-    </Flex>
   );
 }
 

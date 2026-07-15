@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
-import { ResultGrid } from "@/components/query/ResultGrid";
 import type { RunEntry } from "@/api/useQueryRuns";
+import { ResultGrid } from "@/components/query/ResultGrid";
 
 function base(): RunEntry {
   return {

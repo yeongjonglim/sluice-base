@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Box, Group, Tabs, Text, Tooltip } from "@mantine/core";
-import { ResultGrid } from "@/components/query/ResultGrid";
 import type { RunEntry } from "@/api/useQueryRuns";
+import { ResultGrid } from "@/components/query/ResultGrid";
 
 function snippet(text: string, max = 36): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
@@ -40,14 +40,10 @@ export function ResultTabs({
   runs: Array<RunEntry>;
   onHighlight: (entry: RunEntry) => void;
 }) {
+  // `active` is the user's explicitly-clicked tab id; the rendered tab is
+  // derived below with a fallback, so a new run batch (whose ids won't match a
+  // stale `active`) transparently falls back to the first tab — no effect needed.
   const [active, setActive] = useState<string | null>(runs[0]?.id ?? null);
-
-  // When a new run batch replaces the tabs, default to the first tab.
-  useEffect(() => {
-    if (runs.length > 0 && !runs.some((r) => r.id === active)) {
-      setActive(runs[0].id);
-    }
-  }, [runs, active]);
 
   if (runs.length === 0) {
     return (

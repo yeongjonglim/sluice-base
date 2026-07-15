@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
-import { ResultTabs } from "@/components/query/ResultTabs";
 import type { RunEntry } from "@/api/useQueryRuns";
+import { ResultTabs } from "@/components/query/ResultTabs";
 
 function entry(partial: Partial<RunEntry> & Pick<RunEntry, "id" | "index" | "text">): RunEntry {
   return {

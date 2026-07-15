@@ -11,6 +11,7 @@ describe("runLimited", () => {
   it("runs every item exactly once, preserving index", async () => {
     const seen: Array<number> = [];
     await runLimited([10, 20, 30], 2, async (item, index) => {
+      await Promise.resolve();
       seen.push(item + index);
     });
     expect(seen.sort((a, b) => a - b)).toEqual([10, 21, 32]);

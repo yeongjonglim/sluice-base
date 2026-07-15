@@ -2,9 +2,9 @@ import {
   Alert, Button, Code, Flex, Group, ScrollArea, Skeleton, Stack, Table, Text,
 } from "@mantine/core";
 import { IconDownload } from "@tabler/icons-react";
+import type { RunEntry } from "@/api/useQueryRuns";
 import { ApiError } from "@/api/client";
 import { exportToCsv } from "@/utils/csv.ts";
-import type { RunEntry } from "@/api/useQueryRuns";
 
 export function ResultGrid({ entry }: { entry: RunEntry }) {
   if (entry.status === "pending") {
