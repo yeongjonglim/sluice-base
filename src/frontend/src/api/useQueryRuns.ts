@@ -23,7 +23,10 @@ export interface RunEntry {
   error: unknown;
 }
 
-function isBlocked(err: unknown): boolean {
+// Exported for unit testing: distinguishes a sensitive-column block (403) from
+// any other failure, so the blocked classification can be verified directly
+// without driving the hook's fire-and-forget async path.
+export function isBlocked(err: unknown): boolean {
   return (
     err instanceof ApiError &&
     err.status === 403 &&

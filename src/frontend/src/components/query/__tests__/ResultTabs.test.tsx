@@ -47,4 +47,42 @@ describe("ResultTabs", () => {
     await userEvent.click(screen.getByText(/SELECT b/));
     expect(onHighlight).toHaveBeenCalledWith(expect.objectContaining({ id: "1-1" }));
   });
+
+  it("falls back to the first tab when a new run batch replaces the tabs", async () => {
+    const grid = (col: string): RunEntry["response"] => ({
+      columns: [col], rows: [["x"]], rowCount: 1, durationMs: 1, error: null,
+    });
+    const batch1 = [
+      entry({ id: "1-0", index: 0, text: "SELECT a", response: grid("colA") }),
+      entry({ id: "1-1", index: 1, text: "SELECT b", response: grid("colB") }),
+    ];
+    const { rerender } = render(
+      <MantineProvider>
+        <ResultTabs runs={batch1} onHighlight={vi.fn()} />
+      </MantineProvider>,
+    );
+
+    // The first tab's grid is active on mount.
+    expect(screen.getByText("colA")).toBeInTheDocument();
+
+    // Activate the second tab — its grid replaces the first.
+    await userEvent.click(screen.getByText(/SELECT b/));
+    expect(screen.getByText("colB")).toBeInTheDocument();
+
+    // A new batch (fresh ids) arrives; the previously-active id no longer
+    // matches, so the active tab falls back to the first entry of the new batch.
+    const batch2 = [
+      entry({ id: "2-0", index: 0, text: "SELECT c", response: grid("colC") }),
+      entry({ id: "2-1", index: 1, text: "SELECT d", response: grid("colD") }),
+    ];
+    rerender(
+      <MantineProvider>
+        <ResultTabs runs={batch2} onHighlight={vi.fn()} />
+      </MantineProvider>,
+    );
+
+    expect(screen.getByText("colC")).toBeInTheDocument();
+    expect(screen.queryByText("colB")).not.toBeInTheDocument();
+    expect(screen.queryByText("colD")).not.toBeInTheDocument();
+  });
 });
