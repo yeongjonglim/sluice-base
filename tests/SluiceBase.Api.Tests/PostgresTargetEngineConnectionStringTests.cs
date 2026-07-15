@@ -11,8 +11,7 @@ public class PostgresTargetEngineConnectionStringTests
         var engine = new PostgresTargetEngine();
 
         var cs = engine.BuildConnectionString(
-            new ConnectionParameters("appdb", "reader", "s3cret",
-                new PostgresConnectionOptions("db.example.com", 5433)));
+            new ConnectionParameters("db.example.com", 5433, "appdb", "reader", "s3cret"));
 
         Assert.Contains("Host=db.example.com", cs);
         Assert.Contains("Port=5433", cs);

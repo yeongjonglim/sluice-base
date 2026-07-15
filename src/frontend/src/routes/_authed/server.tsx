@@ -9,7 +9,6 @@ import {
   PasswordInput,
   Select,
   Stack,
-  Switch,
   Table,
   Text,
   TextInput,
@@ -462,35 +461,19 @@ function ServerForm({ server, onSuccess }: { server: ServerItem | null; onSucces
   const isEditing = server !== null;
 
   const [name, setName] = useState(server?.name ?? "");
-  const [kind, setKind] = useState(server?.kind ?? "postgres");
+  const [kind] = useState("postgres");
   const [host, setHost] = useState(server?.host ?? "");
   const [port, setPort] = useState<string | number>(server?.port ?? 5432);
-  const [connectionMode, setConnectionMode] = useState(
-    server?.connectionMode ?? "Standard",
-  );
-  const [authSource, setAuthSource] = useState(server?.authSource ?? "");
-  const [replicaSet, setReplicaSet] = useState(server?.replicaSet ?? "");
-  const [useTls, setUseTls] = useState(server?.useTls ?? false);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const mongoOptions =
-      kind === "mongodb"
-        ? {
-            connectionMode,
-            authSource: authSource || null,
-            replicaSet: replicaSet || null,
-            useTls,
-          }
-        : { useTls: false };
-
     if (isEditing) {
       await updateServer.mutateAsync({
         id: server.id,
-        body: { name, host, port, kind, isDisabled: server.isDisabled, ...mongoOptions },
+        body: { name, host, port, kind, isDisabled: server.isDisabled },
       });
     } else {
-      await createServer.mutateAsync({ name, kind, host, port, ...mongoOptions });
+      await createServer.mutateAsync({ name, kind, host, port });
     }
     onSuccess();
   }
@@ -510,11 +493,8 @@ function ServerForm({ server, onSuccess }: { server: ServerItem | null; onSucces
           label="Kind"
           required
           value={kind}
-          onChange={(v) => setKind(v ?? "postgres")}
-          data={[
-            { value: "postgres", label: "PostgreSQL" },
-            { value: "mongodb", label: "MongoDB" },
-          ]}
+          data={[{ value: "postgres", label: "PostgreSQL" }]}
+          readOnly
         />
         <Group grow>
           <TextInput
@@ -530,38 +510,8 @@ function ServerForm({ server, onSuccess }: { server: ServerItem | null; onSucces
             onChange={(v) => setPort(Number(v))}
             min={1}
             max={65535}
-            disabled={kind === "mongodb" && connectionMode === "Srv"}
           />
         </Group>
-        {kind === "mongodb" && (
-          <>
-            <Select
-              label="Connection mode"
-              value={connectionMode}
-              onChange={(v) => setConnectionMode(v ?? "Standard")}
-              data={[
-                { value: "Standard", label: "Standard (host:port)" },
-                { value: "Srv", label: "SRV (mongodb+srv DNS name)" },
-              ]}
-            />
-            <TextInput
-              label="Auth source"
-              placeholder="admin"
-              value={authSource}
-              onChange={(e) => setAuthSource(e.currentTarget.value)}
-            />
-            <TextInput
-              label="Replica set"
-              value={replicaSet}
-              onChange={(e) => setReplicaSet(e.currentTarget.value)}
-            />
-            <Switch
-              label="Use TLS"
-              checked={useTls}
-              onChange={(e) => setUseTls(e.currentTarget.checked)}
-            />
-          </>
-        )}
         <Group justify="flex-end" mt="md">
           <Button type="submit" loading={isPending}>
             {isEditing ? "Save changes" : "Add server"}

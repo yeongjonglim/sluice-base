@@ -29,7 +29,7 @@ internal static class AccessGroupTestHelper
         var user = User.Create($"res-{Guid.NewGuid():N}@example.com", "Res User", DateTimeOffset.UtcNow);
         db.Users.Add(user);
 
-        var server = PostgresServer.Create($"res-{Guid.NewGuid():N}"[..16], "localhost", 5432, DateTimeOffset.UtcNow);
+        var server = Server.Create($"res-{Guid.NewGuid():N}"[..16], "postgres", "localhost", 5432, DateTimeOffset.UtcNow);
         db.Servers.Add(server);
         var cred = Credential.Create(server.Id, "read", "user", "enc", DateTimeOffset.UtcNow);
         db.Credentials.Add(cred);
@@ -58,7 +58,7 @@ internal static class AccessGroupTestHelper
     public static async Task<(ServerId ServerId, DatabaseId DatabaseId)> SeedDatabaseOnlyAsync(
         AppDbContext db, CancellationToken ct)
     {
-        var server = PostgresServer.Create($"res-{Guid.NewGuid():N}"[..16], "localhost", 5432, DateTimeOffset.UtcNow);
+        var server = Server.Create($"res-{Guid.NewGuid():N}"[..16], "postgres", "localhost", 5432, DateTimeOffset.UtcNow);
         db.Servers.Add(server);
         var cred = Credential.Create(server.Id, "read", "user", "enc", DateTimeOffset.UtcNow);
         db.Credentials.Add(cred);
