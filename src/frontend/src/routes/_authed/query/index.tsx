@@ -12,6 +12,7 @@ import {
 import { useOs } from "@mantine/hooks";
 import {
   IconPlayerPlay,
+  IconPlayerTrackNext,
   IconQuestionMark,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
@@ -206,6 +207,17 @@ function QueryPage() {
                   disabled={!selectedDatabaseId || statements.length === 0}
                 >
                   Run
+                </Button>
+                <Button
+                  variant="default"
+                  leftSection={<IconPlayerTrackNext size={14} />}
+                  rightSection={<Kbd size="xs">Shift+{isMac ? "⌘" : "Ctrl"}+Enter</Kbd>}
+                  size="sm"
+                  onClick={() => handleRun(true, editorRef.current?.view)}
+                  loading={isRunning}
+                  disabled={!selectedDatabaseId || statements.length === 0}
+                >
+                  Run all{statements.length > 1 ? ` (${statements.length})` : ""}
                 </Button>
                 <Popover position="bottom-start" withArrow shadow="md">
                   <Popover.Target>
