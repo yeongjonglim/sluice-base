@@ -88,25 +88,27 @@ function QueryPage() {
     [setEditorContent],
   );
 
+  // Drives the Run / Run all button label + disabled state. Recomputed per
+  // keystroke, but deliberately NOT a dependency of the editor extensions below.
   const statements = useMemo(() => splitSqlStatements(editorContent), [editorContent]);
 
+  // Reads the live document + selection from the editor view (supplied by both
+  // the keymap and the buttons) rather than closing over the per-keystroke
+  // `statements`, so this callback's identity only changes when the database or
+  // run mutation does — which keeps `editorExtensions` stable (see below).
   const handleRun = useCallback(
     (runAll: boolean, view: EditorView | null | undefined) => {
-      if (!selectedDatabaseId || statements.length === 0) return;
-      const sel = view
-        ? {
-            from: view.state.selection.main.from,
-            to: view.state.selection.main.to,
-            empty: view.state.selection.main.empty,
-          }
-        : { from: 0, to: 0, empty: true };
-      const targets = selectStatements(statements, sel, runAll);
+      if (!selectedDatabaseId || !view) return;
+      const stmts = splitSqlStatements(view.state.doc.toString());
+      if (stmts.length === 0) return;
+      const { from, to, empty } = view.state.selection.main;
+      const targets = selectStatements(stmts, { from, to, empty }, runAll);
       if (targets.length > 0) {
         setActiveRun(runAll ? "all" : "single");
         run(selectedDatabaseId, targets);
       }
     },
-    [selectedDatabaseId, statements, run],
+    [selectedDatabaseId, run],
   );
 
   const handleHighlight = useCallback((entry: { fromPos: number; toPos: number }) => {
@@ -114,30 +116,34 @@ function QueryPage() {
     if (view) highlightStatementInEditor(view, entry.fromPos, entry.toPos);
   }, []);
 
-  const runKeymap = Prec.highest(
-    keymap.of([
-      {
-        key: "Ctrl-Enter",
-        mac: "Cmd-Enter",
-        run: (view) => {
-          handleRun(false, view);
-          return true;
-        },
-      },
-      {
-        key: "Ctrl-Shift-Enter",
-        mac: "Cmd-Shift-Enter",
-        run: (view) => {
-          handleRun(true, view);
-          return true;
-        },
-      },
-    ]),
-  );
-
+  // Stable across keystrokes: rebuilt only when `handleRun` changes (i.e. when
+  // the selected database changes), so CodeMirror configures its extensions once
+  // instead of reconfiguring on every character typed.
   const editorExtensions = useMemo(
-    () => [runKeymap, noIndentKeymap],
-    [runKeymap],
+    () => [
+      Prec.highest(
+        keymap.of([
+          {
+            key: "Ctrl-Enter",
+            mac: "Cmd-Enter",
+            run: (view) => {
+              handleRun(false, view);
+              return true;
+            },
+          },
+          {
+            key: "Ctrl-Shift-Enter",
+            mac: "Cmd-Shift-Enter",
+            run: (view) => {
+              handleRun(true, view);
+              return true;
+            },
+          },
+        ]),
+      ),
+      noIndentKeymap,
+    ],
+    [handleRun],
   );
 
   return (
