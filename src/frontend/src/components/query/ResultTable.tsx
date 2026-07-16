@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Button, CloseButton, Flex, Group, Text, TextInput } from "@mantine/core";
+import { Button, CloseButton, Flex, Group, Table, Text, TextInput } from "@mantine/core";
 import { IconDownload, IconSearch } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CSSProperties } from "react";
@@ -10,18 +10,26 @@ import { filterRows } from "@/utils/filterRows";
 // huge result set — and scrolling it — stays fast regardless of row count. The
 // trade-off is that the browser's native find-in-page can't see off-screen rows,
 // so the filter box below replaces it: it matches across the FULL result (held
-// in JS) and narrows the grid to matching rows.
+// in JS) and narrows the grid to matching rows. Rendering uses the real Mantine
+// Table with "spacer" rows above/below the window so the styling (borders,
+// striping, sticky header) matches a normal, non-virtualized table.
 
-const ROW_HEIGHT = 30;
+const ROW_HEIGHT = 33; // initial estimate; real heights are measured per row
 
 // Fixed column widths (estimated once from the header + a sample of rows) keep
 // the layout stable while rows are virtualized — with content-based sizing the
 // columns would jump as different rows scroll into view.
 const CHAR_PX = 6.6;
-const CELL_CHROME_PX = 20; // padding + border allowance
+const CELL_CHROME_PX = 24; // padding + border allowance
 const MIN_COL_PX = 56;
 const MAX_COL_PX = 360;
 const SAMPLE_ROWS = 200;
+
+const ELLIPSIS: CSSProperties = {
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
 
 function columnWidths(
   columns: Array<string>,
@@ -39,20 +47,6 @@ function columnWidths(
       Math.min(MAX_COL_PX, Math.max(MIN_COL_PX, maxChars * CHAR_PX + CELL_CHROME_PX)),
     );
   });
-}
-
-function cellStyle(width: number): CSSProperties {
-  return {
-    width,
-    flexShrink: 0,
-    padding: "0 8px",
-    lineHeight: `${ROW_HEIGHT - 1}px`,
-    borderRight: "1px solid var(--mantine-color-default-border)",
-    borderBottom: "1px solid var(--mantine-color-default-border)",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  };
 }
 
 export function ResultTable({
@@ -79,8 +73,15 @@ export function ResultTable({
     count: filtered.length,
     getScrollElement: () => scrollRef.current,
     estimateSize: () => ROW_HEIGHT,
-    overscan: 16,
+    overscan: 12,
   });
+
+  const virtualItems = virtualizer.getVirtualItems();
+  const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
+  const paddingBottom =
+    virtualItems.length > 0
+      ? virtualizer.getTotalSize() - virtualItems[virtualItems.length - 1].end
+      : 0;
 
   return (
     <Flex direction="column" style={{ height: "100%" }}>
@@ -128,65 +129,69 @@ export function ResultTable({
       </Group>
 
       <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-        <div style={{ width: "max-content", minWidth: "100%" }}>
-          <div
-            style={{
-              display: "flex",
-              position: "sticky",
-              top: 0,
-              zIndex: 1,
-              minWidth: totalWidth,
-              fontWeight: 600,
-              background: "var(--mantine-color-body)",
-              borderBottom: "2px solid var(--mantine-color-default-border)",
-            }}
-          >
-            {columns.map((col, j) => (
-              <div key={j} style={cellStyle(widths[j])}>
-                {col}
-              </div>
+        <Table
+          stickyHeader
+          withTableBorder
+          withColumnBorders
+          fz="xs"
+          style={{ tableLayout: "fixed", width: totalWidth }}
+        >
+          <colgroup>
+            {widths.map((w, i) => (
+              <col key={i} style={{ width: w }} />
             ))}
-          </div>
-
-          <div style={{ position: "relative", height: virtualizer.getTotalSize(), minWidth: totalWidth }}>
-            {virtualizer.getVirtualItems().map((vi) => {
+          </colgroup>
+          <Table.Thead>
+            <Table.Tr>
+              {columns.map((col) => (
+                <Table.Th key={col} style={ELLIPSIS}>
+                  {col}
+                </Table.Th>
+              ))}
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {paddingTop > 0 && (
+              <Table.Tr aria-hidden>
+                <Table.Td colSpan={columns.length} style={{ height: paddingTop, padding: 0, border: 0 }} />
+              </Table.Tr>
+            )}
+            {virtualItems.map((vi) => {
               const row = filtered[vi.index];
               return (
-                <div
+                <Table.Tr
                   key={vi.key}
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    display: "flex",
-                    height: ROW_HEIGHT,
-                    transform: `translateY(${vi.start}px)`,
-                    background:
-                      vi.index % 2 === 1 ? "var(--mantine-color-default-hover)" : undefined,
-                  }}
+                  data-index={vi.index}
+                  ref={virtualizer.measureElement}
+                  bg={vi.index % 2 === 1 ? "var(--mantine-color-default-hover)" : undefined}
                 >
                   {row.map((cell, j) => (
-                    <div key={j} style={cellStyle(widths[j])}>
+                    <Table.Td key={j} style={ELLIPSIS}>
                       {cell === null ? (
-                        <Text span inherit c="dimmed" fs="italic">
+                        <Text size="xs" c="dimmed" fs="italic">
                           NULL
                         </Text>
                       ) : (
                         cell
                       )}
-                    </div>
+                    </Table.Td>
                   ))}
-                </div>
+                </Table.Tr>
               );
             })}
-          </div>
+            {paddingBottom > 0 && (
+              <Table.Tr aria-hidden>
+                <Table.Td colSpan={columns.length} style={{ height: paddingBottom, padding: 0, border: 0 }} />
+              </Table.Tr>
+            )}
+          </Table.Tbody>
+        </Table>
 
-          {filtered.length === 0 && (
-            <Text p="xs" size="xs" c="dimmed">
-              No rows match “{query.trim()}”.
-            </Text>
-          )}
-        </div>
+        {filtered.length === 0 && (
+          <Text p="xs" size="xs" c="dimmed">
+            {filtering ? `No rows match “${query.trim()}”.` : "No rows returned."}
+          </Text>
+        )}
       </div>
     </Flex>
   );
