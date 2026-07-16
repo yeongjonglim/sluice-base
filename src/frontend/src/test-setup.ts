@@ -30,3 +30,7 @@ Object.defineProperty(window, "matchMedia", {
 // active option when a dropdown opens, which otherwise surfaces as an
 // unhandled async error.
 Element.prototype.scrollIntoView = () => {};
+
+// jsdom doesn't implement Element.scrollTo either; the editor highlight helper
+// calls it to smooth-scroll a statement into view.
+Element.prototype.scrollTo = () => {};
