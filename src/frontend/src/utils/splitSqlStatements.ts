@@ -16,17 +16,28 @@ function matchDollarTag(sql: string, i: number): string | null {
   return sql[j] === "$" ? sql.slice(i, j + 1) : null;
 }
 
-function lineAt(sql: string, pos: number): number {
-  let line = 1;
-  for (let k = 0; k < pos && k < sql.length; k++) {
-    if (sql[k] === "\n") line++;
-  }
-  return line;
-}
-
 export function splitSqlStatements(sql: string): Array<SqlStatement> {
   const statements: Array<SqlStatement> = [];
   const n = sql.length;
+
+  // Precompute newline offsets once so each statement's line numbers are an
+  // O(log n) binary search rather than an O(pos) rescan from the start — the
+  // rescan made the whole parse O(n²) and froze typing on large scripts.
+  const newlineOffsets: Array<number> = [];
+  for (let k = 0; k < n; k++) {
+    if (sql[k] === "\n") newlineOffsets.push(k);
+  }
+  const lineAt = (pos: number): number => {
+    let lo = 0;
+    let hi = newlineOffsets.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (newlineOffsets[mid] < pos) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo + 1;
+  };
+
   let segStart = 0;
   let mode: Mode = "normal";
   let dollarTag = "";
@@ -42,8 +53,8 @@ export function splitSqlStatements(sql: string): Array<SqlStatement> {
       text: trimmed,
       fromPos,
       toPos,
-      fromLine: lineAt(sql, fromPos),
-      toLine: lineAt(sql, toPos),
+      fromLine: lineAt(fromPos),
+      toLine: lineAt(toPos),
     });
   };
 
