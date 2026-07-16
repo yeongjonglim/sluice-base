@@ -20,25 +20,16 @@ function renderGrid(entry: RunEntry) {
 }
 
 describe("ResultGrid", () => {
-  it("renders a table with columns and rows for a successful result", () => {
+  it("delegates a successful result to the virtualized table (headers + filter)", () => {
     renderGrid({
       ...base(),
       status: "success",
       response: { columns: ["id", "name"], rows: [["1", "Ada"]], rowCount: 1, durationMs: 5, error: null },
     });
+    // Column headers and the stats render outside the virtualized body.
     expect(screen.getByText("id")).toBeInTheDocument();
-    expect(screen.getByText("Ada")).toBeInTheDocument();
     expect(screen.getByText(/1 row/)).toBeInTheDocument();
-  });
-
-  it("applies content-visibility to body rows so off-screen rows skip rendering", () => {
-    const { container } = renderGrid({
-      ...base(),
-      status: "success",
-      response: { columns: ["id"], rows: [["1"], ["2"]], rowCount: 2, durationMs: 5, error: null },
-    });
-    const bodyRow = container.querySelector<HTMLElement>("tbody tr");
-    expect(bodyRow?.style.contentVisibility).toBe("auto");
+    expect(screen.getByLabelText("Filter rows")).toBeInTheDocument();
   });
 
   it("renders a query error alert", () => {

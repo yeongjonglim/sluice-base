@@ -1,22 +1,7 @@
-import {
-  Alert, Button, Code, Flex, Group, ScrollArea, Skeleton, Stack, Table, Text,
-} from "@mantine/core";
-import { IconDownload } from "@tabler/icons-react";
-import type { CSSProperties } from "react";
+import { Alert, Code, Skeleton, Stack, Text } from "@mantine/core";
 import type { RunEntry } from "@/api/useQueryRuns";
 import { ApiError } from "@/api/client";
-import { exportToCsv } from "@/utils/csv.ts";
-
-// Let the browser skip layout/paint for rows that are scrolled off-screen, so
-// switching to a tab with a huge result set stays fast. Unlike virtualization
-// the rows remain in the DOM, so native find-in-page (Cmd/Ctrl+F) still matches
-// text in scrolled-off rows. `contain-intrinsic-size: auto <h>` reserves an
-// estimated row height up front and remembers each row's real height once it
-// has been rendered. Shared object so we don't allocate one style per row.
-const OFFSCREEN_ROW_STYLE: CSSProperties = {
-  contentVisibility: "auto",
-  containIntrinsicSize: "auto 28px",
-};
+import { ResultTable } from "@/components/query/ResultTable";
 
 export function ResultGrid({ entry }: { entry: RunEntry }) {
   if (entry.status === "pending") {
@@ -69,65 +54,13 @@ export function ResultGrid({ entry }: { entry: RunEntry }) {
   }
 
   // success
-  const columns = entry.response?.columns ?? [];
-  const rows = entry.response?.rows ?? [];
-  const rowCount = entry.response?.rowCount ?? 0;
-
   return (
-    <Flex direction="column" style={{ height: "100%" }}>
-      <Group
-        justify="space-between"
-        align="center"
-        px="xs"
-        style={{
-          flexShrink: 0,
-          height: 32,
-          borderBottom: "1px solid var(--mantine-color-default-border)",
-        }}
-      >
-        <Text size="xs" c="dimmed">
-          {rowCount} {rowCount === 1 ? "row" : "rows"} · {entry.response?.durationMs} ms
-        </Text>
-        <Button
-          size="xs"
-          variant="subtle"
-          leftSection={<IconDownload size={12} />}
-          onClick={() => exportToCsv(columns, rows, `query-results-${entry.index + 1}.csv`)}
-        >
-          CSV
-        </Button>
-      </Group>
-      <ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto">
-        <Table
-          stickyHeader
-          striped
-          withTableBorder
-          withColumnBorders
-          fz="xs"
-          style={{ whiteSpace: "nowrap" }}
-        >
-          <Table.Thead>
-            <Table.Tr>
-              {columns.map((col) => (
-                <Table.Th key={col}>{col}</Table.Th>
-              ))}
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {rows.map((row, i) => (
-              <Table.Tr key={i} style={OFFSCREEN_ROW_STYLE}>
-                {row.map((cell, j) => (
-                  <Table.Td key={j}>
-                    {cell === null ? (
-                      <Text size="xs" c="dimmed" fs="italic">NULL</Text>
-                    ) : cell}
-                  </Table.Td>
-                ))}
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </ScrollArea>
-    </Flex>
+    <ResultTable
+      columns={entry.response?.columns ?? []}
+      rows={entry.response?.rows ?? []}
+      rowCount={Number(entry.response?.rowCount ?? 0)}
+      durationMs={Number(entry.response?.durationMs ?? 0)}
+      resultIndex={entry.index}
+    />
   );
 }
