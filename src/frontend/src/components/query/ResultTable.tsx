@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { Button, CloseButton, Flex, Group, Table, Text, TextInput } from "@mantine/core";
+import { Button, CloseButton, Flex, Group, Highlight, Table, Text, TextInput } from "@mantine/core";
 import { IconDownload, IconSearch } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CSSProperties } from "react";
@@ -171,6 +171,10 @@ export function ResultTable({
                         <Text size="xs" c="dimmed" fs="italic">
                           NULL
                         </Text>
+                      ) : filtering ? (
+                        <Highlight span inherit highlight={query.trim()}>
+                          {cell}
+                        </Highlight>
                       ) : (
                         cell
                       )}
