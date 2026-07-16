@@ -118,8 +118,8 @@ function QueryPage() {
         },
       },
       {
-        key: "Shift-Ctrl-Enter",
-        mac: "Shift-Cmd-Enter",
+        key: "Ctrl-Shift-Enter",
+        mac: "Cmd-Shift-Enter",
         run: (view) => {
           handleRun(true, view);
           return true;
@@ -211,7 +211,7 @@ function QueryPage() {
                 <Button
                   variant="default"
                   leftSection={<IconPlayerTrackNext size={14} />}
-                  rightSection={<Kbd size="xs">Shift+{isMac ? "⌘" : "Ctrl"}+Enter</Kbd>}
+                  rightSection={<Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Shift+Enter</Kbd>}
                   size="sm"
                   onClick={() => handleRun(true, editorRef.current?.view)}
                   loading={isRunning}
@@ -229,7 +229,7 @@ function QueryPage() {
                     <Stack gap={4}>
                       <Text size="sm" fw={600} mb={2}>Keyboard shortcuts</Text>
                       <Group gap="xs" justify="space-between"><Text size="xs">Run query</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Enter</Kbd></Group>
-                      <Group gap="xs" justify="space-between"><Text size="xs">Run all statements</Text><Kbd size="xs">Shift+{isMac ? "⌘" : "Ctrl"}+Enter</Kbd></Group>
+                      <Group gap="xs" justify="space-between"><Text size="xs">Run all statements</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Shift+Enter</Kbd></Group>
                       <Group gap="xs" justify="space-between"><Text size="xs">Toggle comment</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+/</Kbd></Group>
                       <Group gap="xs" justify="space-between"><Text size="xs">Move line up/down</Text><Kbd size="xs">Alt+↑/↓</Kbd></Group>
                       <Group gap="xs" justify="space-between"><Text size="xs">Copy line up/down</Text><Kbd size="xs">Shift+Alt+↑/↓</Kbd></Group>
