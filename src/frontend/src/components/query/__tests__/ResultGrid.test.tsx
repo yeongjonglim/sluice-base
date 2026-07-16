@@ -31,6 +31,16 @@ describe("ResultGrid", () => {
     expect(screen.getByText(/1 row/)).toBeInTheDocument();
   });
 
+  it("applies content-visibility to body rows so off-screen rows skip rendering", () => {
+    const { container } = renderGrid({
+      ...base(),
+      status: "success",
+      response: { columns: ["id"], rows: [["1"], ["2"]], rowCount: 2, durationMs: 5, error: null },
+    });
+    const bodyRow = container.querySelector<HTMLElement>("tbody tr");
+    expect(bodyRow?.style.contentVisibility).toBe("auto");
+  });
+
   it("renders a query error alert", () => {
     renderGrid({
       ...base(),

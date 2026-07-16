@@ -2,9 +2,21 @@ import {
   Alert, Button, Code, Flex, Group, ScrollArea, Skeleton, Stack, Table, Text,
 } from "@mantine/core";
 import { IconDownload } from "@tabler/icons-react";
+import type { CSSProperties } from "react";
 import type { RunEntry } from "@/api/useQueryRuns";
 import { ApiError } from "@/api/client";
 import { exportToCsv } from "@/utils/csv.ts";
+
+// Let the browser skip layout/paint for rows that are scrolled off-screen, so
+// switching to a tab with a huge result set stays fast. Unlike virtualization
+// the rows remain in the DOM, so native find-in-page (Cmd/Ctrl+F) still matches
+// text in scrolled-off rows. `contain-intrinsic-size: auto <h>` reserves an
+// estimated row height up front and remembers each row's real height once it
+// has been rendered. Shared object so we don't allocate one style per row.
+const OFFSCREEN_ROW_STYLE: CSSProperties = {
+  contentVisibility: "auto",
+  containIntrinsicSize: "auto 28px",
+};
 
 export function ResultGrid({ entry }: { entry: RunEntry }) {
   if (entry.status === "pending") {
@@ -103,7 +115,7 @@ export function ResultGrid({ entry }: { entry: RunEntry }) {
           </Table.Thead>
           <Table.Tbody>
             {rows.map((row, i) => (
-              <Table.Tr key={i}>
+              <Table.Tr key={i} style={OFFSCREEN_ROW_STYLE}>
                 {row.map((cell, j) => (
                   <Table.Td key={j}>
                     {cell === null ? (
