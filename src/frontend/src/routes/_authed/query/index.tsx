@@ -16,7 +16,7 @@ import {
   IconQuestionMark,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { keymap } from "@codemirror/view";
 import { Prec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
@@ -70,6 +70,10 @@ function QueryPage() {
   const [editorContent, setEditorContent] = useSessionState("sluice:query:editor", "");
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const { runs, run, isRunning } = useQueryRuns();
+  // Which button launched the in-flight run, so only that button shows the
+  // spinner. No reset needed: each button's loading is gated on `isRunning`,
+  // which flips back to false when the run settles.
+  const [activeRun, setActiveRun] = useState<"single" | "all">("single");
 
   const handleTableClick = useCallback(
     (schemaName: string, tableName: string, columns: Array<{ name: string; isSensitive: boolean; isRestricted: boolean }>) => {
@@ -97,7 +101,10 @@ function QueryPage() {
           }
         : { from: 0, to: 0, empty: true };
       const targets = selectStatements(statements, sel, runAll);
-      if (targets.length > 0) run(selectedDatabaseId, targets);
+      if (targets.length > 0) {
+        setActiveRun(runAll ? "all" : "single");
+        run(selectedDatabaseId, targets);
+      }
     },
     [selectedDatabaseId, statements, run],
   );
@@ -203,8 +210,8 @@ function QueryPage() {
                   rightSection={<Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Enter</Kbd>}
                   size="sm"
                   onClick={() => handleRun(false, editorRef.current?.view)}
-                  loading={isRunning}
-                  disabled={!selectedDatabaseId || statements.length === 0}
+                  loading={isRunning && activeRun === "single"}
+                  disabled={!selectedDatabaseId || statements.length === 0 || isRunning}
                 >
                   Run
                 </Button>
@@ -214,8 +221,8 @@ function QueryPage() {
                   rightSection={<Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Shift+Enter</Kbd>}
                   size="sm"
                   onClick={() => handleRun(true, editorRef.current?.view)}
-                  loading={isRunning}
-                  disabled={!selectedDatabaseId || statements.length === 0}
+                  loading={isRunning && activeRun === "all"}
+                  disabled={!selectedDatabaseId || statements.length === 0 || isRunning}
                 >
                   Run all{statements.length > 1 ? ` (${statements.length})` : ""}
                 </Button>
