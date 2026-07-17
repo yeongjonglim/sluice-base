@@ -28,6 +28,7 @@ import { DatabaseSelect } from "@/components/DatabaseSelect";
 import { SchemaSidebar } from "@/components/schema/SchemaSidebar";
 import { useQueryRuns } from "@/api/useQueryRuns";
 import { splitSqlStatements } from "@/utils/splitSqlStatements";
+import { buildSelectSnippet } from "@/utils/buildSelectSnippet";
 import { selectStatements } from "@/utils/selectStatements";
 import { highlightStatementInEditor } from "@/utils/editorHighlight";
 import { ResultTabs } from "@/components/query/ResultTabs";
@@ -79,8 +80,7 @@ function QueryPage() {
     (schemaName: string, tableName: string, columns: Array<{ name: string; isSensitive: boolean; isRestricted: boolean }>) => {
       const safeCols = columns.filter((c) => !c.isSensitive);
       if (safeCols.length === 0) return;
-      const colList = safeCols.map((c) => c.name).join(", ");
-      const snippet = `SELECT ${colList}\nFROM ${schemaName}.${tableName}\nLIMIT 1000;\n`;
+      const snippet = buildSelectSnippet(schemaName, tableName, safeCols.map((c) => c.name));
       setEditorContent((prev) =>
         prev.trimEnd() === "" ? snippet : `${prev.trimEnd()}\n\n${snippet}`,
       );
