@@ -67,7 +67,7 @@ describe("useSchema", () => {
 });
 
 describe("schemaToCompletions", () => {
-  it("transforms SchemaTree into fully-qualified table→columns map", () => {
+  it("transforms SchemaTree into a nested schema→table→column namespace", () => {
     const tree = {
       schemas: [
         {
@@ -86,7 +86,46 @@ describe("schemaToCompletions", () => {
     };
 
     expect(schemaToCompletions(tree)).toEqual({
-      "public.users": ["id", "email"],
+      public: {
+        self: { label: "public", type: "type" },
+        children: {
+          users: {
+            self: { label: "users", type: "type" },
+            children: [
+              { label: "id", type: "property" },
+              { label: "email", type: "property" },
+            ],
+          },
+        },
+      },
+    });
+  });
+
+  it("quotes mixed-case and reserved-word identifiers via apply", () => {
+    const tree = {
+      schemas: [
+        {
+          name: "public",
+          tables: [
+            {
+              name: "__EFMigrationHistory",
+              columns: [{ name: "group", isRestricted: false }],
+            },
+          ],
+        },
+      ],
+    };
+
+    expect(schemaToCompletions(tree)).toEqual({
+      public: {
+        self: { label: "public", type: "type" },
+        children: {
+          __EFMigrationHistory: {
+            self: { label: "__EFMigrationHistory", type: "type", apply: '"__EFMigrationHistory"' },
+            children: [{ label: "group", type: "property", apply: '"group"' }],
+          },
+        },
+      },
     });
   });
 
@@ -110,7 +149,18 @@ describe("schemaToCompletions", () => {
     };
 
     expect(schemaToCompletions(tree)).toEqual({
-      "hr.employees": ["id", "salary"],
+      hr: {
+        self: { label: "hr", type: "type" },
+        children: {
+          employees: {
+            self: { label: "employees", type: "type" },
+            children: [
+              { label: "id", type: "property" },
+              { label: "salary", type: "property" },
+            ],
+          },
+        },
+      },
     });
   });
 
@@ -150,9 +200,31 @@ describe("schemaToCompletions", () => {
     };
 
     expect(schemaToCompletions(tree)).toEqual({
-      "public.users": ["id"],
-      "public.orders": ["id", "user_id"],
-      "audit.logs": ["ts"],
+      public: {
+        self: { label: "public", type: "type" },
+        children: {
+          users: {
+            self: { label: "users", type: "type" },
+            children: [{ label: "id", type: "property" }],
+          },
+          orders: {
+            self: { label: "orders", type: "type" },
+            children: [
+              { label: "id", type: "property" },
+              { label: "user_id", type: "property" },
+            ],
+          },
+        },
+      },
+      audit: {
+        self: { label: "audit", type: "type" },
+        children: {
+          logs: {
+            self: { label: "logs", type: "type" },
+            children: [{ label: "ts", type: "property" }],
+          },
+        },
+      },
     });
   });
 
@@ -171,10 +243,21 @@ describe("schemaToCompletions", () => {
       ],
     };
 
-    const result = schemaToCompletions(tree);
-
-    expect(result["public.orders"]).toEqual(["id"]);
-    expect(result["public.active_orders"]).toEqual(["id"]);
+    expect(schemaToCompletions(tree)).toEqual({
+      public: {
+        self: { label: "public", type: "type" },
+        children: {
+          orders: {
+            self: { label: "orders", type: "type" },
+            children: [{ label: "id", type: "property" }],
+          },
+          active_orders: {
+            self: { label: "active_orders", type: "type" },
+            children: [{ label: "id", type: "property" }],
+          },
+        },
+      },
+    });
   });
 });
 
@@ -208,6 +291,16 @@ describe("useSchemaCompletions", () => {
     const { result } = renderHook(() => useSchemaCompletions("db-1"), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    expect(result.current.data).toEqual({ "public.items": ["id"] });
+    expect(result.current.data).toEqual({
+      public: {
+        self: { label: "public", type: "type" },
+        children: {
+          items: {
+            self: { label: "items", type: "type" },
+            children: [{ label: "id", type: "property" }],
+          },
+        },
+      },
+    });
   });
 });
