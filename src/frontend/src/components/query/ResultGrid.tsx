@@ -1,6 +1,7 @@
-import { Alert, Code, Skeleton, Stack, Text } from "@mantine/core";
+import { Alert, Box, Code, Skeleton, Stack, Text } from "@mantine/core";
 import type { RunEntry } from "@/api/useQueryRuns";
 import { ApiError } from "@/api/client";
+import { PlanSummaryBadges } from "@/components/query/PlanSummaryBadges";
 import { ResultTable } from "@/components/query/ResultTable";
 
 export function ResultGrid({ entry }: { entry: RunEntry }) {
@@ -55,12 +56,21 @@ export function ResultGrid({ entry }: { entry: RunEntry }) {
 
   // success
   return (
-    <ResultTable
-      columns={entry.response?.columns ?? []}
-      rows={entry.response?.rows ?? []}
-      rowCount={Number(entry.response?.rowCount ?? 0)}
-      durationMs={Number(entry.response?.durationMs ?? 0)}
-      resultIndex={entry.index}
-    />
+    <Stack gap={0} h="100%">
+      {entry.response?.estimate && (
+        <Box px="xs" pt="xs">
+          <PlanSummaryBadges summary={entry.response.estimate} label="Planner estimate" />
+        </Box>
+      )}
+      <Box style={{ flex: 1, minHeight: 0 }}>
+        <ResultTable
+          columns={entry.response?.columns ?? []}
+          rows={entry.response?.rows ?? []}
+          rowCount={Number(entry.response?.rowCount ?? 0)}
+          durationMs={Number(entry.response?.durationMs ?? 0)}
+          resultIndex={entry.index}
+        />
+      </Box>
+    </Stack>
   );
 }

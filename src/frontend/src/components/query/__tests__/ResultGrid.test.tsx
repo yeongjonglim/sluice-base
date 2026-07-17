@@ -40,4 +40,20 @@ describe("ResultGrid", () => {
     });
     expect(screen.getByText("boom")).toBeInTheDocument();
   });
+
+  it("shows an advisory estimate strip on a successful run", () => {
+    const entry = {
+      id: "1-0", index: 0, text: "SELECT 1",
+      fromPos: 0, toPos: 8, fromLine: 1, toLine: 1,
+      status: "success" as const,
+      response: {
+        columns: ["?column?"], rows: [["1"]], rowCount: 1, durationMs: 2, error: null,
+        estimate: { totalCost: 15, estimatedRows: 500, rootNode: "Seq Scan", hasSeqScan: true, actualTotalMs: null },
+      },
+      error: null,
+    };
+    renderGrid(entry); // use the test file's existing render helper
+    expect(screen.getByText(/planner estimate/i)).toBeInTheDocument();
+    expect(screen.getByText(/~500 rows/i)).toBeInTheDocument();
+  });
 });
