@@ -19,6 +19,10 @@ internal static class QueryEndpoints
             .RequireAuthorization()
             .WithName("ExecuteQuery");
 
+        app.MapPost("/api/query/explain", ExplainQuery)
+            .RequireAuthorization()
+            .WithName("ExplainQuery");
+
         app.MapGet("/api/query/history", GetHistory)
             .RequireAuthorization()
             .WithName("GetQueryHistory");
@@ -44,6 +48,29 @@ internal static class QueryEndpoints
                 extensions: new Dictionary<string, object?> { ["columns"] = result.BlockedColumns!.Select(c => new { schema = c.Schema, table = c.Table, column = c.Column }).ToArray() }),
             QueryOutcome.BadRequest => TypedResults.BadRequest(result.Error!),
             _ => TypedResults.Ok(result.Response!),
+        };
+    }
+
+    private static async Task<Results<Ok<QueryPlanResponse>, NotFound, BadRequest<string>, ForbidHttpResult, ProblemHttpResult>> ExplainQuery(
+        ExplainRequest request,
+        ICurrentUserAccessor currentUser,
+        IQueryService queryService,
+        CancellationToken ct)
+    {
+        var user = await currentUser.GetAsync(ct);
+        var result = await queryService.ExplainAsync(user!, request.DatabaseId, request.Sql, request.Analyze, ct);
+
+        return result.Outcome switch
+        {
+            QueryOutcome.NotFound => TypedResults.NotFound(),
+            QueryOutcome.Forbidden => TypedResults.Forbid(),
+            QueryOutcome.Blocked => TypedResults.Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "Sensitive columns",
+                type: "sensitive_columns",
+                extensions: new Dictionary<string, object?> { ["columns"] = result.BlockedColumns!.Select(c => new { schema = c.Schema, table = c.Table, column = c.Column }).ToArray() }),
+            QueryOutcome.BadRequest => TypedResults.BadRequest(result.Error!),
+            _ => TypedResults.Ok(new QueryPlanResponse(result.Plan!.PlanJson, result.Plan.Summary)),
         };
     }
 
@@ -138,6 +165,10 @@ internal static class QueryEndpoints
     }
 
     public sealed record QueryRequest(DatabaseId DatabaseId, string Sql);
+
+    public sealed record ExplainRequest(DatabaseId DatabaseId, string Sql, bool Analyze);
+
+    public sealed record QueryPlanResponse(string PlanJson, QueryPlanSummary Summary);
 
     public sealed record QueryResponse(
         string[]? Columns,
