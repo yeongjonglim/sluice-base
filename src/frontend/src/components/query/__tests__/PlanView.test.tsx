@@ -24,7 +24,8 @@ describe("PlanView", () => {
     renderView(entry());
     expect(screen.getByText(/1,?000/)).toBeInTheDocument();
     expect(screen.getByText(/42/)).toBeInTheDocument();
-    expect(screen.getByText(/seq scan/i)).toBeInTheDocument();
+    expect(screen.getByText("Full Table Scan")).toBeInTheDocument();
+    expect(screen.getByText("Seq Scan")).toBeInTheDocument();
   });
 
   it("shows actual time when analyzed", () => {
