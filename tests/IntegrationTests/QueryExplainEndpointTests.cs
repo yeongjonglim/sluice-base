@@ -45,15 +45,38 @@ public sealed class QueryExplainEndpointTests(SluiceBaseStackFactory factory)
     public async Task Explain_WithoutDatabaseRole_Returns403()
     {
         var ct = TestContext.Current.CancellationToken;
-        // Bob has no query:execute on the database.
-        var session = await LoginHelper.SignInAsync("bob", "dev", ct);
+        var (aliceSession, _, databaseId) = await QueryTestSetup.AliceWithBlueServerAsync(factory, ct);
+        using var _a = aliceSession;
+
+        // Bob has no database role on the test database
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        var bobXsrf = await bobSession.FetchXsrfTokenAsync(ct);
+
+        using var req = QueryTestSetup.MutationRequest(HttpMethod.Post, "/api/query/explain", bobXsrf,
+            new { databaseId, sql = "SELECT 1", analyze = false });
+        var resp = await bobSession.Client.SendAsync(req, ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Explain_SensitiveColumn_Returns403()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await QueryTestSetup.AliceWithBlueServerAsync(factory, ct);
         using var _ = session;
-        var xsrf = await session.FetchXsrfTokenAsync(ct);
+
+        await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
 
         using var req = QueryTestSetup.MutationRequest(HttpMethod.Post, "/api/query/explain", xsrf,
-            new { databaseId = Guid.NewGuid(), sql = "SELECT 1", analyze = false });
+            new { databaseId, sql = "SELECT email FROM public.users LIMIT 1", analyze = false });
         var resp = await session.Client.SendAsync(req, ct);
 
-        Assert.True(resp.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound);
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(ct);
+        Assert.Equal("sensitive_columns", body.GetProperty("type").GetString());
+        var columns = body.GetProperty("columns");
+        Assert.True(columns.GetArrayLength() > 0);
     }
 }
