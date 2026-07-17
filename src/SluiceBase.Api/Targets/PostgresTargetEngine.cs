@@ -6,6 +6,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using Npgsql;
 using NpgsqlTypes;
+using SluiceBase.Api.Queries;
 using SluiceBase.Core.Queries;
 using SluiceBase.Core.Schemas;
 using SluiceBase.Core.Targets;
@@ -554,6 +555,36 @@ internal sealed class PostgresTargetEngine : ITargetEngine
 
         await tx.CommitAsync(ct);
         return new QueryData(columns, [.. rows]);
+    }
+
+    public async Task<QueryPlan> ExplainAsync(
+        string connectionString, string sql, bool analyze, CancellationToken ct)
+    {
+        await using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+
+        // Same read-only guard as ExecuteQueryAsync. With ANALYZE the statement actually
+        // runs, so the read-only transaction is what stops a write from mutating data;
+        // we always roll back so nothing is committed either way.
+        await using (var setReadOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", conn, tx))
+        {
+            await setReadOnly.ExecuteNonQueryAsync(ct);
+        }
+
+        var options = analyze ? "ANALYZE true, BUFFERS true, FORMAT JSON" : "FORMAT JSON";
+        var explainSql = $"EXPLAIN ({options}) {sql}";
+
+        string planJson;
+        await using (var cmd = new NpgsqlCommand(explainSql, conn, tx))
+        {
+            var result = await cmd.ExecuteScalarAsync(ct);
+            planJson = result as string ?? result?.ToString() ?? "[]";
+        }
+
+        await tx.RollbackAsync(ct);
+
+        return new QueryPlan(planJson, PostgresPlanParser.Parse(planJson));
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
