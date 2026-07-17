@@ -395,18 +395,6 @@ export function useExportSchemaDdl() {
   });
 }
 
-// useExecuteQuery: change body field name
-export function useExecuteQuery() {
-  return useMutation({
-    mutationFn: ({ databaseId, sql }: { databaseId: string; sql: string }) =>
-      apiRequest<
-        paths["/api/query"]["post"]["requestBody"]["content"]["application/json"],
-        paths["/api/query"]["post"]["responses"][200]["content"]["application/json"]
-      >("/api/query", { method: "POST", body: { databaseId, sql } }),
-  });
-}
-
-
 export function useTestConnection() {
   return useMutation({
     mutationFn: (id: string) =>
