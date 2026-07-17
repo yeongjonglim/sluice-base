@@ -193,17 +193,33 @@ internal sealed class QueryService(
                 .GetConnectionStringAsync(database.Id, CredentialKind.Read, ct);
 
             var targetEngine = engineRegistry.Resolve(database.Server!.Kind);
+
+            QueryPlanSummary? estimate = null;
+            if (configuration.GetValue("Query:AutoExplain", true))
+            {
+                try
+                {
+                    var estimatePlan = await targetEngine.ExplainAsync(connectionString, sql, analyze: false, linkedCts.Token);
+                    estimate = estimatePlan.Summary;
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    // Advisory estimate is best-effort; never fail the real query over it.
+                    _ = ex;
+                }
+            }
+
             var data = await targetEngine.ExecuteQueryAsync(connectionString, sql, linkedCts.Token);
             var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
             rowCount = data.Rows.Length;
             logStatus = QueryLogStatus.Success;
-            response = new QueryEndpoints.QueryResponse(data.Columns, data.Rows, rowCount.Value, durationMs, null);
+            response = new QueryEndpoints.QueryResponse(data.Columns, data.Rows, rowCount.Value, durationMs, null, estimate);
         }
         catch (InvalidOperationException ex)
         {
             var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
             logStatus = QueryLogStatus.Error;
-            response = new QueryEndpoints.QueryResponse(null, null, 0, durationMs, ex.Message);
+            response = new QueryEndpoints.QueryResponse(null, null, 0, durationMs, ex.Message, null);
 
             var log = QueryLog.Create(user.Id, database.Id, sql, logStatus, startedAt, durationMs, null, ex.Message, touchedSensitive, source);
             db.QueryLogs.Add(log);
@@ -214,13 +230,13 @@ internal sealed class QueryService(
         {
             var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
             logStatus = QueryLogStatus.Timeout;
-            response = new QueryEndpoints.QueryResponse(null, null, 0, durationMs, $"Query timed out after {timeoutSeconds}s.");
+            response = new QueryEndpoints.QueryResponse(null, null, 0, durationMs, $"Query timed out after {timeoutSeconds}s.", null);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
             logStatus = QueryLogStatus.Error;
-            response = new QueryEndpoints.QueryResponse(null, null, 0, durationMs, ex.Message);
+            response = new QueryEndpoints.QueryResponse(null, null, 0, durationMs, ex.Message, null);
         }
 
         var queryLog = QueryLog.Create(user.Id, database.Id, sql, logStatus, startedAt, response.DurationMs, rowCount, response.Error, touchedSensitive, source);

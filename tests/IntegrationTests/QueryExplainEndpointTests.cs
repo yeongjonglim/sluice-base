@@ -79,4 +79,22 @@ public sealed class QueryExplainEndpointTests(SluiceBaseStackFactory factory)
         var columns = body.GetProperty("columns");
         Assert.True(columns.GetArrayLength() > 0);
     }
+
+    [Fact]
+    public async Task Query_SuccessfulSelect_IncludesPlanEstimate()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await QueryTestSetup.AliceWithBlueServerAsync(factory, ct);
+        using var _ = session;
+
+        using var req = QueryTestSetup.MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new { databaseId, sql = "SELECT * FROM users" });
+        var resp = await session.Client.SendAsync(req, ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<QueryEndpoints.QueryResponse>(ct);
+        Assert.NotNull(body);
+        Assert.NotNull(body!.Estimate);
+        Assert.True(body.Estimate!.TotalCost > 0);
+    }
 }

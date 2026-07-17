@@ -175,7 +175,8 @@ internal static class QueryEndpoints
         string?[][]? Rows,
         int RowCount,
         int DurationMs,
-        string? Error);
+        string? Error,
+        QueryPlanSummary? Estimate);
 
     public sealed record QueryHistoryItem(
         QueryLogId Id,

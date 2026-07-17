@@ -1149,6 +1149,7 @@ export interface components {
             /** Format: int32 */
             durationMs: number | string;
             error: null | string;
+            estimate: null | components["schemas"]["QueryPlanSummary"];
         };
         /** @enum {string} */
         QuerySource: "Ui" | "Mcp";

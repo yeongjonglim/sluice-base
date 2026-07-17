@@ -3363,7 +3363,8 @@
           "rows",
           "rowCount",
           "durationMs",
-          "error"
+          "error",
+          "estimate"
         ],
         "type": "object",
         "properties": {
@@ -3411,6 +3412,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "estimate": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QueryPlanSummary"
+              }
             ]
           }
         }
