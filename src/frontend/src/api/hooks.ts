@@ -7,9 +7,11 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { notifications } from "@mantine/notifications";
+import type { SQLNamespace } from "@codemirror/lang-sql";
 import type { paths } from "./schema.ts";
 import { ApiError, apiRequest } from "@/api/client";
 import { downloadTextFile } from "@/utils/download";
+import { quoteSqlIdentifier } from "@/utils/quoteSqlIdentifier";
 
 export function createAppQueryClient(): QueryClient {
   return new QueryClient({
@@ -329,6 +331,17 @@ export function useTestDatabaseConnection(serverId: string) {
 
 type SchemaTreeResponse = paths["/api/schema/{databaseId}"]["get"]["responses"][200]["content"]["application/json"];
 
+// Wraps an identifier in a lang-sql completion whose inserted text (`apply`) is
+// quoted via quoteSqlIdentifier only when it needs it. lang-sql already quotes
+// mixed-case/special identifiers on its own, but it is blind to reserved words —
+// a bare `group` passes its lowercase check and inserts unquoted — so we make
+// quoteSqlIdentifier authoritative across every level, matching the identifier
+// quoting the generate-query snippet applies (see buildSelectSnippet).
+function identifierCompletion(name: string, type: "type" | "property") {
+  const quoted = quoteSqlIdentifier(name);
+  return quoted === name ? { label: name, type } : { label: name, type, apply: quoted };
+}
+
 export function schemaToCompletions(
   tree: {
     schemas: Array<{
@@ -343,17 +356,25 @@ export function schemaToCompletions(
       }>;
     }>;
   },
-): Record<string, Array<string>> {
-  const result: Record<string, Array<string>> = {};
+): SQLNamespace {
+  const schemas: Record<string, SQLNamespace> = {};
   for (const schema of tree.schemas) {
     const relations = [...schema.tables, ...(schema.views ?? [])];
+    const tables: Record<string, SQLNamespace> = {};
     for (const relation of relations) {
-      result[`${schema.name}.${relation.name}`] = relation.columns
-        .filter((c) => !c.isRestricted)
-        .map((c) => c.name);
+      tables[relation.name] = {
+        self: identifierCompletion(relation.name, "type"),
+        children: relation.columns
+          .filter((c) => !c.isRestricted)
+          .map((c) => identifierCompletion(c.name, "property")),
+      };
     }
+    schemas[schema.name] = {
+      self: identifierCompletion(schema.name, "type"),
+      children: tables,
+    };
   }
-  return result;
+  return schemas;
 }
 
 export function useSchema(databaseId: string | null) {
