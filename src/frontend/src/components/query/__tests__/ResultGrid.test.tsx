@@ -24,7 +24,7 @@ describe("ResultGrid", () => {
     renderGrid({
       ...base(),
       status: "success",
-      response: { columns: ["id", "name"], rows: [["1", "Ada"]], rowCount: 1, durationMs: 5, error: null },
+      response: { columns: ["id", "name"], rows: [["1", "Ada"]], rowCount: 1, durationMs: 5, error: null, estimate: null },
     });
     // Column headers and the stats render outside the virtualized body.
     expect(screen.getByText("id")).toBeInTheDocument();
@@ -36,7 +36,7 @@ describe("ResultGrid", () => {
     renderGrid({
       ...base(),
       status: "error",
-      response: { columns: null, rows: null, rowCount: 0, durationMs: 2, error: "boom" },
+      response: { columns: null, rows: null, rowCount: 0, durationMs: 2, error: "boom", estimate: null },
     });
     expect(screen.getByText("boom")).toBeInTheDocument();
   });
