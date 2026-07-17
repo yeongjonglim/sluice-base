@@ -392,11 +392,12 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
 
         // ANALYZE executes the statement; the read-only transaction must reject a write
         // rather than mutate data.
-        await Assert.ThrowsAnyAsync<Npgsql.PostgresException>(() =>
+        var ex = await Assert.ThrowsAnyAsync<Npgsql.PostgresException>(() =>
             _targetEngine.ExplainAsync(
                 connectionString,
                 "UPDATE users SET email = email",
                 analyze: true,
                 ct));
+        Assert.Equal(Npgsql.PostgresErrorCodes.ReadOnlySqlTransaction, ex.SqlState);
     }
 }
