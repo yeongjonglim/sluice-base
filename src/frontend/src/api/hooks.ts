@@ -167,6 +167,9 @@ export type CreateServerRequest =
   paths["/api/server"]["post"]["requestBody"]["content"]["application/json"];
 export type ExecuteQueryResponse =
   paths["/api/query"]["post"]["responses"][200]["content"]["application/json"];
+export type ExplainResponse =
+  paths["/api/query/explain"]["post"]["responses"][200]["content"]["application/json"];
+export type QueryPlanSummary = ExplainResponse["summary"];
 
 export function useServers() {
   return useQuery({

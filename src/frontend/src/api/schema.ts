@@ -180,6 +180,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/query/explain": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ExplainQuery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/query/history": {
         parameters: {
             query?: never;
@@ -970,6 +986,11 @@ export interface components {
             fromDirect: boolean;
             fromGroups: components["schemas"]["GroupRef"][];
         };
+        ExplainRequest: {
+            databaseId: components["schemas"]["DatabaseId"];
+            sql: string;
+            analyze: boolean;
+        };
         ExtensionInfo: {
             name: string;
             version: string;
@@ -1102,6 +1123,20 @@ export interface components {
         QueryLogId: unknown;
         /** @enum {string} */
         QueryLogStatus: "Unknown" | "Success" | "Error" | "Timeout" | "Blocked";
+        QueryPlanResponse: {
+            planJson: string;
+            summary: components["schemas"]["QueryPlanSummary"];
+        };
+        QueryPlanSummary: {
+            /** Format: double */
+            totalCost: number | string;
+            /** Format: double */
+            estimatedRows: number | string;
+            rootNode: string;
+            hasSeqScan: boolean;
+            /** Format: double */
+            actualTotalMs: null | number | string;
+        };
         QueryRequest: {
             databaseId: components["schemas"]["DatabaseId"];
             sql: string;
@@ -1114,6 +1149,7 @@ export interface components {
             /** Format: int32 */
             durationMs: number | string;
             error: null | string;
+            estimate: null | components["schemas"]["QueryPlanSummary"];
         };
         /** @enum {string} */
         QuerySource: "Ui" | "Mcp";
@@ -1558,6 +1594,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QueryResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ExplainQuery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExplainRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueryPlanResponse"];
                 };
             };
             /** @description Bad Request */

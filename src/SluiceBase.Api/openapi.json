@@ -272,6 +272,49 @@
         }
       }
     },
+    "/api/query/explain": {
+      "post": {
+        "tags": [
+          "QueryEndpoints"
+        ],
+        "operationId": "ExplainQuery",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExplainRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueryPlanResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/query/history": {
       "get": {
         "tags": [
@@ -2610,6 +2653,25 @@
           }
         }
       },
+      "ExplainRequest": {
+        "required": [
+          "databaseId",
+          "sql",
+          "analyze"
+        ],
+        "type": "object",
+        "properties": {
+          "databaseId": {
+            "$ref": "#/components/schemas/DatabaseId"
+          },
+          "sql": {
+            "type": "string"
+          },
+          "analyze": {
+            "type": "boolean"
+          }
+        }
+      },
       "ExtensionInfo": {
         "required": [
           "name",
@@ -3222,6 +3284,64 @@
         ],
         "type": "string"
       },
+      "QueryPlanResponse": {
+        "required": [
+          "planJson",
+          "summary"
+        ],
+        "type": "object",
+        "properties": {
+          "planJson": {
+            "type": "string"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/QueryPlanSummary"
+          }
+        }
+      },
+      "QueryPlanSummary": {
+        "required": [
+          "totalCost",
+          "estimatedRows",
+          "rootNode",
+          "hasSeqScan",
+          "actualTotalMs"
+        ],
+        "type": "object",
+        "properties": {
+          "totalCost": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "estimatedRows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
+          "rootNode": {
+            "type": "string"
+          },
+          "hasSeqScan": {
+            "type": "boolean"
+          },
+          "actualTotalMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          }
+        }
+      },
       "QueryRequest": {
         "required": [
           "databaseId",
@@ -3243,7 +3363,8 @@
           "rows",
           "rowCount",
           "durationMs",
-          "error"
+          "error",
+          "estimate"
         ],
         "type": "object",
         "properties": {
@@ -3291,6 +3412,16 @@
             "type": [
               "null",
               "string"
+            ]
+          },
+          "estimate": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/QueryPlanSummary"
+              }
             ]
           }
         }

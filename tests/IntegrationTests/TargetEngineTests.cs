@@ -351,4 +351,53 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
         Assert.NotNull(fn.Definition);
         Assert.Contains("CREATE OR REPLACE FUNCTION", fn.Definition!, StringComparison.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_Explain_Estimate_ReturnsCostAndRows()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var plan = await _targetEngine.ExplainAsync(
+            connectionString, "SELECT * FROM users", analyze: false, ct);
+
+        Assert.NotEmpty(plan.PlanJson);
+        Assert.True(plan.Summary.TotalCost > 0);
+        Assert.Null(plan.Summary.ActualTotalMs);
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_Explain_Analyze_PopulatesActualTime()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        var plan = await _targetEngine.ExplainAsync(
+            connectionString, "SELECT * FROM users", analyze: true, ct);
+
+        Assert.NotNull(plan.Summary.ActualTotalMs);
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_Explain_Analyze_WriteIsBlockedByReadOnlyTx()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp
+            .GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+
+        // ANALYZE executes the statement; the read-only transaction must reject a write
+        // rather than mutate data.
+        var ex = await Assert.ThrowsAnyAsync<Npgsql.PostgresException>(() =>
+            _targetEngine.ExplainAsync(
+                connectionString,
+                "UPDATE users SET email = email",
+                analyze: true,
+                ct));
+        Assert.Equal(Npgsql.PostgresErrorCodes.ReadOnlySqlTransaction, ex.SqlState);
+    }
 }

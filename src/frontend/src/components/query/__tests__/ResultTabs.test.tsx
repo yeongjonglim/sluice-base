@@ -9,7 +9,7 @@ function entry(partial: Partial<RunEntry> & Pick<RunEntry, "id" | "index" | "tex
   return {
     fromPos: 0, toPos: 8, fromLine: 1, toLine: 1,
     status: "success",
-    response: { columns: ["n"], rows: [["1"]], rowCount: 1, durationMs: 1, error: null },
+    response: { columns: ["n"], rows: [["1"]], rowCount: 1, durationMs: 1, error: null, estimate: null },
     error: null,
     ...partial,
   };
@@ -50,7 +50,7 @@ describe("ResultTabs", () => {
 
   it("falls back to the first tab when a new run batch replaces the tabs", async () => {
     const grid = (col: string): RunEntry["response"] => ({
-      columns: [col], rows: [["x"]], rowCount: 1, durationMs: 1, error: null,
+      columns: [col], rows: [["x"]], rowCount: 1, durationMs: 1, error: null, estimate: null,
     });
     const batch1 = [
       entry({ id: "1-0", index: 0, text: "SELECT a", response: grid("colA") }),
