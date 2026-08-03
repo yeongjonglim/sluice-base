@@ -44,6 +44,10 @@ public sealed class UpdateRequest
     public User? CancelledBy { get; private set; }
     public UpdateRequest? SourceRequest { get; private set; }
 
+    // Append-only events (currently Previewed). EF populates the backing list.
+    private readonly List<UpdateRequestEvent> _events = [];
+    public IReadOnlyCollection<UpdateRequestEvent> Events => _events;
+
     // Trigger names are an implementation detail — hidden from callers.
     private enum Trigger
     {
