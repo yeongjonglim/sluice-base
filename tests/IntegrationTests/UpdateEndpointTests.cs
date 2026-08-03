@@ -643,6 +643,42 @@ public class UpdateEndpointTests
         Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
     }
 
+    [Fact]
+    public async Task Preview_SqlError_Returns200_WithFailedEvent()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, dbId) = await AliceWithBlueServerAsync(
+            [Permissions.UpdateSubmit, Permissions.UpdateExecute], ct);
+        using var _ = session;
+
+        // References a nonexistent table — deterministically throws PostgresException.
+        var id = await SubmitAsync(session, xsrf, dbId, "UPDATE public.nonexistent SET foo = bar", ct);
+
+        using var req = MutationRequest(HttpMethod.Post, $"/api/update/{id}/preview", xsrf);
+        var resp = await session.Client.SendAsync(req, ct);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+        var root = doc.RootElement;
+        var error = root.GetProperty("error").GetString();
+        Assert.False(string.IsNullOrEmpty(error));
+        Assert.Equal(0, root.GetProperty("resultSets").GetArrayLength());
+        Assert.Equal(0, root.GetProperty("affectedRows").GetInt32());
+
+        // No commit, no state change — the request stays Pending.
+        using var getReq = new HttpRequestMessage(HttpMethod.Get, $"/api/update/{id}");
+        var getResp = await session.Client.SendAsync(getReq, ct);
+        using var getDoc = JsonDocument.Parse(await getResp.Content.ReadAsStringAsync(ct));
+        var getRoot = getDoc.RootElement;
+        Assert.Equal("Pending", getRoot.GetProperty("status").GetString());
+
+        var events = getRoot.GetProperty("events");
+        Assert.Equal(1, events.GetArrayLength());
+        Assert.Equal("Previewed", events[0].GetProperty("type").GetString());
+        Assert.False(events[0].GetProperty("success").GetBoolean());
+        Assert.False(string.IsNullOrEmpty(events[0].GetProperty("error").GetString()));
+    }
+
     private sealed record ListUserBody(UserRow[] Users);
 
     private sealed record UserRow(string Id, string Email);
