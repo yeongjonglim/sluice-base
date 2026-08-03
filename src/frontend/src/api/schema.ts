@@ -829,6 +829,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/update/{id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["PreviewUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1077,6 +1093,10 @@ export interface components {
         PrimaryKey: {
             columns: string[];
         };
+        QueryData: {
+            columns: string[];
+            rows: string[][];
+        };
         QueryHistoryItem: {
             id: components["schemas"]["QueryLogId"];
             databaseId: null | components["schemas"]["DatabaseId"];
@@ -1231,6 +1251,14 @@ export interface components {
             name: string;
             description: null | string;
         };
+        UpdatePreviewResponse: {
+            resultSets: components["schemas"]["QueryData"][];
+            /** Format: int32 */
+            affectedRows: number | string;
+            /** Format: int32 */
+            durationMs: number | string;
+            error: null | string;
+        };
         UpdateRequestDetailResponse: {
             id: components["schemas"]["UpdateRequestId"];
             databaseId: null | components["schemas"]["DatabaseId"];
@@ -1263,7 +1291,26 @@ export interface components {
             execAffectedRows: null | number | string;
             execError: null | string;
             sourceRequestId: null | components["schemas"]["UpdateRequestId"];
+            events: components["schemas"]["UpdateRequestEventItem"][];
         };
+        UpdateRequestEventItem: {
+            type: components["schemas"]["UpdateRequestEventType"];
+            actorId: null | components["schemas"]["UserId"];
+            actorName: null | string;
+            /** Format: date-time */
+            at: string;
+            note: null | string;
+            success: null | boolean;
+            /** Format: int32 */
+            durationMs: null | number | string;
+            /** Format: int32 */
+            affectedRows: null | number | string;
+            /** Format: int32 */
+            resultSetCount: null | number | string;
+            error: null | string;
+        };
+        /** @enum {string} */
+        UpdateRequestEventType: "Previewed";
         /** Format: uuid */
         UpdateRequestId: string;
         /** @enum {string} */
@@ -2937,6 +2984,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": string;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+        };
+    };
+    PreviewUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdatePreviewResponse"];
                 };
             };
             /** @description Not Found */
