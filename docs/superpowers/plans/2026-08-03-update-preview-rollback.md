@@ -172,6 +172,12 @@ public sealed class UpdateRequestEvent
     public UpdateRequestEventType Type { get; private set; }
     public UserId? ActorId { get; private set; }
     public DateTimeOffset At { get; private set; }
+
+    // General text slot so the deferred full migration of lifecycle events fits
+    // this same table: reason (Submitted), review note (Approved/Rejected), cancel
+    // note (Cancelled), edit rationale (Edited). Null for Previewed.
+    public string? Note { get; private set; }
+
     public bool? Success { get; private set; }
     public int? DurationMs { get; private set; }
     public int? AffectedRows { get; private set; }
@@ -897,6 +903,7 @@ In the request/response records region of `UpdateEndpoints`, add:
         UserId? ActorId,
         string? ActorName,
         DateTimeOffset At,
+        string? Note,
         bool? Success,
         int? DurationMs,
         int? AffectedRows,
@@ -932,6 +939,7 @@ In `ToDetail`, add the events projection as the last constructor argument:
                     e.ActorId,
                     e.Actor != null ? (e.Actor.Name ?? e.Actor.Email) : null,
                     e.At,
+                    e.Note,
                     e.Success,
                     e.DurationMs,
                     e.AffectedRows,

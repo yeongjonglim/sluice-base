@@ -141,9 +141,10 @@ public sealed class UpdateRequestEvent
 {
     public UpdateRequestEventId Id { get; private set; }
     public UpdateRequestId RequestId { get; private set; }
-    public UpdateRequestEventType Type { get; private set; }   // Previewed (+ future: Edited, …)
+    public UpdateRequestEventType Type { get; private set; }   // Previewed (+ future: Submitted/Approved/Rejected/Cancelled/Executed/Edited)
     public UserId? ActorId { get; private set; }
     public DateTimeOffset At { get; private set; }
+    public string? Note { get; private set; }                  // reason / review note / cancel note / edit rationale — null for Previewed
     public bool? Success { get; private set; }
     public int? DurationMs { get; private set; }
     public int? AffectedRows { get; private set; }
@@ -162,6 +163,16 @@ public sealed class UpdateRequestEvent
 public enum UpdateRequestEventType { Previewed }
 ```
 
+- **Fit for the deferred full migration.** The metric columns are all nullable,
+  so lifecycle events (Submit/Approve/Reject/Cancel/Execute) degrade to null on
+  them; the general `Note` column carries their reason / review note / cancel
+  note. With those, every current and near-future event type fits this one table
+  — typed nullable columns per type, mirroring how `UpdateRequest` already models
+  its own lifecycle (rather than a JSON payload blob). The **only** field a future
+  event needs that this schema lacks is `SqlSnapshot` for the `Edited` event; it
+  is edit-specific (snapshot-after vs. before/after is a real design choice) and
+  is added with the edit feature, which needs a migration regardless. `Previewed`
+  leaves `Note` null.
 - `UpdateRequestEventId` is a Vogen id (`FromNewVersion7Guid`), matching the
   other ids.
 - New `DbSet<UpdateRequestEvent> UpdateRequestEvents`, an EF configuration under
