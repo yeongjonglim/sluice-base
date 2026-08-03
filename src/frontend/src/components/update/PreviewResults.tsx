@@ -37,7 +37,7 @@ export function PreviewResults({ result }: { result: UpdatePreviewResponse }) {
               columns={set.columns}
               rows={set.rows}
               rowCount={set.rows.length}
-              durationMs={result.durationMs}
+              durationMs={Number(result.durationMs)}
               resultIndex={i}
             />
           </Box>
