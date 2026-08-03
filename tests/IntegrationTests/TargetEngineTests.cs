@@ -199,9 +199,10 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
         var result = await _targetEngine.ExecuteUpdateAsync(
             builder.ConnectionString,
             "UPDATE public.users SET email = email WHERE 1=0",
+            commit: true,
             ct);
 
-        Assert.Equal(0, result);
+        Assert.Equal(0, result.AffectedRows);
     }
 
     [Fact]
@@ -222,6 +223,7 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
             await _targetEngine.ExecuteUpdateAsync(
                 builder.ConnectionString,
                 "UPDATE public.nonexistent SET foo = bar",
+                commit: true,
                 ct));
     }
 

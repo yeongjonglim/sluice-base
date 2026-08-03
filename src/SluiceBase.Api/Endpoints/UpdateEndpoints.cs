@@ -371,11 +371,12 @@ internal static class UpdateEndpoints
             var connectionString = await connectionFactory
                 .GetConnectionStringAsync(database.Id, CredentialKind.Write, ct);
             var targetEngine = engineRegistry.Resolve(database.Server!.Kind);
-            var raw = await targetEngine.ExecuteUpdateAsync(
+            var result = await targetEngine.ExecuteUpdateAsync(
                 connectionString,
                 request.SqlText,
+                commit: true,
                 linkedCts.Token);
-            affectedRows = raw >= 0 ? raw : null;
+            affectedRows = result.AffectedRows;
             success = true;
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
