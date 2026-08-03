@@ -51,6 +51,7 @@ vi.mock("@/api/hooks", () => ({
   useSubmitUpdate: () => ({ mutate: mockMutate, isPending: false }),
   useUpdateRequest: () => mockUpdateRequestResult,
   useSchemaCompletions: () => ({ data: undefined }),
+  usePreviewUpdate: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null, data: null }),
 }));
 
 afterEach(() => {
@@ -128,7 +129,7 @@ describe("NewUpdatePage — route component", () => {
 
   it("renders form with source data when loaded", () => {
     mockUpdateRequestResult = {
-      data: { databaseId: "db-abc", sqlText: "UPDATE users SET name = 'x'" },
+      data: { databaseId: "db-abc", sqlText: "UPDATE users SET name = 'x'", events: [] },
       isPending: false,
       isError: false,
     };

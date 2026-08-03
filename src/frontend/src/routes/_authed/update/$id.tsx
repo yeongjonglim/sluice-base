@@ -2,6 +2,7 @@ import {
   Alert,
   Badge,
   Button,
+  Code,
   Group,
   Modal,
   Skeleton,
@@ -11,17 +12,29 @@ import {
   Timeline,
   Title,
 } from "@mantine/core";
-import { IconBan, IconCheck, IconPlayerPlay, IconSend, IconX } from "@tabler/icons-react";
+import {
+  IconBan,
+  IconCheck,
+  IconEye,
+  IconPlayerPlay,
+  IconSend,
+  IconX,
+} from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import React, { useState } from "react";
+import type { UpdatePreviewResponse } from "@/api/hooks";
 import { SqlEditor } from "@/components/SqlEditor";
+import { ApiError } from "@/api/client";
+import { PreviewResults } from "@/components/update/PreviewResults";
+import { isBlocked } from "@/api/useQueryRuns";
 import {
   meQueryOptions,
   useApproveUpdate,
   useCancelUpdate,
   useExecuteUpdate,
+  usePreviewUpdate,
   useRejectUpdate,
   useUpdateRequest,
 } from "@/api/hooks";
@@ -57,11 +70,13 @@ function UpdateDetailPage() {
   const reject = useRejectUpdate();
   const cancel = useCancelUpdate();
   const execute = useExecuteUpdate();
+  const preview = usePreviewUpdate();
 
   const [approveModalOpen, { open: openApprove, close: closeApprove }] = useDisclosure(false);
   const [rejectModalOpen, { open: openReject, close: closeReject }] = useDisclosure(false);
   const [cancelModalOpen, { open: openCancel, close: closeCancel }] = useDisclosure(false);
   const [reviewNote, setReviewNote] = useState("");
+  const [previewResult, setPreviewResult] = useState<UpdatePreviewResponse | null>(null);
 
   const canApprove = meData?.permissions.includes("update:approve") ?? false;
   const canSubmit = meData?.permissions.includes("update:submit") ?? false;
@@ -86,6 +101,7 @@ function UpdateDetailPage() {
   }
 
   const r = request.data;
+  const canPreview = r.submitterId === meData?.id || canApprove || canExecute;
 
   function handleApprove() {
     if (!reviewNote.trim()) return;
@@ -176,6 +192,23 @@ function UpdateDetailPage() {
       {/* SQL */}
       <SqlEditor value={r.sqlText} editable={false} />
 
+      {/* Preview output */}
+      {preview.isError && isBlocked(preview.error) && (
+        <Alert color="orange" title="Preview blocked — restricted columns">
+          <Text size="sm" mb="xs">
+            This SQL references columns you are not authorised to access:
+          </Text>
+          {(((preview.error instanceof ApiError ? preview.error.body : null) as
+            | { columns?: Array<{ schema: string; table: string; column: string }> }
+            | null)?.columns ?? []).map((c, i) => (
+            <Code key={i} display="block" fz="xs">
+              {c.schema}.{c.table}.{c.column}
+            </Code>
+          ))}
+        </Alert>
+      )}
+      {previewResult && !preview.isError && <PreviewResults result={previewResult} />}
+
       {/* Timeline */}
       {(() => {
         const eventItems: Array<{ ts: string; node: React.ReactNode }> = (
@@ -256,6 +289,28 @@ function UpdateDetailPage() {
                   ),
                 }
               : null,
+            ...r.events.map((e) => ({
+              ts: e.at,
+              node: (
+                <Timeline.Item
+                  key={`preview-${e.at}`}
+                  title="Previewed"
+                  bullet={<IconEye size={14} />}
+                  color={e.success ? "grape" : "red"}
+                >
+                  <Stack gap={4} mt={4}>
+                    <Text size="sm" c="dimmed">
+                      {e.actorName} &middot; {new Date(e.at).toLocaleString()}
+                    </Text>
+                    <Text size="sm" c="dimmed">
+                      {e.success
+                        ? `${e.affectedRows ?? 0} rows affected · ${e.resultSetCount ?? 0} result set(s) · rolled back`
+                        : (e.error ?? "Preview failed")}
+                    </Text>
+                  </Stack>
+                </Timeline.Item>
+              ),
+            })),
           ] as Array<{ ts: string; node: React.ReactNode } | null>
         )
           .filter((x): x is { ts: string; node: React.ReactNode } => x !== null)
@@ -299,6 +354,18 @@ function UpdateDetailPage() {
         {r.status === "Approved" && canExecute && (
           <Button color="teal" onClick={handleExecute} loading={execute.isPending}>
             Execute
+          </Button>
+        )}
+        {canPreview && (r.status === "Pending" || r.status === "Approved") && (
+          <Button
+            variant="light"
+            color="grape"
+            loading={preview.isPending}
+            onClick={() =>
+              preview.mutate(id, { onSuccess: (data) => setPreviewResult(data) })
+            }
+          >
+            Preview
           </Button>
         )}
         {canSubmit && (
