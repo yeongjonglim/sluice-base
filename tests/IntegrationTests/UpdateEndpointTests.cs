@@ -542,6 +542,107 @@ public class UpdateEndpointTests
         Assert.Contains(withResults.Requests, r => r.Id == detail!.Id);
     }
 
+    // ── preview ────────────────────────────────────────────────────────────────
+
+    private async Task<Guid> SubmitAsync(
+        AuthenticatedSession session, string xsrf, DatabaseId databaseId, string sql, CancellationToken ct)
+    {
+        using var req = MutationRequest(HttpMethod.Post, "/api/update", xsrf,
+            new { databaseId, sqlText = sql, reason = "preview test" });
+        var resp = await session.Client.SendAsync(req, ct);
+        resp.EnsureSuccessStatusCode();
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+        return doc.RootElement.GetProperty("id").GetGuid();
+    }
+
+    [Fact]
+    public async Task Preview_RollsBack_AndReturnsResultSet()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, dbId) = await AliceWithBlueServerAsync(
+            [Permissions.UpdateSubmit, Permissions.UpdateExecute], ct);
+        using var _ = session;
+
+        // A statement that returns a result set and mutates — RETURNING proves both.
+        var id = await SubmitAsync(session, xsrf, dbId,
+            "UPDATE public.users SET email = 'previewed@test.com' WHERE id = 1 RETURNING id, email", ct);
+
+        using var req = MutationRequest(HttpMethod.Post, $"/api/update/{id}/preview", xsrf);
+        var resp = await session.Client.SendAsync(req, ct);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+
+        using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync(ct));
+        var root = doc.RootElement;
+        Assert.Equal(1, root.GetProperty("affectedRows").GetInt32());
+        Assert.Equal(1, root.GetProperty("resultSets").GetArrayLength());
+
+        // The request never leaves its pre-execution state.
+        using var getReq = new HttpRequestMessage(HttpMethod.Get, $"/api/update/{id}");
+        var getResp = await session.Client.SendAsync(getReq, ct);
+        using var getDoc = JsonDocument.Parse(await getResp.Content.ReadAsStringAsync(ct));
+        Assert.Equal("Pending", getDoc.RootElement.GetProperty("status").GetString());
+
+        // And the row was rolled back: a fresh read still sees the original value.
+        var conn = await _factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        await using var pg = new NpgsqlConnection(conn);
+        await pg.OpenAsync(ct);
+        await using var check = new NpgsqlCommand("SELECT email FROM public.users WHERE id = 1", pg);
+        Assert.NotEqual("previewed@test.com", (string?)await check.ExecuteScalarAsync(ct));
+    }
+
+    [Fact]
+    public async Task Preview_WritesPreviewEventToTimeline()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, dbId) = await AliceWithBlueServerAsync(
+            [Permissions.UpdateSubmit, Permissions.UpdateExecute], ct);
+        using var _ = session;
+        var id = await SubmitAsync(session, xsrf, dbId, "UPDATE public.users SET email = email WHERE id = 1", ct);
+
+        using var pReq = MutationRequest(HttpMethod.Post, $"/api/update/{id}/preview", xsrf);
+        (await session.Client.SendAsync(pReq, ct)).EnsureSuccessStatusCode();
+
+        using var getResp = await session.Client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, $"/api/update/{id}"), ct);
+        using var doc = JsonDocument.Parse(await getResp.Content.ReadAsStringAsync(ct));
+        var events = doc.RootElement.GetProperty("events");
+        Assert.Equal(1, events.GetArrayLength());
+        Assert.Equal("Previewed", events[0].GetProperty("type").GetString());
+    }
+
+    [Fact]
+    public async Task Preview_Returns403_WhenNeitherSubmitterNorReviewerNorExecutor()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // Alice submits; Bob (no roles on the db) tries to preview.
+        var (alice, aliceXsrf, dbId) = await AliceWithBlueServerAsync([Permissions.UpdateSubmit], ct);
+        using var _ = alice;
+        var id = await SubmitAsync(alice, aliceXsrf, dbId, "UPDATE public.users SET email = email WHERE id = 1", ct);
+
+        using var bob = await LoginHelper.SignInAsync("bob", "dev", ct);
+        var bobXsrf = await bob.FetchXsrfTokenAsync(ct);
+        using var req = MutationRequest(HttpMethod.Post, $"/api/update/{id}/preview", bobXsrf);
+        var resp = await bob.Client.SendAsync(req, ct);
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Preview_Returns409_ForRejectedRequest()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, dbId) = await AliceWithBlueServerAsync(
+            [Permissions.UpdateSubmit, Permissions.UpdateApprove, Permissions.UpdateExecute], ct);
+        using var _ = session;
+        var id = await SubmitAsync(session, xsrf, dbId, "UPDATE public.users SET email = email WHERE id = 1", ct);
+
+        using var rej = MutationRequest(HttpMethod.Post, $"/api/update/{id}/reject", xsrf, new { note = "no" });
+        (await session.Client.SendAsync(rej, ct)).EnsureSuccessStatusCode();
+
+        using var req = MutationRequest(HttpMethod.Post, $"/api/update/{id}/preview", xsrf);
+        var resp = await session.Client.SendAsync(req, ct);
+        Assert.Equal(HttpStatusCode.Conflict, resp.StatusCode);
+    }
+
     private sealed record ListUserBody(UserRow[] Users);
 
     private sealed record UserRow(string Id, string Email);
