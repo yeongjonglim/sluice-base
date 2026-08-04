@@ -25,13 +25,15 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("UserMenuHeader", () => {
-  it("renders both name and email when provided", () => {
+  it("renders the avatar initials alongside name and email when provided", () => {
     render(
       React.createElement(UserMenuHeader, { name: "Ada Lovelace", email: "ada@example.com" }),
       { wrapper: Wrapper },
     );
     expect(screen.getByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
+    // Mantine derives "AL" initials from the name for the avatar placeholder.
+    expect(screen.getByText("AL")).toBeInTheDocument();
   });
 
   it("renders email only when name is missing", () => {
