@@ -33,7 +33,8 @@ internal sealed class QueryService(
     ITargetEngineRegistry engineRegistry,
     TimeProvider timeProvider,
     IConfiguration configuration,
-    IAccessResolver resolver) : IQueryService
+    IAccessResolver resolver,
+    SensitiveColumnGuard sensitiveGuard) : IQueryService
 {
     public async Task<QueryExecutionResult> ExecuteAsync(User user, DatabaseId databaseId, string sql, QuerySource source, CancellationToken ct)
     {
@@ -54,61 +55,25 @@ internal sealed class QueryService(
             return new QueryExecutionResult(QueryOutcome.Forbidden, null, null, null);
         }
 
-        // ── sensitive column check ────────────────────────────────────────────────
-        var sensitiveColumns = await db.SensitiveColumns
-            .AsNoTracking()
-            .Where(c => c.DatabaseId == database.Id)
-            .ToListAsync(ct);
+        // ── sensitive column check (shared with the update-preview endpoint) ──
+        var decision = await sensitiveGuard.EvaluateAsync(user.Id, database.Id, sql, ct);
+        var touchedSensitive = decision.Touched.ToArray();
 
-        string[] touchedSensitive = [];
-
-        if (sensitiveColumns.Count > 0)
+        if (decision.BlockedHits.Count > 0)
         {
-            var allSensitive = sensitiveColumns
-                .Select(c => (c.SchemaName, c.TableName, c.ColumnName))
+            var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
+            var logEntry = QueryLog.Create(user.Id, database.Id, sql,
+                QueryLogStatus.Blocked, startedAt, durationMs, null,
+                $"Sensitive columns: {string.Join(", ", decision.BlockedHits.Select(h => $"{h.Schema}.{h.Table}.{h.Column}"))}",
+                touchedSensitive,
+                source);
+            db.QueryLogs.Add(logEntry);
+            await db.SaveChangesAsync(ct);
+
+            var blockedColumnsList = decision.BlockedHits
+                .Select(h => new BlockedColumn(h.Schema, h.Table, h.Column))
                 .ToList();
-            var allHits = SqlColumnChecker.FindBlockedColumns(sql, allSensitive);
-
-            if (allHits.Count > 0)
-            {
-                touchedSensitive = allHits
-                    .Select(h => $"{h.Schema}.{h.Table}.{h.Column}")
-                    .ToArray();
-
-                var sensitiveColumnIds = sensitiveColumns.Select(c => c.Id).ToList();
-                var bypassedIds = await db.UserColumnBypasses
-                    .AsNoTracking()
-                    .Where(b => b.UserId == user.Id && sensitiveColumnIds.Contains(b.SensitiveColumnId))
-                    .Select(b => b.SensitiveColumnId)
-                    .ToListAsync(ct);
-
-                var blockedColumns = sensitiveColumns
-                    .Where(c => !bypassedIds.Contains(c.Id))
-                    .Select(c => (c.SchemaName, c.TableName, c.ColumnName))
-                    .ToList();
-
-                if (blockedColumns.Count > 0)
-                {
-                    var blockedHits = SqlColumnChecker.FindBlockedColumns(sql, blockedColumns);
-
-                    if (blockedHits.Count > 0)
-                    {
-                        var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
-                        var logEntry = QueryLog.Create(user.Id, database.Id, sql,
-                            QueryLogStatus.Blocked, startedAt, durationMs, null,
-                            $"Sensitive columns: {string.Join(", ", blockedHits.Select(h => $"{h.Schema}.{h.Table}.{h.Column}"))}",
-                            touchedSensitive,
-                            source);
-                        db.QueryLogs.Add(logEntry);
-                        await db.SaveChangesAsync(ct);
-
-                        var blockedColumnsList = blockedHits
-                            .Select(h => new BlockedColumn(h.Schema, h.Table, h.Column))
-                            .ToList();
-                        return new QueryExecutionResult(QueryOutcome.Blocked, null, blockedColumnsList, null);
-                    }
-                }
-            }
+            return new QueryExecutionResult(QueryOutcome.Blocked, null, blockedColumnsList, null);
         }
 
         var timeoutSeconds = configuration.GetValue("Query:TimeoutSeconds", 30);

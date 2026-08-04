@@ -9,6 +9,7 @@ using SluiceBase.Api.Extensions;
 using SluiceBase.Api.Mcp;
 using SluiceBase.Api.Mcp.Tools;
 using SluiceBase.Api.Middleware;
+using SluiceBase.Api.Queries;
 using SluiceBase.Api.Servers;
 using SluiceBase.Api.Services;
 using SluiceBase.Api.Targets;
@@ -52,6 +53,7 @@ builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<ISchemaService, SchemaService>();
 builder.Services.AddScoped<IQueryService, QueryService>();
+builder.Services.AddScoped<SensitiveColumnGuard>();
 
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
 builder.Services.AddScoped<IMcpTokenService, McpTokenService>();

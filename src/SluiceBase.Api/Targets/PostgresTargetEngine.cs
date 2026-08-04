@@ -506,6 +506,43 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         return stdout;
     }
 
+    // Reads the CURRENT result set of an open reader into a QueryData, using the
+    // same value formatting as ExecuteQueryAsync (including the interval handling
+    // that avoids Npgsql's interval -> TimeSpan crash).
+    private static async Task<QueryData> ReadResultSet(NpgsqlDataReader reader, CancellationToken ct)
+    {
+        var columns = Enumerable.Range(0, reader.FieldCount).Select(reader.GetName).ToArray();
+
+        // PostgreSQL interval columns are read as NpgsqlInterval rather than via GetValue:
+        // Npgsql's default interval -> TimeSpan mapping throws for intervals carrying
+        // non-zero months or years, since TimeSpan has no concept of months. The same
+        // applies element-wise to interval[] columns.
+        var dataTypeNames = Enumerable.Range(0, reader.FieldCount)
+            .Select(reader.GetDataTypeName)
+            .ToArray();
+
+        var rows = new List<string?[]>();
+        while (await reader.ReadAsync(ct))
+        {
+            var row = new string?[reader.FieldCount];
+            for (var i = 0; i < reader.FieldCount; i++)
+            {
+                row[i] = reader.IsDBNull(i)
+                    ? null
+                    : dataTypeNames[i] switch
+                    {
+                        "interval" => FormatInterval(reader.GetFieldValue<NpgsqlInterval>(i)),
+                        "interval[]" => FormatIntervalArray(reader.GetFieldValue<NpgsqlInterval?[]>(i)),
+                        _ => FormatValue(reader.GetValue(i)),
+                    };
+            }
+
+            rows.Add(row);
+        }
+
+        return new QueryData(columns, [.. rows]);
+    }
+
     public async Task<QueryData> ExecuteQueryAsync(string connectionString, string sql, CancellationToken ct)
     {
         await using var conn = new NpgsqlConnection(connectionString);
@@ -517,43 +554,15 @@ internal sealed class PostgresTargetEngine : ITargetEngine
             await setReadOnly.ExecuteNonQueryAsync(ct);
         }
 
-        string[] columns;
-        var rows = new List<string?[]>();
-
+        QueryData data;
         await using (var cmd = new NpgsqlCommand(sql, conn, tx))
         await using (var reader = await cmd.ExecuteReaderAsync(ct))
         {
-            columns = [.. Enumerable.Range(0, reader.FieldCount).Select(reader.GetName)];
-
-            // PostgreSQL interval columns are read as NpgsqlInterval rather than via GetValue:
-            // Npgsql's default interval -> TimeSpan mapping throws for intervals carrying
-            // non-zero months or years, since TimeSpan has no concept of months. The same
-            // applies element-wise to interval[] columns.
-            var dataTypeNames = Enumerable.Range(0, reader.FieldCount)
-                .Select(reader.GetDataTypeName)
-                .ToArray();
-
-            while (await reader.ReadAsync(ct))
-            {
-                var row = new string?[reader.FieldCount];
-                for (var i = 0; i < reader.FieldCount; i++)
-                {
-                    row[i] = reader.IsDBNull(i)
-                        ? null
-                        : dataTypeNames[i] switch
-                        {
-                            "interval" => FormatInterval(reader.GetFieldValue<NpgsqlInterval>(i)),
-                            "interval[]" => FormatIntervalArray(reader.GetFieldValue<NpgsqlInterval?[]>(i)),
-                            _ => FormatValue(reader.GetValue(i)),
-                        };
-                }
-
-                rows.Add(row);
-            }
+            data = await ReadResultSet(reader, ct);
         }
 
         await tx.CommitAsync(ct);
-        return new QueryData(columns, [.. rows]);
+        return data;
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
@@ -667,14 +676,44 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         return sb.ToString();
     }
 
-    public async Task<int> ExecuteUpdateAsync(string connectionString, string sql, CancellationToken ct)
+    public async Task<UpdateExecutionResult> ExecuteUpdateAsync(
+        string connectionString, string sql, bool commit, CancellationToken ct)
     {
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
-        await using var cmd = new NpgsqlCommand(sql, conn, tx);
-        var affected = await cmd.ExecuteNonQueryAsync(ct);
-        await tx.CommitAsync(ct);
-        return affected;
+
+        var resultSets = new List<QueryData>();
+        int affected;
+        await using (var cmd = new NpgsqlCommand(sql, conn, tx))
+        await using (var reader = await cmd.ExecuteReaderAsync(ct))
+        {
+            do
+            {
+                // FieldCount == 0 means a statement with no result set (e.g. a plain
+                // UPDATE without RETURNING); skip it but keep advancing the batch.
+                if (reader.FieldCount > 0)
+                {
+                    resultSets.Add(await ReadResultSet(reader, ct));
+                }
+            }
+            while (await reader.NextResultAsync(ct));
+
+            affected = reader.RecordsAffected;
+        }
+
+        // Commit/rollback only AFTER the reader is disposed. Npgsql forbids issuing
+        // another command — and COMMIT/ROLLBACK are commands — while a data reader is
+        // still open on the same connection ("A command is already in progress").
+        if (commit)
+        {
+            await tx.CommitAsync(ct);
+        }
+        else
+        {
+            await tx.RollbackAsync(ct);
+        }
+
+        return new UpdateExecutionResult(resultSets, affected < 0 ? 0 : affected);
     }
 }

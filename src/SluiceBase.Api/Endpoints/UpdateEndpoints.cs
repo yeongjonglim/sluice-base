@@ -2,9 +2,11 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
+using SluiceBase.Api.Queries;
 using SluiceBase.Api.Servers;
 using SluiceBase.Core.Common;
 using SluiceBase.Core.Permissions;
+using SluiceBase.Core.Queries;
 using SluiceBase.Core.Servers;
 using SluiceBase.Core.Targets;
 using SluiceBase.Core.Updates;
@@ -25,6 +27,7 @@ internal static class UpdateEndpoints
         group.MapPost("/{id}/reject", Reject).WithName("RejectUpdate");
         group.MapPost("/{id}/cancel", Cancel).WithName("CancelUpdate");
         group.MapPost("/{id}/execute", Execute).WithName("ExecuteUpdate");
+        group.MapPost("/{id}/preview", Preview).WithName("PreviewUpdate");
     }
 
     // ── submit ───────────────────────────────────────────────────────────────
@@ -371,11 +374,12 @@ internal static class UpdateEndpoints
             var connectionString = await connectionFactory
                 .GetConnectionStringAsync(database.Id, CredentialKind.Write, ct);
             var targetEngine = engineRegistry.Resolve(database.Server!.Kind);
-            var raw = await targetEngine.ExecuteUpdateAsync(
+            var result = await targetEngine.ExecuteUpdateAsync(
                 connectionString,
                 request.SqlText,
+                commit: true,
                 linkedCts.Token);
-            affectedRows = raw >= 0 ? raw : null;
+            affectedRows = result.AffectedRows;
             success = true;
         }
         catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
@@ -409,6 +413,127 @@ internal static class UpdateEndpoints
         return TypedResults.Ok(ToDetail((await LoadDetail(db, id, ct))!));
     }
 
+    // ── preview ──────────────────────────────────────────────────────────────
+
+    private static async Task<Results<Ok<UpdatePreviewResponse>, NotFound, Conflict<string>, ProblemHttpResult, UnauthorizedHttpResult, ForbidHttpResult>> Preview(
+        UpdateRequestId id,
+        AppDbContext db,
+        ICurrentUserAccessor currentUser,
+        IAccessResolver resolver,
+        IServerConnectionFactory connectionFactory,
+        ITargetEngineRegistry engineRegistry,
+        SensitiveColumnGuard sensitiveGuard,
+        TimeProvider timeProvider,
+        IConfiguration configuration,
+        CancellationToken ct)
+    {
+        var request = await LoadForMutation(db, id, ct);
+        if (request is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        if (request.Status is not (UpdateRequestStatus.Pending or UpdateRequestStatus.Approved))
+        {
+            return TypedResults.Conflict($"Cannot preview a request in '{request.Status}' state.");
+        }
+
+        if (request.DatabaseId is null)
+        {
+            return TypedResults.Conflict("Server was deleted. Cannot preview.");
+        }
+
+        var database = await db.Databases.AsNoTracking()
+            .Include(d => d.Server)
+            .SingleOrDefaultAsync(s => s.Id == request.DatabaseId, ct);
+        if (database is null || !database.CanWrite)
+        {
+            return TypedResults.Conflict("Server not found or has no write credentials configured.");
+        }
+
+        if (database.IsDisabled)
+        {
+            return TypedResults.Conflict("Server is disabled.");
+        }
+
+        var user = await currentUser.GetAsync(ct);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        // Submitter of this request, or anyone who can approve/execute on the db.
+        var isSubmitter = request.SubmitterId == user.Id;
+        var canApprove = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId.Value, Permissions.UpdateApprove, ct);
+        var canExecute = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId.Value, Permissions.UpdateExecute, ct);
+        if (!isSubmitter && !canApprove && !canExecute)
+        {
+            return TypedResults.Forbid();
+        }
+
+        // Sensitive-column gate — same policy as the read path. A hit blocks the run
+        // entirely; the SQL never executes and no event is recorded.
+        var decision = await sensitiveGuard.EvaluateAsync(user.Id, request.DatabaseId.Value, request.SqlText, ct);
+        if (decision.BlockedHits.Count > 0)
+        {
+            return TypedResults.Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "Sensitive columns",
+                type: "sensitive_columns",
+                extensions: new Dictionary<string, object?>
+                {
+                    ["columns"] = decision.BlockedHits
+                        .Select(c => new { schema = c.Schema, table = c.Table, column = c.Column })
+                        .ToArray()
+                });
+        }
+
+        var timeoutSeconds = configuration.GetValue("Query:TimeoutSeconds", 30);
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+        var startedAt = timeProvider.GetUtcNow();
+        IReadOnlyList<QueryData> resultSets = [];
+        var affectedRows = 0;
+        bool success;
+        string? error = null;
+
+        try
+        {
+            var connectionString = await connectionFactory
+                .GetConnectionStringAsync(database.Id, CredentialKind.Write, ct);
+            var engine = engineRegistry.Resolve(database.Server!.Kind);
+            var result = await engine.ExecuteUpdateAsync(connectionString, request.SqlText, commit: false, linkedCts.Token);
+            resultSets = result.ResultSets;
+            affectedRows = result.AffectedRows;
+            success = true;
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            success = false;
+            error = $"Preview timed out after {timeoutSeconds}s.";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            success = false;
+            error = ex.Message;
+        }
+
+        var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
+
+        db.UpdateRequestEvents.Add(UpdateRequestEvent.Preview(
+            request.Id,
+            new Actioned(user.Id, timeProvider.GetUtcNow()),
+            success,
+            durationMs,
+            affectedRows,
+            resultSets.Count,
+            error));
+        await db.SaveChangesAsync(ct);
+
+        return TypedResults.Ok(new UpdatePreviewResponse(resultSets, affectedRows, durationMs, error));
+    }
+
     // ── helpers ───────────────────────────────────────────────────────────────
 
     // AsNoTracking so that a second call after SaveChangesAsync returns fresh data with nav props.
@@ -420,6 +545,7 @@ internal static class UpdateEndpoints
             .Include(r => r.Reviewer)
             .Include(r => r.Executor)
             .Include(r => r.CancelledBy)
+            .Include(r => r.Events).ThenInclude(e => e.Actor)
             .SingleOrDefaultAsync(r => r.Id == id, ct);
 
     // Tracked load for state-transition endpoints that need to mutate the entity.
@@ -451,7 +577,21 @@ internal static class UpdateEndpoints
             r.ExecDurationMs,
             r.ExecAffectedRows,
             r.ExecError,
-            r.SourceRequestId);
+            r.SourceRequestId,
+            r.Events
+                .OrderBy(e => e.At)
+                .Select(e => new UpdateRequestEventItem(
+                    e.Type,
+                    e.ActorId,
+                    e.Actor != null ? (e.Actor.Name ?? e.Actor.Email) : null,
+                    e.At,
+                    e.Note,
+                    e.Success,
+                    e.DurationMs,
+                    e.AffectedRows,
+                    e.ResultSetCount,
+                    e.Error))
+                .ToList());
 
     // ── request / response records ────────────────────────────────────────────
 
@@ -471,6 +611,24 @@ internal static class UpdateEndpoints
         bool? ExecSuccess);
 
     public sealed record ListUpdateRequestsResponse(IReadOnlyList<UpdateSummaryItem> Requests);
+
+    public sealed record UpdatePreviewResponse(
+        IReadOnlyList<QueryData> ResultSets,
+        int AffectedRows,
+        int DurationMs,
+        string? Error);
+
+    public sealed record UpdateRequestEventItem(
+        UpdateRequestEventType Type,
+        UserId? ActorId,
+        string? ActorName,
+        DateTimeOffset At,
+        string? Note,
+        bool? Success,
+        int? DurationMs,
+        int? AffectedRows,
+        int? ResultSetCount,
+        string? Error);
 
     public sealed record UpdateRequestDetailResponse(
         UpdateRequestId Id,
@@ -497,5 +655,6 @@ internal static class UpdateEndpoints
         int? ExecDurationMs,
         int? ExecAffectedRows,
         string? ExecError,
-        UpdateRequestId? SourceRequestId);
+        UpdateRequestId? SourceRequestId,
+        IReadOnlyList<UpdateRequestEventItem> Events);
 }

@@ -23,6 +23,7 @@ namespace SluiceBase.Api.Data.Converters;
 [EfCoreConverter<CredentialId>]
 [EfCoreConverter<QueryLogId>]
 [EfCoreConverter<UpdateRequestId>]
+[EfCoreConverter<UpdateRequestEventId>]
 [EfCoreConverter<McpOAuthClientId>]
 [EfCoreConverter<McpAuthCodeId>]
 [EfCoreConverter<McpTokenId>]

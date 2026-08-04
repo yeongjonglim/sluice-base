@@ -1,27 +1,39 @@
 import {
   Alert,
   Badge,
+  Box,
   Button,
   Group,
   Modal,
   Skeleton,
+  Splitter,
   Stack,
   Text,
   Textarea,
   Timeline,
   Title,
 } from "@mantine/core";
-import { IconBan, IconCheck, IconPlayerPlay, IconSend, IconX } from "@tabler/icons-react";
+import {
+  IconBan,
+  IconCheck,
+  IconEye,
+  IconPlayerPlay,
+  IconSend,
+  IconX,
+} from "@tabler/icons-react";
 import { useDisclosure } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import React, { useState } from "react";
+import type { UpdatePreviewResponse } from "@/api/hooks";
 import { SqlEditor } from "@/components/SqlEditor";
+import { PreviewPane } from "@/components/update/PreviewPane";
 import {
   meQueryOptions,
   useApproveUpdate,
   useCancelUpdate,
   useExecuteUpdate,
+  usePreviewUpdate,
   useRejectUpdate,
   useUpdateRequest,
 } from "@/api/hooks";
@@ -48,6 +60,8 @@ const STATUS_COLOR: Record<string, string> = {
   Executed: "teal",
 };
 
+const BORDER = "1px solid var(--mantine-color-default-border)";
+
 function UpdateDetailPage() {
   const { id } = Route.useParams();
   const meData = Route.useRouteContext().queryClient.getQueryData(meQueryOptions.queryKey);
@@ -57,11 +71,13 @@ function UpdateDetailPage() {
   const reject = useRejectUpdate();
   const cancel = useCancelUpdate();
   const execute = useExecuteUpdate();
+  const preview = usePreviewUpdate();
 
   const [approveModalOpen, { open: openApprove, close: closeApprove }] = useDisclosure(false);
   const [rejectModalOpen, { open: openReject, close: closeReject }] = useDisclosure(false);
   const [cancelModalOpen, { open: openCancel, close: closeCancel }] = useDisclosure(false);
   const [reviewNote, setReviewNote] = useState("");
+  const [previewResult, setPreviewResult] = useState<UpdatePreviewResponse | null>(null);
 
   const canApprove = meData?.permissions.includes("update:approve") ?? false;
   const canSubmit = meData?.permissions.includes("update:submit") ?? false;
@@ -86,6 +102,7 @@ function UpdateDetailPage() {
   }
 
   const r = request.data;
+  const canPreview = r.submitterId === meData?.id || canApprove || canExecute;
 
   function handleApprove() {
     if (!reviewNote.trim()) return;
@@ -149,167 +166,257 @@ function UpdateDetailPage() {
       )
     ) : null;
 
-  return (
-    <Stack gap="md">
-      <Group gap="sm">
-        <Title order={2}>Update Request</Title>
-        <Badge color={STATUS_COLOR[r.status] ?? "gray"} size="lg">
-          {r.status}
-        </Badge>
-      </Group>
-
-      {/* Recreated from */}
-      {r.sourceRequestId && (
-        <Text size="sm" c="dimmed">
-          Recreated from{" "}
-          <Text
-            component="a"
-            href={`/update/${r.sourceRequestId}`}
-            size="sm"
-            c="blue"
+  // ── Timeline ───────────────────────────────────────────────────────────────
+  // Single-shot lifecycle events come from the request's columns; repeatable
+  // Previewed events come from the append-only event log. Both are merged and
+  // sorted chronologically.
+  const eventItems: Array<{ ts: string; node: React.ReactNode }> = (
+    [
+      r.status !== "Pending" && r.reviewedAt
+        ? {
+            ts: r.reviewedAt,
+            node: (
+              <Timeline.Item
+                key="review"
+                title={r.status === "Rejected" ? "Rejected" : "Approved"}
+                bullet={r.status === "Rejected" ? <IconX size={14} /> : <IconCheck size={14} />}
+                color={r.status === "Rejected" ? "red" : "green"}
+              >
+                <Stack gap={4} mt={4}>
+                  <Text size="sm" c="dimmed">
+                    {r.reviewerName} &middot; {new Date(r.reviewedAt).toLocaleString()}
+                  </Text>
+                  {r.reviewNote && <Text size="sm">{r.reviewNote}</Text>}
+                </Stack>
+              </Timeline.Item>
+            ),
+          }
+        : null,
+      r.status === "Cancelled" && r.cancelledAt
+        ? {
+            ts: r.cancelledAt,
+            node: (
+              <Timeline.Item key="cancel" title="Cancelled" bullet={<IconBan size={14} />} color="gray">
+                <Stack gap={4} mt={4}>
+                  <Text size="sm" c="dimmed">
+                    {r.cancelledByName} &middot; {new Date(r.cancelledAt).toLocaleString()}
+                  </Text>
+                  {r.cancelNote && <Text size="sm">{r.cancelNote}</Text>}
+                </Stack>
+              </Timeline.Item>
+            ),
+          }
+        : null,
+      r.status === "Executed" && r.executedAt
+        ? {
+            ts: r.executedAt,
+            node: (
+              <Timeline.Item
+                key="exec"
+                title="Executed"
+                bullet={<IconPlayerPlay size={14} />}
+                color={r.execSuccess ? "teal" : "red"}
+              >
+                <Stack gap={4} mt={4}>
+                  <Group gap="xs">
+                    <Text size="sm" c="dimmed">
+                      {r.executorName} &middot; {new Date(r.executedAt).toLocaleString()}
+                    </Text>
+                    {execBadge}
+                  </Group>
+                  {r.execDurationMs != null && (
+                    <Text size="sm" c="dimmed">
+                      {r.execDurationMs} ms
+                      {r.execAffectedRows != null && ` · ${r.execAffectedRows} rows affected`}
+                    </Text>
+                  )}
+                  {r.execError && (
+                    <Alert color="red" title="Error" mt={4}>
+                      {r.execError}
+                    </Alert>
+                  )}
+                </Stack>
+              </Timeline.Item>
+            ),
+          }
+        : null,
+      ...r.events.map((e) => ({
+        ts: e.at,
+        node: (
+          <Timeline.Item
+            key={`preview-${e.at}`}
+            title="Previewed"
+            bullet={<IconEye size={14} />}
+            color={e.success ? "grape" : "red"}
           >
-            {`/update/${r.sourceRequestId}`}
+            <Stack gap={4} mt={4}>
+              <Text size="sm" c="dimmed">
+                {e.actorName} &middot; {new Date(e.at).toLocaleString()}
+              </Text>
+              <Text size="sm" c="dimmed">
+                {e.success
+                  ? `${e.affectedRows ?? 0} rows would change · ${e.resultSetCount ?? 0} result set(s) · rolled back`
+                  : (e.error ?? "Preview failed")}
+              </Text>
+            </Stack>
+          </Timeline.Item>
+        ),
+      })),
+    ] as Array<{ ts: string; node: React.ReactNode } | null>
+  )
+    .filter((x): x is { ts: string; node: React.ReactNode } => x !== null)
+    .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
+
+  const timeline = (
+    <Timeline active={eventItems.length} bulletSize={26}>
+      <Timeline.Item title="Submitted" bullet={<IconSend size={14} />} color="blue">
+        <Stack gap={4} mt={4}>
+          <Text size="sm" c="dimmed">
+            {r.submitterName} &middot; {new Date(r.submittedAt).toLocaleString()}
           </Text>
-        </Text>
-      )}
+          <Text size="sm" c="dimmed">
+            {r.databaseDisplayName}
+          </Text>
+          <Text size="sm">{r.reason}</Text>
+        </Stack>
+      </Timeline.Item>
+      {eventItems.map((x) => x.node)}
+    </Timeline>
+  );
 
-      {/* SQL */}
-      <SqlEditor value={r.sqlText} editable={false} />
-
-      {/* Timeline */}
-      {(() => {
-        const eventItems: Array<{ ts: string; node: React.ReactNode }> = (
-          [
-            r.status !== "Pending" && r.reviewedAt
-              ? {
-                  ts: r.reviewedAt,
-                  node: (
-                    <Timeline.Item
-                      key="review"
-                      title={r.status === "Rejected" ? "Rejected" : "Approved"}
-                      bullet={
-                        r.status === "Rejected" ? <IconX size={14} /> : <IconCheck size={14} />
-                      }
-                      color={r.status === "Rejected" ? "red" : "green"}
-                    >
-                      <Stack gap={4} mt={4}>
-                        <Text size="sm" c="dimmed">
-                          {r.status === "Rejected" ? r.reviewerName : r.reviewerName} &middot;{" "}
-                          {new Date(r.reviewedAt).toLocaleString()}
-                        </Text>
-                        {r.reviewNote && <Text size="sm">{r.reviewNote}</Text>}
-                      </Stack>
-                    </Timeline.Item>
-                  ),
-                }
-              : null,
-            r.status === "Cancelled" && r.cancelledAt
-              ? {
-                  ts: r.cancelledAt,
-                  node: (
-                    <Timeline.Item
-                      key="cancel"
-                      title="Cancelled"
-                      bullet={<IconBan size={14} />}
-                      color="gray"
-                    >
-                      <Stack gap={4} mt={4}>
-                        <Text size="sm" c="dimmed">
-                          {r.cancelledByName} &middot; {new Date(r.cancelledAt).toLocaleString()}
-                        </Text>
-                        {r.cancelNote && <Text size="sm">{r.cancelNote}</Text>}
-                      </Stack>
-                    </Timeline.Item>
-                  ),
-                }
-              : null,
-            r.status === "Executed" && r.executedAt
-              ? {
-                  ts: r.executedAt,
-                  node: (
-                    <Timeline.Item
-                      key="exec"
-                      title="Executed"
-                      bullet={<IconPlayerPlay size={14} />}
-                      color={r.execSuccess ? "teal" : "red"}
-                    >
-                      <Stack gap={4} mt={4}>
-                        <Group gap="xs">
-                          <Text size="sm" c="dimmed">
-                            {r.executorName} &middot; {new Date(r.executedAt).toLocaleString()}
-                          </Text>
-                          {execBadge}
-                        </Group>
-                        {r.execDurationMs != null && (
-                          <Text size="sm" c="dimmed">
-                            {r.execDurationMs} ms
-                            {r.execAffectedRows != null && ` · ${r.execAffectedRows} rows affected`}
-                          </Text>
-                        )}
-                        {r.execError && (
-                          <Alert color="red" title="Error" mt={4}>
-                            {r.execError}
-                          </Alert>
-                        )}
-                      </Stack>
-                    </Timeline.Item>
-                  ),
-                }
-              : null,
-          ] as Array<{ ts: string; node: React.ReactNode } | null>
-        )
-          .filter((x): x is { ts: string; node: React.ReactNode } => x !== null)
-          .sort((a, b) => new Date(a.ts).getTime() - new Date(b.ts).getTime());
-
-        return (
-          <Timeline active={eventItems.length} bulletSize={26} mt="xs">
-            <Timeline.Item title="Submitted" bullet={<IconSend size={14} />} color="blue">
-              <Stack gap={4} mt={4}>
-                <Text size="sm" c="dimmed">
-                  {r.submitterName} &middot; {new Date(r.submittedAt).toLocaleString()}
-                </Text>
-                <Text size="sm" c="dimmed">
-                  {r.databaseDisplayName}
-                </Text>
-                <Text size="sm">{r.reason}</Text>
-              </Stack>
-            </Timeline.Item>
-            {eventItems.map((x) => x.node)}
-          </Timeline>
-        );
-      })()}
-
-      {/* Action area */}
-      <Group>
-        {r.status === "Pending" && canApprove && (
-          <>
-            <Button color="green" onClick={openApprove} loading={approve.isPending}>
-              Approve
+  return (
+    <Box
+      style={{
+        height: "calc(100vh - 44px)",
+        margin: "calc(-1 * var(--mantine-spacing-sm))",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
+      {/* Header: identity, status, and every action — always visible, never scrolls */}
+      <Group
+        justify="space-between"
+        wrap="nowrap"
+        px="sm"
+        py="xs"
+        style={{ flexShrink: 0, borderBottom: BORDER }}
+      >
+        <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+          <Title order={3}>Update Request</Title>
+          <Badge color={STATUS_COLOR[r.status] ?? "gray"} size="lg">
+            {r.status}
+          </Badge>
+          {r.sourceRequestId && (
+            <Text size="xs" c="dimmed" truncate>
+              recreated from{" "}
+              <Text component="a" href={`/update/${r.sourceRequestId}`} size="xs" c="blue">
+                {r.sourceRequestId}
+              </Text>
+            </Text>
+          )}
+        </Group>
+        <Group gap="xs">
+          {r.status === "Pending" && canApprove && (
+            <>
+              <Button color="green" onClick={openApprove} loading={approve.isPending}>
+                Approve
+              </Button>
+              <Button color="red" variant="outline" onClick={openReject} loading={reject.isPending}>
+                Reject
+              </Button>
+            </>
+          )}
+          {(r.status === "Pending" || r.status === "Approved") && canSubmit && (
+            <Button color="gray" variant="outline" onClick={openCancel} loading={cancel.isPending}>
+              Cancel
             </Button>
-            <Button color="red" variant="outline" onClick={openReject} loading={reject.isPending}>
-              Reject
+          )}
+          {r.status === "Approved" && canExecute && (
+            <Button color="teal" onClick={handleExecute} loading={execute.isPending}>
+              Execute
             </Button>
-          </>
-        )}
-        {(r.status === "Pending" || r.status === "Approved") && canSubmit && (
-          <Button color="gray" variant="outline" onClick={openCancel} loading={cancel.isPending}>
-            Cancel
-          </Button>
-        )}
-        {r.status === "Approved" && canExecute && (
-          <Button color="teal" onClick={handleExecute} loading={execute.isPending}>
-            Execute
-          </Button>
-        )}
-        {canSubmit && (
-          <Button
-            variant="light"
-            onClick={() => navigate({ to: "/update/new", search: { from: id } })}
-          >
-            Recreate
-          </Button>
-        )}
+          )}
+          {canPreview && (r.status === "Pending" || r.status === "Approved") && (
+            <Button
+              variant="light"
+              color="grape"
+              leftSection={<IconEye size={16} />}
+              loading={preview.isPending}
+              onClick={() => preview.mutate(id, { onSuccess: (data) => setPreviewResult(data) })}
+            >
+              Preview
+            </Button>
+          )}
+          {canSubmit && (
+            <Button variant="light" onClick={() => navigate({ to: "/update/new", search: { from: id } })}>
+              Recreate
+            </Button>
+          )}
+        </Group>
       </Group>
+
+      {/* Body: SQL over preview on the left, timeline on the right — all resizable */}
+      <Box style={{ flex: 1, minHeight: 0 }}>
+        <Splitter
+          orientation="horizontal"
+          h="100%"
+          withHandle={false}
+          handleColor="var(--mantine-color-default-border)"
+          lineSize={4}
+        >
+          <Splitter.Pane
+            defaultSize={66}
+            min={35}
+            style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}
+          >
+            <Splitter
+              orientation="vertical"
+              h="100%"
+              withHandle={false}
+              handleColor="var(--mantine-color-default-border)"
+              lineSize={4}
+              style={{ flex: 1 }}
+            >
+              <Splitter.Pane
+                defaultSize={52}
+                min={15}
+                style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}
+              >
+                <Box p="xs" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+                  <SqlEditor
+                    value={r.sqlText}
+                    editable={false}
+                    height="100%"
+                    style={{ flex: 1, minHeight: 0 }}
+                  />
+                </Box>
+              </Splitter.Pane>
+
+              <Splitter.Pane defaultSize={48} min={15} style={{ overflow: "hidden" }}>
+                <PreviewPane
+                  isPending={preview.isPending}
+                  isError={preview.isError}
+                  error={preview.error}
+                  result={previewResult}
+                />
+              </Splitter.Pane>
+            </Splitter>
+          </Splitter.Pane>
+
+          <Splitter.Pane
+            defaultSize={34}
+            min={22}
+            style={{ display: "flex", flexDirection: "column", overflow: "hidden", borderLeft: BORDER }}
+          >
+            <Box style={{ flex: 1, minHeight: 0, overflow: "auto", scrollbarGutter: "stable" }} p="md">
+              <Text tt="uppercase" fw={700} fz="xs" c="dimmed" mb="md" style={{ letterSpacing: "0.05em" }}>
+                Timeline
+              </Text>
+              {timeline}
+            </Box>
+          </Splitter.Pane>
+        </Splitter>
+      </Box>
 
       {/* Approve modal */}
       <Modal opened={approveModalOpen} onClose={closeApprove} title="Approve request">
@@ -394,6 +501,6 @@ function UpdateDetailPage() {
           </Group>
         </Stack>
       </Modal>
-    </Stack>
+    </Box>
   );
 }

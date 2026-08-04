@@ -10,6 +10,7 @@ import { notifications } from "@mantine/notifications";
 import type { SQLNamespace } from "@codemirror/lang-sql";
 import type { paths } from "./schema.ts";
 import { ApiError, apiRequest } from "@/api/client";
+import { isBlocked } from "@/api/useQueryRuns";
 import { downloadTextFile } from "@/utils/download";
 import { quoteSqlIdentifier } from "@/utils/quoteSqlIdentifier";
 
@@ -558,6 +559,30 @@ export function useExecuteUpdate() {
     onError: (error) => {
       notifications.show({
         title: "Execute failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export type UpdatePreviewResponse =
+  paths["/api/update/{id}/preview"]["post"]["responses"][200]["content"]["application/json"];
+
+export function usePreviewUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiRequest<void, UpdatePreviewResponse>(`/api/update/${id}/preview`, { method: "POST" }),
+    onSuccess: (_data, id) => {
+      // Refresh the timeline so the new Previewed event shows.
+      void qc.invalidateQueries({ queryKey: ["update", id] });
+    },
+    onError: (error) => {
+      // A sensitive-column block is rendered inline by the page, not toasted.
+      if (isBlocked(error)) return;
+      notifications.show({
+        title: "Preview failed",
         message: error instanceof ApiError ? formatApiError(error) : error.message,
         color: "red",
       });

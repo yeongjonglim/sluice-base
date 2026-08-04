@@ -48,6 +48,7 @@ const fakeDetail = {
   execDurationMs: 120,
   execAffectedRows: null,
   execError: 'column "active" does not exist',
+  events: [],
 };
 
 vi.mock("@/api/hooks", () => ({
@@ -58,6 +59,7 @@ vi.mock("@/api/hooks", () => ({
   useCancelUpdate: () => ({ mutate: vi.fn(), isPending: false }),
   useExecuteUpdate: () => ({ mutate: vi.fn(), isPending: false }),
   useSchemaCompletions: () => ({ data: undefined }),
+  usePreviewUpdate: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null, data: null }),
 }));
 
 function makeRouteContext(permissions: Array<string>) {
