@@ -31,6 +31,7 @@ import { useMe } from "@/api/hooks.ts";
 import { AuthProvider } from "@/auth/AuthProvider.tsx";
 import { useHasPermission } from "@/auth/permission.ts";
 import { ConnectMcpTrigger } from "@/components/mcp/ConnectMcpTrigger";
+import { UserMenuHeader } from "@/components/UserMenuHeader";
 import { useBranding } from "@/theme/BrandingContext";
 
 export const Route = createFileRoute("/_authed")({
@@ -113,6 +114,12 @@ function AuthedLayout() {
                   />
                 </Menu.Target>
                 <Menu.Dropdown>
+                  {(me.data.name || me.data.email) && (
+                    <>
+                      <UserMenuHeader name={me.data.name} email={me.data.email} />
+                      <Menu.Divider />
+                    </>
+                  )}
                   <Menu.Item component="a" href="/logout" leftSection={<IconLogout size={14} />}>
                     Log out
                   </Menu.Item>
