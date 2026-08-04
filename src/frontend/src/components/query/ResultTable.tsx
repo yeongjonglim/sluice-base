@@ -3,6 +3,7 @@ import { Button, CloseButton, Flex, Group, Highlight, Table, Text, TextInput } f
 import { IconDownload, IconSearch } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CSSProperties } from "react";
+import { columnWidths } from "@/components/query/columnWidths";
 import { exportToCsv } from "@/utils/csv.ts";
 import { filterRows } from "@/utils/filterRows";
 
@@ -16,38 +17,11 @@ import { filterRows } from "@/utils/filterRows";
 
 const ROW_HEIGHT = 33; // initial estimate; real heights are measured per row
 
-// Fixed column widths (estimated once from the header + a sample of rows) keep
-// the layout stable while rows are virtualized — with content-based sizing the
-// columns would jump as different rows scroll into view.
-const CHAR_PX = 6.6;
-const CELL_CHROME_PX = 24; // padding + border allowance
-const MIN_COL_PX = 56;
-const MAX_COL_PX = 360;
-const SAMPLE_ROWS = 200;
-
 const ELLIPSIS: CSSProperties = {
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
 };
-
-function columnWidths(
-  columns: Array<string>,
-  rows: Array<Array<string | null>>,
-): Array<number> {
-  const sample = rows.length > SAMPLE_ROWS ? rows.slice(0, SAMPLE_ROWS) : rows;
-  return columns.map((col, j) => {
-    let maxChars = col.length;
-    for (const row of sample) {
-      const value = row[j];
-      const len = value === null ? 4 /* "NULL" */ : value.length;
-      if (len > maxChars) maxChars = len;
-    }
-    return Math.round(
-      Math.min(MAX_COL_PX, Math.max(MIN_COL_PX, maxChars * CHAR_PX + CELL_CHROME_PX)),
-    );
-  });
-}
 
 export function ResultTable({
   columns,
