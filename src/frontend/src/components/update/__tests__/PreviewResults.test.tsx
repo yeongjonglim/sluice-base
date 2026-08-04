@@ -35,13 +35,13 @@ describe("PreviewResults", () => {
     expect(screen.getByText("syntax error")).toBeInTheDocument();
   });
 
-  it("shows affected-rows summary when there are no result sets but no error", () => {
+  it("shows a rows-would-change summary when there are no result sets but no error", () => {
     renderWithMantine(
       <PreviewResults
         result={{ resultSets: [], affectedRows: 5, durationMs: 3, error: null }}
       />,
     );
-    expect(screen.getByText(/5 rows affected/i)).toBeInTheDocument();
+    expect(screen.getByText(/5 rows would change/i)).toBeInTheDocument();
     expect(screen.getByText(/rolled back/i)).toBeInTheDocument();
   });
 });
