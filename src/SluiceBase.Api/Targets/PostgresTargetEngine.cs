@@ -684,6 +684,7 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         await using var tx = await conn.BeginTransactionAsync(ct);
 
         var resultSets = new List<QueryData>();
+        int affected;
         await using (var cmd = new NpgsqlCommand(sql, conn, tx))
         await using (var reader = await cmd.ExecuteReaderAsync(ct))
         {
@@ -698,18 +699,21 @@ internal sealed class PostgresTargetEngine : ITargetEngine
             }
             while (await reader.NextResultAsync(ct));
 
-            var affected = reader.RecordsAffected;
-
-            if (commit)
-            {
-                await tx.CommitAsync(ct);
-            }
-            else
-            {
-                await tx.RollbackAsync(ct);
-            }
-
-            return new UpdateExecutionResult(resultSets, affected < 0 ? 0 : affected);
+            affected = reader.RecordsAffected;
         }
+
+        // Commit/rollback only AFTER the reader is disposed. Npgsql forbids issuing
+        // another command — and COMMIT/ROLLBACK are commands — while a data reader is
+        // still open on the same connection ("A command is already in progress").
+        if (commit)
+        {
+            await tx.CommitAsync(ct);
+        }
+        else
+        {
+            await tx.RollbackAsync(ct);
+        }
+
+        return new UpdateExecutionResult(resultSets, affected < 0 ? 0 : affected);
     }
 }
