@@ -34,3 +34,10 @@ Element.prototype.scrollIntoView = () => {};
 // jsdom doesn't implement Element.scrollTo either; the editor highlight helper
 // calls it to smooth-scroll a statement into view.
 Element.prototype.scrollTo = () => {};
+
+// jsdom doesn't implement canvas's 2D context (without the optional `canvas`
+// package), which otherwise logs a noisy "Not implemented" warning every time
+// the result-grid column-width estimator calls measureText(). Stubbing it to
+// return null lets measureText() fall back to its char-count estimate, which
+// is the path these tests already rely on.
+HTMLCanvasElement.prototype.getContext = () => null;
