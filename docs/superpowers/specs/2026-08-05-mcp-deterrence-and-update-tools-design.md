@@ -100,9 +100,22 @@ A separate `[McpServerToolType]` (keeps read/write tools in focused files),
 registered with a second `.WithTools<UpdateTools>()`.
 
 - `submit_update_request(databaseId, sql, reason)` — gated by `update:submit`.
-  Returns `{ id, status: "Pending", message: "Submitted for human review — you cannot approve or execute it." }`.
+  Returns `{ id, status: "Pending", link, message }`, where:
+  - `link` is a clickable URL to the request's detail page (`/update/{id}`). The scheme+host
+    are derived from the incoming MCP request via a shared `McpRequestUrls.BaseUrl(ctx)` helper —
+    the same derivation the OAuth metadata endpoints use to advertise the server (issuer/
+    resource) and the server-side equivalent of the frontend's `window.location.origin`. That
+    helper is extracted from `OAuthMetadataEndpoints` so both call one source of truth.
+  - `message` tells the agent it cannot approve/execute and to give the user the link.
+  - The tool description also instructs the agent NOT to include transaction-control statements
+    (`BEGIN`/`COMMIT`/`ROLLBACK`): the statement is executed inside a system-managed transaction
+    (rolled back for preview via `commit:false`, committed on execute via `commit:true` in
+    `PostgresTargetEngine.ExecuteUpdateAsync`), so a nested transaction from the agent's SQL is wrong.
 - `list_update_requests(databaseId?, status?)` — status summaries.
 - `get_update_request(id)` — full detail incl. event history.
+
+The same two points (managed transaction; surface the returned link) are also stated in the
+MCP `ServerInstructions` so every session sees them up front.
 
 Tool descriptions state plainly that the agent cannot approve/reject/cancel/execute —
 those require a human via the app. Failure outcomes throw `InvalidOperationException`/
@@ -126,9 +139,11 @@ those require a human via the app. Failure outcomes throw `InvalidOperationExcep
 
 - `src/SluiceBase.Api/Mcp/Tools/DatabaseTools.cs` — blocked-result change + description.
 - `src/SluiceBase.Api/Mcp/SensitiveColumnBlockPayload.cs` — new pure helper.
-- `src/SluiceBase.Api/Mcp/Tools/UpdateTools.cs` — new tool-type.
+- `src/SluiceBase.Api/Mcp/McpRequestUrls.cs` — new shared base-URL helper (used by tools + OAuth metadata).
+- `src/SluiceBase.Api/Mcp/Oauth/OAuthMetadataEndpoints.cs` — reuse the shared base-URL helper.
+- `src/SluiceBase.Api/Mcp/Tools/UpdateTools.cs` — new tool-type (submit returns a link; transaction guidance).
 - `src/SluiceBase.Api/Services/IUpdateRequestService.cs` — new service.
-- `src/SluiceBase.Api/Endpoints/UpdateEndpoints.cs` — Submit/List/Get become adapters.
+- `src/SluiceBase.Api/Endpoints/UpdateEndpoints.cs` — Submit/List/Get become adapters; mappers made internal.
 - `src/SluiceBase.Api/Program.cs` — register service, `WithTools<UpdateTools>`, `ServerInstructions`.
 - `tests/SluiceBase.Api.Tests/…` — payload unit test.
-- `tests/IntegrationTests/McpToolsTests.cs` — new integration coverage.
+- `tests/IntegrationTests/McpToolsTests.cs` — new integration coverage (blocked payload, tool presence/absence, submit→get + link).

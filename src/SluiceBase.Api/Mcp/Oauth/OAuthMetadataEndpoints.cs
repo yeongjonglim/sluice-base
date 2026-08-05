@@ -38,5 +38,5 @@ internal static class OAuthMetadataEndpoints
         }).AllowAnonymous();
     }
 
-    private static string BaseUrl(HttpContext ctx) => $"{ctx.Request.Scheme}://{ctx.Request.Host}";
+    private static string BaseUrl(HttpContext ctx) => McpRequestUrls.BaseUrl(ctx);
 }

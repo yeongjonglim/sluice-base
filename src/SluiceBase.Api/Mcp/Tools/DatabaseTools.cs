@@ -40,7 +40,9 @@ internal sealed class DatabaseTools
     }
 
     [McpServerTool(Name = "run_query")]
-    [Description("Execute a read-only SQL query against a database the user can query. Returns columns and rows.")]
+    [Description("Execute a read-only SQL query against a database the user can query. Returns columns and rows. " +
+        "Sensitive columns are enforced server-side: if a query is blocked, the result names the offending columns — " +
+        "re-run without them instead of trying to work around the restriction, which cannot be bypassed from here.")]
     public static async Task<object> RunQuery(
         [Description("The database id (GUID) from list_databases.")] string databaseId,
         [Description("A read-only SQL statement.")] string sql,
@@ -54,9 +56,10 @@ internal sealed class DatabaseTools
             QueryOutcome.Ok => result.Response!,
             QueryOutcome.NotFound => throw new InvalidOperationException("Database not found."),
             QueryOutcome.Forbidden => throw new InvalidOperationException("You do not have query access to this database."),
-            QueryOutcome.Blocked => throw new InvalidOperationException(
-                "Query touches sensitive columns: " + string.Join(", ",
-                    result.BlockedColumns!.Select(c => $"{c.Schema}.{c.Table}.{c.Column}"))),
+            // Return a structured, instructive payload (not a throw): the MCP SDK serializes
+            // this object into the tool result content the client model reads, steering a
+            // cooperative agent to exclude the named columns rather than brute-forcing.
+            QueryOutcome.Blocked => SensitiveColumnBlockPayload.From(result.BlockedColumns!),
             _ => throw new InvalidOperationException(result.Error ?? "Query error."),
         };
     }

@@ -140,6 +140,16 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         cResp.EnsureSuccessStatusCode();
         var cred = (await cResp.Content.ReadFromJsonAsync<CredentialBody>(ct))!;
 
+        // A write credential so the database reports CanWrite — required by submit_update_request.
+        // Submit never opens a write connection, so reusing the same credentials is sufficient.
+        using var wReq = new HttpRequestMessage(HttpMethod.Post, $"/api/server/{server.Id}/credential");
+        wReq.Headers.Add("X-XSRF-TOKEN", xsrf);
+        wReq.Content = JsonContent.Create(
+            new { label = "write", username = blueBuilder.Username, password = blueBuilder.Password });
+        var wResp = await session.Client.SendAsync(wReq, ct);
+        wResp.EnsureSuccessStatusCode();
+        var writeCred = (await wResp.Content.ReadFromJsonAsync<CredentialBody>(ct))!;
+
         using var dbReq = new HttpRequestMessage(HttpMethod.Post, $"/api/server/{server.Id}/database");
         dbReq.Headers.Add("X-XSRF-TOKEN", xsrf);
         dbReq.Content = JsonContent.Create(new
@@ -147,6 +157,7 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
             displayName = "mcp-db",
             databaseName = blueBuilder.Database ?? "postgres",
             readCredentialId = cred.Id,
+            writeCredentialId = writeCred.Id,
         });
         var dbResp = await session.Client.SendAsync(dbReq, ct);
         dbResp.EnsureSuccessStatusCode();
@@ -154,6 +165,40 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
 
         return (session, xsrf, db.Id);
     }
+
+    /// <summary>
+    /// Builds an MCP streamable-HTTP transport pointed at /mcp with the bearer token preset,
+    /// bypassing TLS validation (Aspire dev certs are self-signed in test environments).
+    /// </summary>
+    private HttpClientTransport CreateMcpTransport(string accessToken)
+    {
+        var apiEndpoint = factory.InitialisedApp.GetEndpoint("api", "https");
+        var mcpEndpoint = new Uri(apiEndpoint, "/mcp");
+
+        var innerHandler = new HttpClientHandler
+        {
+            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
+        };
+        var httpClient = new HttpClient(innerHandler)
+        {
+            BaseAddress = mcpEndpoint,
+        };
+        httpClient.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+        var transportOptions = new HttpClientTransportOptions
+        {
+            Endpoint = mcpEndpoint,
+            TransportMode = HttpTransportMode.StreamableHttp,
+        };
+
+        return new HttpClientTransport(transportOptions, httpClient, loggerFactory: null, ownsHttpClient: true);
+    }
+
+    private static string ContentText(ModelContextProtocol.Protocol.CallToolResult result) =>
+        string.Concat(result.Content
+            .OfType<ModelContextProtocol.Protocol.TextContentBlock>()
+            .Select(t => t.Text));
 
     // ── Test 1: Bearer gate ──────────────────────────────────────────────────────
 
@@ -270,32 +315,10 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         // Mint a bearer token for bob
         var accessToken = await MintAccessTokenAsync("bob", "dev", ct);
 
-        // Build an HttpClient with the Authorization header preset and bypassing TLS validation
-        // (Aspire dev certs are self-signed in test environments).
-        var apiEndpoint = factory.InitialisedApp.GetEndpoint("api", "https");
-        var mcpEndpoint = new Uri(apiEndpoint, "/mcp");
-
-        var innerHandler = new HttpClientHandler
-        {
-            ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-        };
-        var httpClient = new HttpClient(innerHandler)
-        {
-            BaseAddress = mcpEndpoint,
-        };
-        httpClient.DefaultRequestHeaders.Authorization =
-            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
-
-        var transportOptions = new HttpClientTransportOptions
-        {
-            Endpoint = mcpEndpoint,
-            TransportMode = HttpTransportMode.StreamableHttp,
-        };
-
-        await using var transport = new HttpClientTransport(transportOptions, httpClient, loggerFactory: null, ownsHttpClient: true);
+        await using var transport = CreateMcpTransport(accessToken);
         await using var mcpClient = await McpClient.CreateAsync(transport, cancellationToken: ct);
 
-        // 4. Assert all three tools are discoverable
+        // 4. Assert the read tools are discoverable
         var tools = await mcpClient.ListToolsAsync(cancellationToken: ct);
         var toolNames = tools.Select(t => t.Name).ToArray();
         Assert.Contains("list_databases", toolNames);
@@ -321,8 +344,7 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         // when the tool returns valid content). The content carrying the query rows — plus the
         // source='Mcp' audit row below — proves the tool executed end-to-end.
         Assert.NotEmpty(callResult.Content);
-        var resultText = string.Concat(
-            callResult.Content.OfType<ModelContextProtocol.Protocol.TextContentBlock>().Select(t => t.Text));
+        var resultText = ContentText(callResult);
         Assert.Contains("value", resultText);
         Assert.Contains("\"rowCount\":1", resultText);
 
@@ -337,6 +359,138 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
 
         Assert.NotNull(sourceValue);
         Assert.Equal("Mcp", sourceValue!.ToString());
+    }
+
+    // ── Test 4: run_query blocked by sensitive column returns guidance payload ────
+
+    /// <summary>
+    /// A query that references a sensitive column must be blocked and the tool result must
+    /// carry the structured deterrence payload — the discriminator, the offending column, and
+    /// guidance steering the agent to exclude it — rather than a bare error string. The guard
+    /// blocks before execution, so the referenced table need not exist.
+    /// </summary>
+    [Fact]
+    public async Task RunQuery_BlockedBySensitiveColumn_ReturnsGuidancePayload()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (adminSession, adminXsrf, databaseId) = await AdminSessionWithDatabaseAsync(LoginHelper, factory.InitialisedApp, ct);
+        using var admin = adminSession;
+
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await bobSession.Client.GetAsync("/api/me", ct);
+        var users = await admin.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var bob = users!.Users.Single(u => u.Email == "bob@example.com");
+
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(admin, bob.Id, Permissions.QueryExecute, databaseId, adminXsrf, ct);
+        await SensitiveColumnTestHelper.MarkColumnAsync(admin, databaseId, "public", "people", "ssn", adminXsrf, ct);
+
+        var accessToken = await MintAccessTokenAsync("bob", "dev", ct);
+        await using var transport = CreateMcpTransport(accessToken);
+        await using var mcpClient = await McpClient.CreateAsync(transport, cancellationToken: ct);
+
+        var callResult = await mcpClient.CallToolAsync(
+            "run_query",
+            new Dictionary<string, object?>
+            {
+                ["databaseId"] = databaseId,
+                ["sql"] = "SELECT ssn FROM people",
+            },
+            cancellationToken: ct);
+
+        var text = ContentText(callResult);
+        Assert.Contains("sensitive_columns_blocked", text);
+        Assert.Contains("ssn", text);
+        // The guidance must steer a cooperative agent to exclude and stop probing.
+        Assert.Contains("without them", text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    // ── Test 5: update tools present, mutation tools absent ──────────────────────
+
+    /// <summary>
+    /// The agent may submit and read update requests but must never be able to approve,
+    /// reject, cancel, or execute them — those transitions stay REST/UI-only. Enforced here at
+    /// the tool-discovery surface.
+    /// </summary>
+    [Fact]
+    public async Task UpdateTools_AreListed_AndMutationToolsAbsent()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (adminSession, _, _) = await AdminSessionWithDatabaseAsync(LoginHelper, factory.InitialisedApp, ct);
+        using var admin = adminSession;
+
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await bobSession.Client.GetAsync("/api/me", ct);
+
+        var accessToken = await MintAccessTokenAsync("bob", "dev", ct);
+        await using var transport = CreateMcpTransport(accessToken);
+        await using var mcpClient = await McpClient.CreateAsync(transport, cancellationToken: ct);
+
+        var tools = await mcpClient.ListToolsAsync(cancellationToken: ct);
+        var toolNames = tools.Select(t => t.Name).ToArray();
+
+        Assert.Contains("submit_update_request", toolNames);
+        Assert.Contains("list_update_requests", toolNames);
+        Assert.Contains("get_update_request", toolNames);
+
+        Assert.DoesNotContain(toolNames, n => n.Contains("approve", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(toolNames, n => n.Contains("reject", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(toolNames, n => n.Contains("cancel", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(toolNames, n => n.Contains("execute", StringComparison.OrdinalIgnoreCase));
+    }
+
+    // ── Test 6: submit_update_request creates a Pending request readable via get ──
+
+    /// <summary>
+    /// submit_update_request creates a Pending request (never approved or executed by the
+    /// agent), and get_update_request reads it back with its reason. Verifies the shared
+    /// IUpdateRequestService path end-to-end over MCP.
+    /// </summary>
+    [Fact]
+    public async Task SubmitUpdateRequest_CreatesPendingRequest_ReadableViaGet()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (adminSession, adminXsrf, databaseId) = await AdminSessionWithDatabaseAsync(LoginHelper, factory.InitialisedApp, ct);
+        using var admin = adminSession;
+
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await bobSession.Client.GetAsync("/api/me", ct);
+        var users = await admin.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var bob = users!.Users.Single(u => u.Email == "bob@example.com");
+
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(admin, bob.Id, Permissions.UpdateSubmit, databaseId, adminXsrf, ct);
+
+        var accessToken = await MintAccessTokenAsync("bob", "dev", ct);
+        await using var transport = CreateMcpTransport(accessToken);
+        await using var mcpClient = await McpClient.CreateAsync(transport, cancellationToken: ct);
+
+        var reason = $"mcp-submit-{Guid.NewGuid():N}";
+        var submitResult = await mcpClient.CallToolAsync(
+            "submit_update_request",
+            new Dictionary<string, object?>
+            {
+                ["databaseId"] = databaseId,
+                ["sql"] = "UPDATE people SET active = true WHERE id = 1",
+                ["reason"] = reason,
+            },
+            cancellationToken: ct);
+
+        var submitText = ContentText(submitResult);
+        Assert.Contains("Pending", submitText);
+        // A clickable link to the request's detail page must be returned for the agent to surface.
+        Assert.Contains("/update/", submitText);
+
+        var idMatch = System.Text.RegularExpressions.Regex.Match(
+            submitText, "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+        Assert.True(idMatch.Success, "Expected an update request id (GUID) in the submit response");
+
+        var getResult = await mcpClient.CallToolAsync(
+            "get_update_request",
+            new Dictionary<string, object?> { ["id"] = idMatch.Value },
+            cancellationToken: ct);
+
+        var getText = ContentText(getResult);
+        Assert.Contains(idMatch.Value, getText);
+        Assert.Contains(reason, getText);
     }
 
     // ── Private record types ─────────────────────────────────────────────────────
