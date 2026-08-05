@@ -2,7 +2,8 @@ import { useMemo, useRef, useState } from "react";
 import { Button, CloseButton, Flex, Group, Highlight, Table, Text, TextInput } from "@mantine/core";
 import { IconDownload, IconSearch } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { CSSProperties } from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import { useColumnWidths } from "@/components/query/useColumnWidths";
 import { exportToCsv } from "@/utils/csv.ts";
 import { filterRows } from "@/utils/filterRows";
 
@@ -16,37 +17,40 @@ import { filterRows } from "@/utils/filterRows";
 
 const ROW_HEIGHT = 33; // initial estimate; real heights are measured per row
 
-// Fixed column widths (estimated once from the header + a sample of rows) keep
-// the layout stable while rows are virtualized — with content-based sizing the
-// columns would jump as different rows scroll into view.
-const CHAR_PX = 6.6;
-const CELL_CHROME_PX = 24; // padding + border allowance
-const MIN_COL_PX = 56;
-const MAX_COL_PX = 360;
-const SAMPLE_ROWS = 200;
-
 const ELLIPSIS: CSSProperties = {
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
 };
 
-function columnWidths(
-  columns: Array<string>,
-  rows: Array<Array<string | null>>,
-): Array<number> {
-  const sample = rows.length > SAMPLE_ROWS ? rows.slice(0, SAMPLE_ROWS) : rows;
-  return columns.map((col, j) => {
-    let maxChars = col.length;
-    for (const row of sample) {
-      const value = row[j];
-      const len = value === null ? 4 /* "NULL" */ : value.length;
-      if (len > maxChars) maxChars = len;
-    }
-    return Math.round(
-      Math.min(MAX_COL_PX, Math.max(MIN_COL_PX, maxChars * CHAR_PX + CELL_CHROME_PX)),
-    );
-  });
+function ColumnResizeHandle({
+  label,
+  onPointerDown,
+  onDoubleClick,
+}: {
+  label: string;
+  onPointerDown: (event: ReactPointerEvent) => void;
+  onDoubleClick: () => void;
+}) {
+  return (
+    <div
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={`Resize ${label} column`}
+      onPointerDown={onPointerDown}
+      onDoubleClick={onDoubleClick}
+      style={{
+        position: "absolute",
+        top: 0,
+        right: 0,
+        height: "100%",
+        width: 6,
+        cursor: "col-resize",
+        touchAction: "none",
+        userSelect: "none",
+      }}
+    />
+  );
 }
 
 export function ResultTable({
@@ -65,8 +69,7 @@ export function ResultTable({
   const [query, setQuery] = useState("");
   const filtering = query.trim() !== "";
   const filtered = useMemo(() => filterRows(rows, query), [rows, query]);
-  const widths = useMemo(() => columnWidths(columns, rows), [columns, rows]);
-  const totalWidth = useMemo(() => widths.reduce((a, b) => a + b, 0), [widths]);
+  const { widths, totalWidth, onResizeStart, onAutoFit } = useColumnWidths(columns, rows);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -143,9 +146,18 @@ export function ResultTable({
           </colgroup>
           <Table.Thead>
             <Table.Tr>
-              {columns.map((col) => (
+              {columns.map((col, i) => (
+                // The resize handle (position: absolute) anchors to this cell's own
+                // position: sticky, which Mantine sets on th under border-collapse
+                // (see Table.css). Do NOT add position: relative here — it would
+                // override the sticky positioning and unpin the header on scroll.
                 <Table.Th key={col} style={ELLIPSIS}>
                   {col}
+                  <ColumnResizeHandle
+                    label={col}
+                    onPointerDown={(e) => onResizeStart(i, e)}
+                    onDoubleClick={() => onAutoFit(i)}
+                  />
                 </Table.Th>
               ))}
             </Table.Tr>
