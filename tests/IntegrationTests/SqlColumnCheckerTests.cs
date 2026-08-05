@@ -101,6 +101,51 @@ public class SqlColumnCheckerTests
     }
 
     [Fact]
+    public void FindBlockedColumns_CountStar_NotBlocked()
+    {
+        var blocked = new[] { ("public", "users", "email"), ("public", "users", "ssn") };
+        var hits = SqlColumnChecker.FindBlockedColumns("SELECT count(*) FROM users", blocked);
+        Assert.Empty(hits);
+    }
+
+    [Fact]
+    public void FindBlockedColumns_Multiplication_NotBlocked()
+    {
+        var blocked = new[] { ("public", "orders", "price") };
+        var hits = SqlColumnChecker.FindBlockedColumns(
+            "SELECT quantity * unit_cost AS total FROM orders", blocked);
+        Assert.Empty(hits);
+    }
+
+    [Fact]
+    public void FindBlockedColumns_CteWithCountStar_NotBlocked()
+    {
+        var blocked = new[] { ("public", "users", "email") };
+        var sql = """
+            WITH active AS (SELECT id FROM users WHERE active = true)
+            SELECT count(*) FROM active
+            """;
+        var hits = SqlColumnChecker.FindBlockedColumns(sql, blocked);
+        Assert.Empty(hits);
+    }
+
+    [Fact]
+    public void FindBlockedColumns_SelectStar_StillBlocks()
+    {
+        var blocked = new[] { ("public", "users", "email"), ("public", "users", "ssn") };
+        var hits = SqlColumnChecker.FindBlockedColumns("SELECT * FROM users", blocked);
+        Assert.Equal(2, hits.Count);
+    }
+
+    [Fact]
+    public void FindBlockedColumns_QualifiedStar_StillBlocks()
+    {
+        var blocked = new[] { ("public", "users", "email") };
+        var hits = SqlColumnChecker.FindBlockedColumns("SELECT u.* FROM users u", blocked);
+        Assert.Single(hits);
+    }
+
+    [Fact]
     public void FindBlockedColumns_ToJsonb_BlocksSensitiveColumns()
     {
         var blocked = new[] { ("public", "employees", "ssn") };
