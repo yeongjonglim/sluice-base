@@ -9,7 +9,12 @@ import { measureRenderedText, measureText } from "@/utils/measureText";
 // allowance — leaves the text sitting in just its natural padding, no dead space.
 // Rounded up to 12 for a sub-pixel margin so the tail never clips.
 const CELL_CHROME_PX = 12;
-export const MIN_COL_PX = 56;
+// Floor for the auto-estimate and manual resize — just enough to keep a
+// near-empty column usable (header + the 6px resize handle) without padding out
+// genuinely narrow numeric/boolean columns, which the content measurement already
+// sizes tightly (e.g. a 1–3 digit column lands ~35px, below this floor only when
+// its content truly is tiny).
+export const MIN_COL_PX = 32;
 const MAX_COL_PX = 360; // cap for the auto-estimate only
 const SAMPLE_ROWS = 200;
 

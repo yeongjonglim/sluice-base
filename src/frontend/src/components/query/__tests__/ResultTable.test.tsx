@@ -92,15 +92,15 @@ describe("ResultTable column resizing", () => {
 
   it("widens a column when its handle is dragged right", () => {
     const { container } = renderCustom(["id", "name"], [["1", "Ada"]]);
-    expect(colWidths(container)[0]).toBe("56px");
+    expect(colWidths(container)[0]).toBe("32px");
 
     const handle = screen.getByLabelText("Resize id column");
     fireEvent.pointerDown(handle, { clientX: 0 });
     fireEvent.pointerMove(window, { clientX: 100 });
     fireEvent.pointerUp(window, { clientX: 100 });
 
-    // 56 + 100 = 156, within [56, 800].
-    expect(colWidths(container)[0]).toBe("156px");
+    // 32 + 100 = 132, within [32, 800].
+    expect(colWidths(container)[0]).toBe("132px");
   });
 
   it("auto-fits a column to its content on double-click", () => {
@@ -119,14 +119,14 @@ describe("ResultTable column resizing", () => {
     fireEvent.pointerDown(screen.getByLabelText("Resize id column"), { clientX: 0 });
     fireEvent.pointerMove(window, { clientX: 100 });
     fireEvent.pointerUp(window, { clientX: 100 });
-    expect(colWidths(container)[0]).toBe("156px");
+    expect(colWidths(container)[0]).toBe("132px");
 
     rerender(
       <MantineProvider>
         <ResultTable columns={["v"]} rows={[["1"]]} rowCount={1} durationMs={1} resultIndex={0} />
       </MantineProvider>,
     );
-    // Fresh estimate for the new single column; the dragged 156px is gone.
-    expect(colWidths(container)).toEqual(["56px"]);
+    // Fresh estimate for the new single column; the dragged 132px is gone.
+    expect(colWidths(container)).toEqual(["32px"]);
   });
 });

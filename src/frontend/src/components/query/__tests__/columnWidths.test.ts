@@ -12,8 +12,8 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("columnWidths", () => {
   it("clamps a short column up to the minimum width", () => {
-    // "id" -> ceil(2*6.6)=14, +12 chrome = 26, clamped up to MIN 56.
-    expect(columnWidths(["id"], [["1"]])).toEqual([56]);
+    // "id" -> ceil(2*6.6)=14, +12 chrome = 26, clamped up to MIN 32.
+    expect(columnWidths(["id"], [["1"]])).toEqual([32]);
   });
 
   it("clamps a very wide column down to the maximum width", () => {
@@ -27,7 +27,8 @@ describe("columnWidths", () => {
   });
 
   it("treats null cells as the text 'NULL' without throwing", () => {
-    expect(columnWidths(["c"], [[null]])).toEqual([56]);
+    // "NULL" -> ceil(4*6.6)=27, +12 = 39; above the MIN 32 floor.
+    expect(columnWidths(["c"], [[null]])).toEqual([39]);
   });
 });
 
