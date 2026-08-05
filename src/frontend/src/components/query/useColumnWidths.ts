@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { PointerEvent as ReactPointerEvent } from "react";
-import { MANUAL_MAX_COL_PX, autoFitWidth, columnWidths } from "@/components/query/columnWidths";
-
-const MIN_COL_PX = 56; // resize floor; matches the columnWidths clamp minimum
+import { MANUAL_MAX_COL_PX, MIN_COL_PX, autoFitWidth, columnWidths } from "@/components/query/columnWidths";
 
 function clamp(value: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, value));
@@ -50,6 +48,10 @@ export function useColumnWidths(
   }
 
   function onResizeStart(index: number, event: ReactPointerEvent) {
+    // A new drag can start (pointerdown) before the previous one's pointerup fires.
+    // End the in-flight drag first so its window listeners are removed instead of leaked.
+    if (drag.current) drag.current.up();
+
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = widths[index];

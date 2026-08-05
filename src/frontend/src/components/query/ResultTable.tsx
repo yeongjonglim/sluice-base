@@ -147,7 +147,11 @@ export function ResultTable({
           <Table.Thead>
             <Table.Tr>
               {columns.map((col, i) => (
-                <Table.Th key={col} style={{ ...ELLIPSIS, position: "relative" }}>
+                // The resize handle (position: absolute) anchors to this cell's own
+                // position: sticky, which Mantine sets on th under border-collapse
+                // (see Table.css). Do NOT add position: relative here — it would
+                // override the sticky positioning and unpin the header on scroll.
+                <Table.Th key={col} style={ELLIPSIS}>
                   {col}
                   <ColumnResizeHandle
                     label={col}

@@ -5,7 +5,7 @@ import { measureText } from "@/utils/measureText";
 // sizing the columns would jump as different rows scroll into view. These widths are
 // the starting defaults; users can drag or double-click to resize (see useColumnWidths).
 const CELL_CHROME_PX = 24; // padding + border allowance
-const MIN_COL_PX = 56;
+export const MIN_COL_PX = 56;
 const MAX_COL_PX = 360; // cap for the auto-estimate only
 const SAMPLE_ROWS = 200;
 
