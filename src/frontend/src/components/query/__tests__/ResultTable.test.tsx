@@ -106,12 +106,12 @@ describe("ResultTable column resizing", () => {
   it("auto-fits a column to its content on double-click", () => {
     const long = "x".repeat(80);
     const { container } = renderCustom(["id", "name"], [["1", long]]);
-    // Estimate clamps the 552px content down to the 360 cap.
+    // Estimate clamps the 540px content down to the 360 cap.
     expect(colWidths(container)[1]).toBe("360px");
 
     fireEvent.dblClick(screen.getByLabelText("Resize name column"));
     // Auto-fit ignores the 360 cap and fits the real content.
-    expect(colWidths(container)[1]).toBe("552px");
+    expect(colWidths(container)[1]).toBe("540px");
   });
 
   it("resets widths when the result's columns change", () => {
