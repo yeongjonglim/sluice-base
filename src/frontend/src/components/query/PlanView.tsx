@@ -1,9 +1,12 @@
+import { useMemo } from "react";
 import { Alert, Code, Collapse, Stack, Text, UnstyledButton } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { IconChevronRight } from "@tabler/icons-react";
 import type { ExplainEntry } from "@/api/useExplainRuns";
 import { ApiError } from "@/api/client";
 import { PlanSummaryBadges } from "@/components/query/PlanSummaryBadges";
+import { PlanTree } from "@/components/query/PlanTree";
+import { parsePlan } from "@/utils/queryPlan";
 
 function prettyJson(raw: string): string {
   try {
@@ -15,6 +18,10 @@ function prettyJson(raw: string): string {
 
 export function PlanView({ entry }: { entry: ExplainEntry }) {
   const [open, { toggle }] = useDisclosure(false);
+  const parsed = useMemo(
+    () => (entry.plan ? parsePlan(entry.plan.planJson) : null),
+    [entry.plan],
+  );
 
   if (entry.status === "pending") {
     return <Text p="xs" size="sm" c="dimmed">Analyzing…</Text>;
@@ -47,6 +54,7 @@ export function PlanView({ entry }: { entry: ExplainEntry }) {
   return (
     <Stack p="xs" gap="xs">
       <PlanSummaryBadges summary={entry.plan.summary} />
+      {parsed && <PlanTree root={parsed} />}
       <UnstyledButton onClick={toggle}>
         <Text size="xs" c="dimmed" style={{ display: "flex", alignItems: "center", gap: 4 }}>
           <IconChevronRight
@@ -56,7 +64,7 @@ export function PlanView({ entry }: { entry: ExplainEntry }) {
           Raw plan
         </Text>
       </UnstyledButton>
-      <Collapse expanded={open} keepMounted={false}>
+      <Collapse expanded={open || !parsed} keepMounted={false}>
         <Code block fz="xs" style={{ maxHeight: 320, overflow: "auto" }}>
           {prettyJson(entry.plan.planJson)}
         </Code>
