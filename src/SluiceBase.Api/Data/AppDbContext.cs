@@ -31,6 +31,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Database> Databases => Set<Database>();
     public DbSet<QueryLog> QueryLogs => Set<QueryLog>();
     public DbSet<UpdateRequest> UpdateRequests => Set<UpdateRequest>();
+    public DbSet<UpdateRequestEvent> UpdateRequestEvents => Set<UpdateRequestEvent>();
     public DbSet<McpOAuthClient> McpOAuthClients => Set<McpOAuthClient>();
     public DbSet<McpAuthCode> McpAuthCodes => Set<McpAuthCode>();
     public DbSet<McpToken> McpTokens => Set<McpToken>();

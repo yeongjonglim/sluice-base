@@ -94,6 +94,41 @@ public class SqlTokenizerTests
     }
 
     [Fact]
+    public void Tokenize_CountStar_NotWildcard()
+    {
+        var result = SqlTokenizer.Tokenize("SELECT count(*) FROM users");
+        Assert.False(result.HasWildcard);
+    }
+
+    [Fact]
+    public void Tokenize_Multiplication_NotWildcard()
+    {
+        var result = SqlTokenizer.Tokenize("SELECT quantity * unit_cost FROM orders");
+        Assert.False(result.HasWildcard);
+    }
+
+    [Fact]
+    public void Tokenize_NumericMultiplication_NotWildcard()
+    {
+        var result = SqlTokenizer.Tokenize("SELECT price, 2 * 3 FROM orders");
+        Assert.False(result.HasWildcard);
+    }
+
+    [Fact]
+    public void Tokenize_QualifiedStar_DetectsWildcard()
+    {
+        var result = SqlTokenizer.Tokenize("SELECT u.* FROM users u");
+        Assert.True(result.HasWildcard);
+    }
+
+    [Fact]
+    public void Tokenize_DistinctOnStar_DetectsWildcard()
+    {
+        var result = SqlTokenizer.Tokenize("SELECT DISTINCT ON (id) * FROM users");
+        Assert.True(result.HasWildcard);
+    }
+
+    [Fact]
     public void Tokenize_UppercaseKeywords_ExtractedAsIdentifiers()
     {
         var result = SqlTokenizer.Tokenize("SELECT EMAIL, FIRST_NAME FROM USERS");

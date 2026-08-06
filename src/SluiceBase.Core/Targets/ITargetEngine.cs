@@ -32,10 +32,15 @@ public interface ITargetEngine
         bool analyze,
         CancellationToken ct);
 
-    Task<int> ExecuteUpdateAsync(
+    Task<UpdateExecutionResult> ExecuteUpdateAsync(
         string connectionString,
         string sql,
+        bool commit,
         CancellationToken ct);
 }
 
 public sealed record ConnectivityResult(bool Ok, string? Error);
+
+public sealed record UpdateExecutionResult(
+    IReadOnlyList<QueryData> ResultSets,
+    int AffectedRows);

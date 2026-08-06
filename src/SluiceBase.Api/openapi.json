@@ -2095,6 +2095,49 @@
           }
         }
       }
+    },
+    "/api/update/{id}/preview": {
+      "post": {
+        "tags": [
+          "UpdateEndpoints"
+        ],
+        "operationId": "PreviewUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdatePreviewResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3154,6 +3197,30 @@
           }
         }
       },
+      "QueryData": {
+        "required": [
+          "columns",
+          "rows"
+        ],
+        "type": "object",
+        "properties": {
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
       "QueryHistoryItem": {
         "required": [
           "id",
@@ -3975,6 +4042,45 @@
           }
         }
       },
+      "UpdatePreviewResponse": {
+        "required": [
+          "resultSets",
+          "affectedRows",
+          "durationMs",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "resultSets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueryData"
+            }
+          },
+          "affectedRows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "durationMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
       "UpdateRequestDetailResponse": {
         "required": [
           "id",
@@ -4001,7 +4107,8 @@
           "execDurationMs",
           "execAffectedRows",
           "execError",
-          "sourceRequestId"
+          "sourceRequestId",
+          "events"
         ],
         "type": "object",
         "properties": {
@@ -4173,8 +4280,105 @@
                 "$ref": "#/components/schemas/UpdateRequestId"
               }
             ]
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UpdateRequestEventItem"
+            }
           }
         }
+      },
+      "UpdateRequestEventItem": {
+        "required": [
+          "type",
+          "actorId",
+          "actorName",
+          "at",
+          "note",
+          "success",
+          "durationMs",
+          "affectedRows",
+          "resultSetCount",
+          "error"
+        ],
+        "type": "object",
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/UpdateRequestEventType"
+          },
+          "actorId": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/UserId"
+              }
+            ]
+          },
+          "actorName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "note": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "success": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "durationMs": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "affectedRows": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "resultSetCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "null",
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        }
+      },
+      "UpdateRequestEventType": {
+        "enum": [
+          "Previewed"
+        ],
+        "type": "string"
       },
       "UpdateRequestId": {
         "type": "string",

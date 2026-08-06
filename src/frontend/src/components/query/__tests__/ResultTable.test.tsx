@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { ResultTable } from "@/components/query/ResultTable";
 import { filterRows } from "@/utils/filterRows";
@@ -60,5 +60,73 @@ describe("ResultTable", () => {
     renderTable([["1", "Ada"], ["2", "Bob"]]);
     expect(screen.getByText(/2 rows/)).toBeInTheDocument();
     expect(screen.getByText(/5 ms/)).toBeInTheDocument();
+  });
+});
+
+describe("ResultTable column resizing", () => {
+  // Force the char-count fallback (6.6px/char) so widths are deterministic.
+  beforeEach(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  function renderCustom(columns: Array<string>, rows: Array<Array<string | null>>) {
+    return render(
+      <MantineProvider>
+        <ResultTable
+          columns={columns}
+          rows={rows}
+          rowCount={rows.length}
+          durationMs={1}
+          resultIndex={0}
+        />
+      </MantineProvider>,
+    );
+  }
+
+  function colWidths(container: HTMLElement): Array<string> {
+    return Array.from(container.querySelectorAll("col")).map(
+      (col) => (col as HTMLElement).style.width,
+    );
+  }
+
+  it("widens a column when its handle is dragged right", () => {
+    const { container } = renderCustom(["id", "name"], [["1", "Ada"]]);
+    expect(colWidths(container)[0]).toBe("32px");
+
+    const handle = screen.getByLabelText("Resize id column");
+    fireEvent.pointerDown(handle, { clientX: 0 });
+    fireEvent.pointerMove(window, { clientX: 100 });
+    fireEvent.pointerUp(window, { clientX: 100 });
+
+    // 32 + 100 = 132, within [32, 800].
+    expect(colWidths(container)[0]).toBe("132px");
+  });
+
+  it("auto-fits a column to its content on double-click", () => {
+    const long = "x".repeat(80);
+    const { container } = renderCustom(["id", "name"], [["1", long]]);
+    // Estimate clamps the 540px content down to the 360 cap.
+    expect(colWidths(container)[1]).toBe("360px");
+
+    fireEvent.dblClick(screen.getByLabelText("Resize name column"));
+    // Auto-fit ignores the 360 cap and fits the real content.
+    expect(colWidths(container)[1]).toBe("540px");
+  });
+
+  it("resets widths when the result's columns change", () => {
+    const { container, rerender } = renderCustom(["id", "name"], [["1", "Ada"]]);
+    fireEvent.pointerDown(screen.getByLabelText("Resize id column"), { clientX: 0 });
+    fireEvent.pointerMove(window, { clientX: 100 });
+    fireEvent.pointerUp(window, { clientX: 100 });
+    expect(colWidths(container)[0]).toBe("132px");
+
+    rerender(
+      <MantineProvider>
+        <ResultTable columns={["v"]} rows={[["1"]]} rowCount={1} durationMs={1} resultIndex={0} />
+      </MantineProvider>,
+    );
+    // Fresh estimate for the new single column; the dragged 132px is gone.
+    expect(colWidths(container)).toEqual(["32px"]);
   });
 });

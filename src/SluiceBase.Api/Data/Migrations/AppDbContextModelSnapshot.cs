@@ -17,7 +17,7 @@ namespace SluiceBase.Api.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.9")
+                .HasAnnotation("ProductVersion", "10.0.10")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -852,6 +852,66 @@ namespace SluiceBase.Api.Data.Migrations
                     b.ToTable("update_request", (string)null);
                 });
 
+            modelBuilder.Entity("SluiceBase.Core.Updates.UpdateRequestEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid?>("ActorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_id");
+
+                    b.Property<int?>("AffectedRows")
+                        .HasColumnType("integer")
+                        .HasColumnName("affected_rows");
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<int?>("DurationMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("duration_ms");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("request_id");
+
+                    b.Property<int?>("ResultSetCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("result_set_count");
+
+                    b.Property<bool?>("Success")
+                        .HasColumnType("boolean")
+                        .HasColumnName("success");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_update_request_event");
+
+                    b.HasIndex("ActorId")
+                        .HasDatabaseName("ix_update_request_event_actor_id");
+
+                    b.HasIndex("RequestId")
+                        .HasDatabaseName("ix_update_request_event_request_id");
+
+                    b.ToTable("update_request_event", (string)null);
+                });
+
             modelBuilder.Entity("SluiceBase.Core.Users.ExternalLogin", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1197,6 +1257,26 @@ namespace SluiceBase.Api.Data.Migrations
                     b.Navigation("Submitter");
                 });
 
+            modelBuilder.Entity("SluiceBase.Core.Updates.UpdateRequestEvent", b =>
+                {
+                    b.HasOne("SluiceBase.Core.Users.User", "Actor")
+                        .WithMany()
+                        .HasForeignKey("ActorId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_update_request_event_user_actor_id");
+
+                    b.HasOne("SluiceBase.Core.Updates.UpdateRequest", "Request")
+                        .WithMany("Events")
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_update_request_event_update_request_request_id");
+
+                    b.Navigation("Actor");
+
+                    b.Navigation("Request");
+                });
+
             modelBuilder.Entity("SluiceBase.Core.Users.ExternalLogin", b =>
                 {
                     b.HasOne("SluiceBase.Core.Users.User", "User")
@@ -1248,6 +1328,11 @@ namespace SluiceBase.Api.Data.Migrations
                     b.Navigation("Credentials");
 
                     b.Navigation("Databases");
+                });
+
+            modelBuilder.Entity("SluiceBase.Core.Updates.UpdateRequest", b =>
+                {
+                    b.Navigation("Events");
                 });
 
             modelBuilder.Entity("SluiceBase.Core.Users.User", b =>
