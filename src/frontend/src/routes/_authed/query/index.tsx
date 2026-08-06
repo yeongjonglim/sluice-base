@@ -4,6 +4,7 @@ import {
   Button,
   Group,
   Kbd,
+  Menu,
   Popover,
   Splitter,
   Stack,
@@ -11,6 +12,8 @@ import {
 } from "@mantine/core";
 import { useOs } from "@mantine/hooks";
 import {
+  IconChartBar,
+  IconChevronDown,
   IconPlayerPlay,
   IconPlayerTrackNext,
   IconQuestionMark,
@@ -27,11 +30,13 @@ import { meQueryOptions, useSchema } from "@/api/hooks";
 import { DatabaseSelect } from "@/components/DatabaseSelect";
 import { SchemaSidebar } from "@/components/schema/SchemaSidebar";
 import { useQueryRuns } from "@/api/useQueryRuns";
+import { useExplainRuns } from "@/api/useExplainRuns";
 import { splitSqlStatements } from "@/utils/splitSqlStatements";
 import { buildSelectSnippet } from "@/utils/buildSelectSnippet";
-import { selectStatements } from "@/utils/selectStatements";
+import { buildExplainDispatch, resolveTargetStatements } from "@/utils/resolveTargetStatements";
 import { highlightStatementInEditor } from "@/utils/editorHighlight";
 import { ResultTabs } from "@/components/query/ResultTabs";
+import { PlanTabs } from "@/components/query/PlanTabs";
 
 const noIndentKeymap = Prec.highest(
   keymap.of([
@@ -61,7 +66,7 @@ export const Route = createFileRoute("/_authed/query/")({
   component: QueryPage,
 });
 
-function QueryPage() {
+export function QueryPage() {
   const isMac = useOs({ getValueInEffect: false }) === "macos";
   const [selectedDatabaseId, setSelectedDatabaseId] = useSessionState<string | null>(
     "sluice:query:db",
@@ -71,10 +76,13 @@ function QueryPage() {
   const [editorContent, setEditorContent] = useSessionState("sluice:query:editor", "");
   const editorRef = useRef<ReactCodeMirrorRef>(null);
   const { runs, run, isRunning } = useQueryRuns();
+  const explain = useExplainRuns();
   // Which button launched the in-flight run, so only that button shows the
   // spinner. No reset needed: each button's loading is gated on `isRunning`,
   // which flips back to false when the run settles.
   const [activeRun, setActiveRun] = useState<"single" | "all">("single");
+  // Which view the bottom pane shows: last action wins.
+  const [resultView, setResultView] = useState<"results" | "plan">("results");
 
   const handleTableClick = useCallback(
     (schemaName: string, tableName: string, columns: Array<{ name: string; isSensitive: boolean; isRestricted: boolean }>) => {
@@ -98,17 +106,29 @@ function QueryPage() {
   // run mutation does — which keeps `editorExtensions` stable (see below).
   const handleRun = useCallback(
     (runAll: boolean, view: EditorView | null | undefined) => {
-      if (!selectedDatabaseId || !view) return;
-      const stmts = splitSqlStatements(view.state.doc.toString());
-      if (stmts.length === 0) return;
-      const { from, to, empty } = view.state.selection.main;
-      const targets = selectStatements(stmts, { from, to, empty }, runAll);
+      if (!selectedDatabaseId) return;
+      const targets = resolveTargetStatements(view, runAll);
       if (targets.length > 0) {
         setActiveRun(runAll ? "all" : "single");
+        setResultView("results");
         run(selectedDatabaseId, targets);
       }
     },
     [selectedDatabaseId, run],
+  );
+
+  // Mirrors `handleRun`'s statement scoping, but Explain never runs "all" —
+  // it always targets the current selection/cursor — and carries an
+  // `analyze` flag (false for the primary button, true for "Explain with
+  // timings", which actually executes the query).
+  const handleExplain = useCallback(
+    (analyze: boolean, view: EditorView | null | undefined) => {
+      const dispatch = buildExplainDispatch(selectedDatabaseId, view, analyze);
+      if (!dispatch) return;
+      setResultView("plan");
+      explain.run(dispatch.databaseId, dispatch.targets, dispatch.analyze);
+    },
+    [selectedDatabaseId, explain],
   );
 
   const handleHighlight = useCallback((entry: { fromPos: number; toPos: number }) => {
@@ -232,6 +252,36 @@ function QueryPage() {
                 >
                   Run all{statements.length > 1 ? ` (${statements.length})` : ""}
                 </Button>
+                <Button.Group>
+                  <Button
+                    variant="default"
+                    leftSection={<IconChartBar size={14} />}
+                    size="sm"
+                    onClick={() => handleExplain(false, editorRef.current?.view)}
+                    loading={explain.isRunning}
+                    disabled={!selectedDatabaseId || statements.length === 0 || explain.isRunning}
+                  >
+                    Explain
+                  </Button>
+                  <Menu position="bottom-end" withArrow shadow="md">
+                    <Menu.Target>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        px={6}
+                        disabled={!selectedDatabaseId || statements.length === 0 || explain.isRunning}
+                        aria-label="Explain options"
+                      >
+                        <IconChevronDown size={14} />
+                      </Button>
+                    </Menu.Target>
+                    <Menu.Dropdown>
+                      <Menu.Item onClick={() => handleExplain(true, editorRef.current?.view)}>
+                        Explain with timings (runs the query)
+                      </Menu.Item>
+                    </Menu.Dropdown>
+                  </Menu>
+                </Button.Group>
                 <Popover position="bottom-start" withArrow shadow="md">
                   <Popover.Target>
                     <ActionIcon variant="subtle" size="sm" color="gray" aria-label="Keyboard shortcuts">
@@ -262,7 +312,11 @@ function QueryPage() {
           </Splitter.Pane>
 
           <Splitter.Pane defaultSize={65} min={15} style={{ overflow: "hidden" }}>
-            <ResultTabs runs={runs} onHighlight={handleHighlight} />
+            {resultView === "plan" ? (
+              <PlanTabs runs={explain.runs} onHighlight={handleHighlight} />
+            ) : (
+              <ResultTabs runs={runs} onHighlight={handleHighlight} />
+            )}
           </Splitter.Pane>
         </Splitter>
       </Splitter.Pane>

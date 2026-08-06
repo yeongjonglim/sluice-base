@@ -26,6 +26,12 @@ public interface ITargetEngine
         string sql,
         CancellationToken ct);
 
+    Task<QueryPlan> ExplainAsync(
+        string connectionString,
+        string sql,
+        bool analyze,
+        CancellationToken ct);
+
     Task<UpdateExecutionResult> ExecuteUpdateAsync(
         string connectionString,
         string sql,
