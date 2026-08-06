@@ -26,8 +26,10 @@ describe("PlanView", () => {
     renderView(entry());
     expect(screen.getByText(/1,?000/)).toBeInTheDocument();
     expect(screen.getByText(/42/)).toBeInTheDocument();
-    expect(screen.getByText("Full Table Scan")).toBeInTheDocument();
-    expect(screen.getByText("Seq Scan")).toBeInTheDocument();
+    // "Full Table Scan" and "Seq Scan" now legitimately appear twice each:
+    // once in the summary badges, once in the tree row.
+    expect(screen.getAllByText("Full Table Scan").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Seq Scan").length).toBeGreaterThan(0);
   });
 
   it("shows actual time when analyzed", () => {
@@ -68,5 +70,30 @@ describe("PlanView", () => {
     // The Collapse open animation runs across nested requestAnimationFrame
     // callbacks, so the raw plan mounts asynchronously.
     await waitFor(() => expect(screen.getByText(/"Node Type"/)).toBeInTheDocument());
+  });
+
+  it("renders the node tree for a parseable success plan", () => {
+    renderView(entry({
+      plan: {
+        planJson: JSON.stringify([{ Plan: { "Node Type": "Seq Scan", "Relation Name": "orders", "Total Cost": 890, "Plan Rows": 10000 } }]),
+        summary: { totalCost: 890, estimatedRows: 10000, rootNode: "Seq Scan", hasSeqScan: true, actualTotalMs: null },
+      },
+    }));
+    // "Seq Scan" appears in both the summary badge and the tree row; "orders"
+    // is unique to the tree row, so it confirms the tree actually rendered.
+    expect(screen.getAllByText("Seq Scan").length).toBeGreaterThan(0);
+    expect(screen.getByText(/orders/)).toBeInTheDocument();
+    expect(screen.getByText(/Raw plan/i)).toBeInTheDocument(); // secondary toggle still present
+  });
+
+  it("falls back to the raw panel when the plan JSON will not parse", () => {
+    renderView(entry({
+      plan: {
+        planJson: "not valid json",
+        summary: { totalCost: 0, estimatedRows: 0, rootNode: "?", hasSeqScan: false, actualTotalMs: null },
+      },
+    }));
+    // No tree; raw content shown directly
+    expect(screen.getByText(/not valid json/)).toBeInTheDocument();
   });
 });
