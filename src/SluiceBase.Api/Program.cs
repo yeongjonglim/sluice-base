@@ -53,6 +53,7 @@ builder.Services.AddScoped<IServerConnectionFactory, ServerConnectionFactory>();
 builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<ISchemaService, SchemaService>();
 builder.Services.AddScoped<IQueryService, QueryService>();
+builder.Services.AddScoped<IUpdateRequestService, UpdateRequestService>();
 builder.Services.AddScoped<SensitiveColumnGuard>();
 
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
@@ -61,9 +62,24 @@ builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
 var mcpEnabled = builder.Configuration.GetValue($"{McpOptions.SectionName}:Enabled", true);
 if (mcpEnabled)
 {
-    builder.Services.AddMcpServer()
+    builder.Services.AddMcpServer(options =>
+        {
+            // House rule surfaced to every client session up front. Best-effort deterrence:
+            // the actual boundary is SensitiveColumnGuard (server-side, hard-rejects + logs).
+            options.ServerInstructions =
+                "Sensitive columns are enforced server-side. If run_query reports " +
+                "'sensitive_columns_blocked', re-run the query without the named columns — do not " +
+                "try to work around the restriction (SELECT *, aliases, casts, row-serialization, or " +
+                "resubmitting); it cannot be bypassed from here. Write access is request-only: use " +
+                "submit_update_request to propose changes for human review. You cannot approve or " +
+                "execute update requests. Update SQL runs inside a system-managed transaction — never " +
+                "include BEGIN/COMMIT/ROLLBACK. Tool results return server-relative paths (e.g. " +
+                "/update/{id}); prefix them with this MCP server's base URL — the origin you connect " +
+                "to, without the /mcp suffix — to present clickable links to the user.";
+        })
         .WithHttpTransport()
-        .WithTools<DatabaseTools>();
+        .WithTools<DatabaseTools>()
+        .WithTools<UpdateTools>();
 }
 
 // Register the "vite" HttpClient used by BrandingHtmlMiddleware in dev.

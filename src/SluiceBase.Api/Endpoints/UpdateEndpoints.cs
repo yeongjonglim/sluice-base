@@ -4,6 +4,7 @@ using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Queries;
 using SluiceBase.Api.Servers;
+using SluiceBase.Api.Services;
 using SluiceBase.Core.Common;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Queries;
@@ -34,10 +35,8 @@ internal static class UpdateEndpoints
 
     private static async Task<Results<Created<UpdateRequestDetailResponse>, BadRequest<string>, NotFound, UnauthorizedHttpResult, ForbidHttpResult>> Submit(
         SubmitUpdateRequest req,
-        AppDbContext db,
         ICurrentUserAccessor currentUser,
-        IAccessResolver resolver,
-        TimeProvider timeProvider,
+        IUpdateRequestService updateService,
         CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct);
@@ -48,41 +47,17 @@ internal static class UpdateEndpoints
             return TypedResults.Unauthorized();
         }
 
-        var database = await db.Databases.AsNoTracking()
-            .SingleOrDefaultAsync(s => s.Id == req.DatabaseId, ct);
-        if (database is null)
+        var result = await updateService.SubmitAsync(
+            user, req.DatabaseId, req.SqlText, req.Reason, req.SourceRequestId, ct);
+
+        return result.Outcome switch
         {
-            return TypedResults.NotFound();
-        }
-
-        var hasSubmitRole = await resolver.HasDatabasePermissionAsync(user.Id, database.Id, Permissions.UpdateSubmit, ct);
-        if (!hasSubmitRole)
-        {
-            return TypedResults.Forbid();
-        }
-
-        if (database.IsDisabled)
-        {
-            return TypedResults.BadRequest("Server is disabled.");
-        }
-
-        if (!database.CanWrite)
-        {
-            return TypedResults.BadRequest("Server has no write credentials configured.");
-        }
-
-        var request = UpdateRequest.Create(
-            database.Id,
-            req.SqlText,
-            req.Reason,
-            new Actioned(user.Id, timeProvider.GetUtcNow()),
-            req.SourceRequestId);
-
-        db.UpdateRequests.Add(request);
-        await db.SaveChangesAsync(ct);
-
-        var created = await LoadDetail(db, request.Id, ct);
-        return TypedResults.Created($"/api/update/{request.Id}", ToDetail(created!));
+            SubmitOutcome.Ok => TypedResults.Created($"/api/update/{result.Detail!.Id}", result.Detail),
+            SubmitOutcome.NotFound => TypedResults.NotFound(),
+            SubmitOutcome.Forbidden => TypedResults.Forbid(),
+            SubmitOutcome.BadRequest => TypedResults.BadRequest(result.Error!),
+            _ => TypedResults.BadRequest("Unknown error."),
+        };
     }
 
     // ── list ─────────────────────────────────────────────────────────────────
@@ -92,18 +67,11 @@ internal static class UpdateEndpoints
         DateTimeOffset? to,
         string? databaseId,
         string? status,
-        AppDbContext db,
         ICurrentUserAccessor currentUser,
-        IAccessResolver resolver,
+        IUpdateRequestService updateService,
         CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct);
-
-        // Collect databases where the user has any update permission (submit, approve, or execute)
-        var submitIds = await resolver.DatabasesWithPermissionAsync(user!.Id, Permissions.UpdateSubmit, ct);
-        var approveIds = await resolver.DatabasesWithPermissionAsync(user!.Id, Permissions.UpdateApprove, ct);
-        var executeIds = await resolver.DatabasesWithPermissionAsync(user!.Id, Permissions.UpdateExecute, ct);
-        var allowedDatabaseIds = submitIds.Union(approveIds).Union(executeIds).ToList();
 
         DatabaseId? filterDb = databaseId is not null && Guid.TryParse(databaseId, out var dbGuid)
             ? DatabaseId.From(dbGuid)
@@ -114,63 +82,26 @@ internal static class UpdateEndpoints
             ? parsedStatus
             : null;
 
-        var requests = await db.UpdateRequests
-            .Include(r => r.Database)
-            .Include(r => r.Submitter)
-            .AsNoTracking()
-            .Where(r => r.DatabaseId != null && allowedDatabaseIds.Contains(r.DatabaseId.Value))
-            .Where(r => @from == null || r.SubmittedAt >= @from)
-            .Where(r => to == null || r.SubmittedAt <= to)
-            .Where(r => filterDb == null || r.DatabaseId == filterDb)
-            .Where(r => filterStatus == null || r.Status == filterStatus)
-            .OrderByDescending(r => r.SubmittedAt)
-            .ToListAsync(ct);
-
-        var items = requests
-            .Select(r => new UpdateSummaryItem(
-                r.Id,
-                r.Database?.DisplayName,
-                r.Submitter?.Name ?? r.Submitter?.Email,
-                r.Reason,
-                r.Status,
-                r.SubmittedAt,
-                r.ExecSuccess))
-            .ToList();
-
-        return TypedResults.Ok(new ListUpdateRequestsResponse(items));
+        var response = await updateService.ListAsync(user!, @from, to, filterDb, filterStatus, ct);
+        return TypedResults.Ok(response);
     }
 
     // ── get ──────────────────────────────────────────────────────────────────
 
     private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound>> Get(
         UpdateRequestId id,
-        AppDbContext db,
         ICurrentUserAccessor currentUser,
-        IAccessResolver resolver,
+        IUpdateRequestService updateService,
         CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct);
 
-        var request = await LoadDetail(db, id, ct);
-        if (request is null)
+        var result = await updateService.GetAsync(user!, id, ct);
+        return result.Outcome switch
         {
-            return TypedResults.NotFound();
-        }
-
-        if (request.DatabaseId is not null)
-        {
-            var hasAnyRole = await resolver.HasAnyDatabasePermissionAsync(
-                user!.Id,
-                request.DatabaseId.Value,
-                [Permissions.UpdateSubmit, Permissions.UpdateApprove, Permissions.UpdateExecute],
-                ct);
-            if (!hasAnyRole)
-            {
-                return TypedResults.NotFound();
-            }
-        }
-
-        return TypedResults.Ok(ToDetail(request));
+            GetUpdateOutcome.Ok => TypedResults.Ok(result.Detail!),
+            _ => TypedResults.NotFound(),
+        };
     }
 
     // ── approve ──────────────────────────────────────────────────────────────
@@ -537,7 +468,8 @@ internal static class UpdateEndpoints
     // ── helpers ───────────────────────────────────────────────────────────────
 
     // AsNoTracking so that a second call after SaveChangesAsync returns fresh data with nav props.
-    private static Task<UpdateRequest?> LoadDetail(AppDbContext db, UpdateRequestId id, CancellationToken ct) =>
+    // internal so IUpdateRequestService reuses the exact same load shape for submit/list/get.
+    internal static Task<UpdateRequest?> LoadDetail(AppDbContext db, UpdateRequestId id, CancellationToken ct) =>
         db.UpdateRequests
             .AsNoTracking()
             .Include(r => r.Database)
@@ -552,7 +484,18 @@ internal static class UpdateEndpoints
     private static Task<UpdateRequest?> LoadForMutation(AppDbContext db, UpdateRequestId id, CancellationToken ct) =>
         db.UpdateRequests.SingleOrDefaultAsync(r => r.Id == id, ct);
 
-    private static UpdateRequestDetailResponse ToDetail(UpdateRequest r) =>
+    // internal so IUpdateRequestService maps list rows with the identical projection.
+    internal static UpdateSummaryItem ToSummary(UpdateRequest r) =>
+        new(r.Id,
+            r.Database?.DisplayName,
+            r.Submitter?.Name ?? r.Submitter?.Email,
+            r.Reason,
+            r.Status,
+            r.SubmittedAt,
+            r.ExecSuccess);
+
+    // internal so IUpdateRequestService maps detail responses with the identical projection.
+    internal static UpdateRequestDetailResponse ToDetail(UpdateRequest r) =>
         new(r.Id,
             r.DatabaseId,
             r.Database?.DisplayName,
