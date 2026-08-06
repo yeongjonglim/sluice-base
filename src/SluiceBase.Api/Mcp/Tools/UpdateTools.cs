@@ -19,14 +19,23 @@ internal sealed class UpdateTools
         "approve, reject, cancel, or execute the request; a human operator does that in the app. " +
         "The statement is executed inside a system-managed transaction (rolled back during preview, " +
         "committed on execution), so do NOT include BEGIN/COMMIT/ROLLBACK or any transaction-control " +
-        "statements in your SQL. On success this returns a server-relative 'path' to the request — " +
+        "statements in your SQL. Before approving, a reviewer can PREVIEW this SQL — it runs in the " +
+        "rolled-back transaction and returns any result sets it produces — so write the SQL so its " +
+        "preview reveals the before/after data change (see the 'sql' argument for how to structure it). " +
+        "On success this returns a server-relative 'path' to the request — " +
         "prefix it with this MCP server's base URL (the origin you connect to, without the /mcp " +
         "suffix) and give that clickable link to the user so they can review and approve it.")]
     public static async Task<object> SubmitUpdateRequest(
         [Description("The database id (GUID) from list_databases.")] string databaseId,
         [Description("The write/update SQL to run once a human approves and executes it. Do not wrap it in a " +
-            "transaction (no BEGIN/COMMIT/ROLLBACK) — the system already runs it in a managed transaction.")] string sql,
-        [Description("Why this change is needed — shown to the human reviewer.")] string reason,
+            "transaction (no BEGIN/COMMIT/ROLLBACK) — the system already runs it in a managed transaction. " +
+            "Because reviewers can PREVIEW this SQL (executed then rolled back, returning its result sets), " +
+            "include a before/after comparison so the change is visible in the preview: a leading SELECT of the " +
+            "rows you will touch (the 'before'), then the mutation with a RETURNING clause — or, on engines " +
+            "without RETURNING, a trailing SELECT of the same rows — to show the 'after'. Keep the comparison to " +
+            "the key and changed columns, and leave out sensitive columns (preview blocks them just like reads do).")] string sql,
+        [Description("Why this change is needed — shown to the human reviewer. If your SQL includes a " +
+            "before/after comparison, briefly note what the reviewer should look for in its preview result sets.")] string reason,
         IUpdateRequestService updates, ICurrentUserAccessor currentUser, CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct) ?? throw new InvalidOperationException("No authenticated user.");
