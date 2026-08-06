@@ -19,14 +19,15 @@ internal sealed class UpdateTools
         "approve, reject, cancel, or execute the request; a human operator does that in the app. " +
         "The statement is executed inside a system-managed transaction (rolled back during preview, " +
         "committed on execution), so do NOT include BEGIN/COMMIT/ROLLBACK or any transaction-control " +
-        "statements in your SQL. On success this returns a link to the request — always give that " +
-        "clickable link to the user so they can review and approve it.")]
+        "statements in your SQL. On success this returns a server-relative 'path' to the request — " +
+        "prefix it with this MCP server's base URL (the origin you connect to, without the /mcp " +
+        "suffix) and give that clickable link to the user so they can review and approve it.")]
     public static async Task<object> SubmitUpdateRequest(
         [Description("The database id (GUID) from list_databases.")] string databaseId,
         [Description("The write/update SQL to run once a human approves and executes it. Do not wrap it in a " +
             "transaction (no BEGIN/COMMIT/ROLLBACK) — the system already runs it in a managed transaction.")] string sql,
         [Description("Why this change is needed — shown to the human reviewer.")] string reason,
-        IUpdateRequestService updates, ICurrentUserAccessor currentUser, IHttpContextAccessor http, CancellationToken ct)
+        IUpdateRequestService updates, ICurrentUserAccessor currentUser, CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct) ?? throw new InvalidOperationException("No authenticated user.");
         if (!Guid.TryParse(databaseId, out var g)) { throw new ArgumentException("databaseId must be a GUID."); }
@@ -34,7 +35,7 @@ internal sealed class UpdateTools
         var result = await updates.SubmitAsync(user, DatabaseId.From(g), sql, reason, null, ct);
         return result.Outcome switch
         {
-            SubmitOutcome.Ok => BuildSubmitResponse(result.Detail!, http),
+            SubmitOutcome.Ok => BuildSubmitResponse(result.Detail!),
             SubmitOutcome.NotFound => throw new InvalidOperationException("Database not found."),
             SubmitOutcome.Forbidden => throw new InvalidOperationException(
                 "You do not have permission to submit update requests for this database."),
@@ -43,22 +44,22 @@ internal sealed class UpdateTools
         };
     }
 
-    // Builds the success payload including a clickable link to the request's detail page, derived
-    // from the current request's scheme/host (same approach as the OAuth metadata endpoints).
-    private static object BuildSubmitResponse(
-        UpdateEndpoints.UpdateRequestDetailResponse detail, IHttpContextAccessor http)
+    // Builds the success payload with a SERVER-RELATIVE path to the request's detail page. We
+    // deliberately do not build an absolute URL server-side: the server's own scheme/host is
+    // unreliable behind proxies (forwarded headers) and X-Forwarded-Host is client-spoofable. The
+    // MCP client already knows the base URL it connected to, so it resolves the path — and the
+    // worst case is a harmless relative path rather than a wrong or spoofed absolute link.
+    private static object BuildSubmitResponse(UpdateEndpoints.UpdateRequestDetailResponse detail)
     {
-        var ctx = http.HttpContext;
-        var link = ctx is not null
-            ? $"{McpRequestUrls.BaseUrl(ctx)}/update/{detail.Id.Value}"
-            : $"/update/{detail.Id.Value}";
+        var path = $"/update/{detail.Id.Value}";
         return new
         {
             id = detail.Id,
             status = detail.Status.ToString(),
-            link,
-            message = "Submitted for human review — you cannot approve or execute it. " +
-                      $"Give the user this link to review and approve it: {link}",
+            path,
+            message = "Submitted for human review — you cannot approve or execute it. To give the user a " +
+                      "clickable link, prefix this path with this MCP server's base URL (the origin you " +
+                      $"connect to, without the /mcp suffix): {path}",
         };
     }
 

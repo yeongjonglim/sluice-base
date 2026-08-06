@@ -100,13 +100,16 @@ A separate `[McpServerToolType]` (keeps read/write tools in focused files),
 registered with a second `.WithTools<UpdateTools>()`.
 
 - `submit_update_request(databaseId, sql, reason)` — gated by `update:submit`.
-  Returns `{ id, status: "Pending", link, message }`, where:
-  - `link` is a clickable URL to the request's detail page (`/update/{id}`). The scheme+host
-    are derived from the incoming MCP request via a shared `McpRequestUrls.BaseUrl(ctx)` helper —
-    the same derivation the OAuth metadata endpoints use to advertise the server (issuer/
-    resource) and the server-side equivalent of the frontend's `window.location.origin`. That
-    helper is extracted from `OAuthMetadataEndpoints` so both call one source of truth.
-  - `message` tells the agent it cannot approve/execute and to give the user the link.
+  Returns `{ id, status: "Pending", path, message }`, where:
+  - `path` is a **server-relative** path to the request's detail page (`/update/{id}`). The server
+    deliberately does not build an absolute URL: its own scheme/host is unreliable behind proxies
+    (forwarded headers) and `X-Forwarded-Host` is client-spoofable. The MCP client already knows the
+    base URL it connected to, so it resolves the path — and the worst case degrades to a harmless
+    relative path rather than a wrong or spoofed absolute link. An operator-configured absolute base
+    URL (which would also fix the OAuth metadata, whose `issuer`/endpoints must stay server-built) is
+    tracked separately in issue #209.
+  - `message` tells the agent it cannot approve/execute and to prefix the path with this MCP server's
+    base URL (the origin it connects to, minus `/mcp`) to present a clickable link.
   - The tool description also instructs the agent NOT to include transaction-control statements
     (`BEGIN`/`COMMIT`/`ROLLBACK`): the statement is executed inside a system-managed transaction
     (rolled back for preview via `commit:false`, committed on execute via `commit:true` in
@@ -114,8 +117,9 @@ registered with a second `.WithTools<UpdateTools>()`.
 - `list_update_requests(databaseId?, status?)` — status summaries.
 - `get_update_request(id)` — full detail incl. event history.
 
-The same two points (managed transaction; surface the returned link) are also stated in the
-MCP `ServerInstructions` so every session sees them up front.
+The same points (managed transaction; resolve server-relative paths against the client's MCP base
+URL to surface clickable links) are also stated in the MCP `ServerInstructions` so every session
+sees them up front.
 
 Tool descriptions state plainly that the agent cannot approve/reject/cancel/execute —
 those require a human via the app. Failure outcomes throw `InvalidOperationException`/
@@ -139,9 +143,7 @@ those require a human via the app. Failure outcomes throw `InvalidOperationExcep
 
 - `src/SluiceBase.Api/Mcp/Tools/DatabaseTools.cs` — blocked-result change + description.
 - `src/SluiceBase.Api/Mcp/SensitiveColumnBlockPayload.cs` — new pure helper.
-- `src/SluiceBase.Api/Mcp/McpRequestUrls.cs` — new shared base-URL helper (used by tools + OAuth metadata).
-- `src/SluiceBase.Api/Mcp/Oauth/OAuthMetadataEndpoints.cs` — reuse the shared base-URL helper.
-- `src/SluiceBase.Api/Mcp/Tools/UpdateTools.cs` — new tool-type (submit returns a link; transaction guidance).
+- `src/SluiceBase.Api/Mcp/Tools/UpdateTools.cs` — new tool-type (submit returns a relative path; transaction guidance).
 - `src/SluiceBase.Api/Services/IUpdateRequestService.cs` — new service.
 - `src/SluiceBase.Api/Endpoints/UpdateEndpoints.cs` — Submit/List/Get become adapters; mappers made internal.
 - `src/SluiceBase.Api/Program.cs` — register service, `WithTools<UpdateTools>`, `ServerInstructions`.
