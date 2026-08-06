@@ -8,11 +8,15 @@ export function TableNode({ data }: NodeProps<TableNodeType>) {
   return (
     <Box
       style={{
-        border: "1px solid var(--mantine-color-default-border)",
+        // Pulled-in tables from a hidden schema read as "referenced only": dashed + faded.
+        border: data.isExternal
+          ? "1px dashed var(--mantine-color-default-border)"
+          : "1px solid var(--mantine-color-default-border)",
         borderRadius: "var(--mantine-radius-sm)",
         background: "var(--mantine-color-body)",
         minWidth: 220,
         overflow: "hidden",
+        opacity: data.isExternal ? 0.6 : 1,
       }}
     >
       <Box
