@@ -48,4 +48,50 @@ describe("PlanTree", () => {
     await userEvent.click(screen.getByLabelText("collapse node"));
     expect(screen.queryByText("Seq Scan")).not.toBeInTheDocument();
   });
+
+  it("moves the hottest marker when the metric toggle changes", async () => {
+    renderTree(analyzedTree);
+    // default metric Time -> hottest is the deep Seq Scan (self-time 11 > root's 1)
+    expect(document.querySelector('[data-hottest="true"]')).toHaveTextContent("Seq Scan");
+
+    await userEvent.click(screen.getByText("Cost"));
+    // by Cost, root (1000) outweighs the child (200) -> hottest is the root
+    expect(document.querySelector('[data-hottest="true"]')).toHaveTextContent("Aggregate");
+  });
+});
+
+describe("PlanTree auto-collapse", () => {
+  // Build a root with ~25 cheap leaf children plus one mid-weight "Cheap" child
+  // that itself has a child, so the tree exceeds the 25-node auto-collapse
+  // threshold and "Cheap" (< 1% of root weight) collapses by default.
+  const buildLeaves = (count: number): Array<PlanNode> =>
+    Array.from({ length: count }, (_, i) =>
+      node({ id: `leaf-${i}`, nodeType: `Leaf ${i}`, totalCost: 1, planRows: 1 }),
+    );
+
+  const bigTree = node({
+    id: "0",
+    nodeType: "Root",
+    totalCost: 100000,
+    planRows: 1,
+    children: [
+      ...buildLeaves(25),
+      node({
+        id: "cheap",
+        nodeType: "Cheap",
+        totalCost: 10, // < 1% of root's 100000
+        planRows: 1,
+        children: [node({ id: "cheap.0", nodeType: "Hidden Leaf", totalCost: 1, planRows: 1 })],
+      }),
+    ],
+  });
+
+  it("auto-collapses cheap subtrees in large plans, expandable on demand", async () => {
+    renderTree(bigTree);
+    expect(screen.getByText("Cheap")).toBeInTheDocument();
+    expect(screen.queryByText("Hidden Leaf")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText("expand node"));
+    expect(screen.getByText("Hidden Leaf")).toBeInTheDocument();
+  });
 });

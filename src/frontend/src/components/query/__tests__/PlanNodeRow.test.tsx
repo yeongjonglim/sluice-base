@@ -15,7 +15,7 @@ const renderRow = (props: Partial<React.ComponentProps<typeof PlanNodeRow>> = {}
   render(
     <MantineProvider>
       <PlanNodeRow
-        node={base()} depth={0} metric="cost" weightShare={0.5}
+        node={base()} depth={0} weightShare={0.5}
         isHottest={false} hasChildren={false} collapsed={false} onToggle={vi.fn()}
         {...props}
       />
@@ -36,7 +36,6 @@ describe("PlanNodeRow", () => {
         nodeType: "Seq Scan", actualTotalTimeMs: 8.1, actualRows: 9981, actualLoops: 1,
         selfTimeMs: 8.1, misestimateFactor: 19.96,
       }),
-      metric: "time",
     });
     expect(screen.getByText(/8\.1/)).toBeInTheDocument();
     expect(screen.getByText(/20×|19|est.*actual/i)).toBeInTheDocument();

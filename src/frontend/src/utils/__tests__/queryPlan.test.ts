@@ -75,6 +75,12 @@ describe("parsePlan", () => {
     expect(parsePlan("[]")).toBeNull();
     expect(parsePlan("[{}]")).toBeNull();
   });
+
+  it("returns null instead of throwing when a node's Plans is not an array", () => {
+    const malformed = JSON.stringify([{ Plan: { "Node Type": "X", Plans: 5 } }]);
+    expect(() => parsePlan(malformed)).not.toThrow();
+    expect(parsePlan(malformed)).toBeNull();
+  });
 });
 
 describe("computeSelfTimeMs", () => {

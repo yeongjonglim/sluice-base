@@ -32,18 +32,17 @@ interface RawPlan {
 const MISESTIMATE_THRESHOLD = 10;
 
 export function parsePlan(planJson: string): PlanNode | null {
-  let doc: unknown;
   try {
-    doc = JSON.parse(planJson);
+    const doc: unknown = JSON.parse(planJson);
+    const first = Array.isArray(doc) ? doc[0] : undefined;
+    const root = (first as { Plan?: RawPlan } | undefined)?.Plan;
+    if (!root || typeof root !== "object" || typeof root["Node Type"] !== "string") {
+      return null;
+    }
+    return buildNode(root, "0");
   } catch {
     return null;
   }
-  const first = Array.isArray(doc) ? doc[0] : undefined;
-  const root = (first as { Plan?: RawPlan } | undefined)?.Plan;
-  if (!root || typeof root !== "object" || typeof root["Node Type"] !== "string") {
-    return null;
-  }
-  return buildNode(root, "0");
 }
 
 function numOrNull(v: number | undefined): number | null {

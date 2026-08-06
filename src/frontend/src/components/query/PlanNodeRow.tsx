@@ -1,6 +1,6 @@
 import { ActionIcon, Badge, Box, Group, Text } from "@mantine/core";
 import { IconChevronRight } from "@tabler/icons-react";
-import type { PlanMetric, PlanNode } from "@/utils/queryPlan";
+import type { PlanNode } from "@/utils/queryPlan";
 import { hasActuals, isMisestimated } from "@/utils/queryPlan";
 
 function fmt(n: number): string {
@@ -25,7 +25,6 @@ export function PlanNodeRow({
 }: {
   node: PlanNode;
   depth: number;
-  metric: PlanMetric;
   weightShare: number;
   isHottest: boolean;
   hasChildren: boolean;
@@ -35,6 +34,7 @@ export function PlanNodeRow({
   const analyzed = hasActuals(node);
   return (
     <Box
+      data-hottest={isHottest ? "true" : undefined}
       style={{
         paddingLeft: depth * 16 + 4,
         borderLeft: isHottest ? "2px solid var(--mantine-color-red-6)" : "2px solid transparent",

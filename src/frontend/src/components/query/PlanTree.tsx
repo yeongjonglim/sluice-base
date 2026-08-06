@@ -75,7 +75,6 @@ export function PlanTree({ root }: { root: PlanNode }) {
             key={node.id}
             node={node}
             depth={depth}
-            metric={metric}
             weightShare={maxWeight > 0 ? nodeWeight(node, metric) / maxWeight : 0}
             isHottest={node.id === hottestId && maxWeight > 0}
             hasChildren={node.children.length > 0}
