@@ -1,9 +1,11 @@
+import { useMemo, useState } from "react";
 import { Alert, Box, Button, Center, Group, Loader, Stack, Text } from "@mantine/core";
 import { IconDownload } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { meQueryOptions, useCatalogServer, useExportSchemaDdl, useSchema } from "@/api/hooks";
 import { DatabaseSelect } from "@/components/DatabaseSelect";
 import { ErdCanvas } from "@/components/erd/ErdCanvas";
+import { SchemaSelect } from "@/components/SchemaSelect";
 import { useSessionState } from "@/utils/useSessionState";
 
 export const Route = createFileRoute("/_authed/query/diagram")({
@@ -25,6 +27,27 @@ function DiagramPage() {
   const catalog = useCatalogServer();
   const exportDdl = useExportSchemaDdl();
 
+  // null = "all schemas" (the default). Becomes a concrete array once the user narrows it.
+  const [selectedSchemas, setSelectedSchemas] = useState<Array<string> | null>(null);
+
+  // Reset the schema filter to "all" whenever the selected database changes.
+  // Done during render (not in an effect) per react.dev "You Might Not Need an Effect".
+  const [prevDatabaseId, setPrevDatabaseId] = useState(selectedDatabaseId);
+  if (selectedDatabaseId !== prevDatabaseId) {
+    setPrevDatabaseId(selectedDatabaseId);
+    setSelectedSchemas(null);
+  }
+
+  const allSchemaNames = (schema.data?.schemas ?? []).map((s) => s.name);
+  const effectiveSelected = selectedSchemas ?? allSchemaNames;
+
+  // Stable Set identity (keyed on the selection state) so ErdCanvas's layout effect
+  // only re-runs when the filter actually changes, preserving dragged node positions.
+  const visibleSchemas = useMemo(
+    () => (selectedSchemas === null ? undefined : new Set(selectedSchemas)),
+    [selectedSchemas],
+  );
+
   function handleExport() {
     if (!selectedDatabaseId) return;
     const match = (catalog.data?.servers ?? [])
@@ -45,7 +68,16 @@ function DiagramPage() {
     >
       <Box p="xs" style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}>
         <Group justify="space-between" wrap="nowrap">
-          <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
+          <Group gap="xs" wrap="nowrap">
+            <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
+            {allSchemaNames.length > 1 && (
+              <SchemaSelect
+                schemas={allSchemaNames}
+                value={effectiveSelected}
+                onChange={setSelectedSchemas}
+              />
+            )}
+          </Group>
           <Button
             leftSection={<IconDownload size={14} />}
             size="sm"
@@ -74,7 +106,9 @@ function DiagramPage() {
             {schema.error instanceof Error ? schema.error.message : "Unknown error"}
           </Alert>
         )}
-        {selectedDatabaseId && schema.data && <ErdCanvas tree={schema.data} />}
+        {selectedDatabaseId && schema.data && (
+          <ErdCanvas tree={schema.data} visibleSchemas={visibleSchemas} />
+        )}
       </Box>
     </Stack>
   );

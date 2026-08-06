@@ -49,17 +49,23 @@ function layout(nodes: Array<TableNodeType>, edges: Array<Edge>): Array<TableNod
   });
 }
 
-export function ErdCanvas({ tree }: { tree: SchemaTree }) {
+export function ErdCanvas({
+  tree,
+  visibleSchemas,
+}: {
+  tree: SchemaTree;
+  visibleSchemas?: Set<string>;
+}) {
   // Controlled state with change handlers so nodes are draggable and React Flow can
   // record measured dimensions (which the minimap needs to render node rectangles).
   const [nodes, setNodes, onNodesChange] = useNodesState<TableNodeType>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   useEffect(() => {
-    const model = buildErdModel(tree);
+    const model = buildErdModel(tree, visibleSchemas);
     setNodes(layout(model.nodes, model.edges));
     setEdges(model.edges);
-  }, [tree, setNodes, setEdges]);
+  }, [tree, visibleSchemas, setNodes, setEdges]);
 
   return (
     <ReactFlow
