@@ -74,7 +74,9 @@ function DiagramPage() {
               <SchemaSelect
                 schemas={allSchemaNames}
                 value={effectiveSelected}
-                onChange={setSelectedSchemas}
+                // Removing every pill snaps back to "all schemas" (null) — the meaningful
+                // reset — so the diagram can never blank.
+                onChange={(next) => setSelectedSchemas(next.length > 0 ? next : null)}
               />
             )}
           </Group>
