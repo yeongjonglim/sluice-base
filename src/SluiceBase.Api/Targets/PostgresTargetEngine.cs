@@ -596,6 +596,31 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         return new QueryPlan(planJson, PostgresPlanParser.Parse(planJson));
     }
 
+    public async Task<IReadOnlyList<ColumnRef>> ResolveReferencedColumnsAsync(
+        string connectionString, string sql, CancellationToken ct)
+    {
+        await using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync(ct);
+        await using var tx = await conn.BeginTransactionAsync(ct);
+
+        // Plan only (no ANALYZE): resolves names/aliases/views/`*` without executing the
+        // statement, so nothing mutates even for writes. Read-only + rollback belt-and-suspenders.
+        await using (var setReadOnly = new NpgsqlCommand("SET TRANSACTION READ ONLY", conn, tx))
+        {
+            await setReadOnly.ExecuteNonQueryAsync(ct);
+        }
+
+        string planJson;
+        await using (var cmd = new NpgsqlCommand($"EXPLAIN (VERBOSE, FORMAT JSON, COSTS OFF) {sql}", conn, tx))
+        {
+            var result = await cmd.ExecuteScalarAsync(ct);
+            planJson = result as string ?? result?.ToString() ?? "[]";
+        }
+
+        await tx.RollbackAsync(ct);
+        return PostgresPlanColumnExtractor.Extract(planJson);
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false,
