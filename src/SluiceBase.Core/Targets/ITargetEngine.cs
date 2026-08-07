@@ -44,3 +44,5 @@ public sealed record ConnectivityResult(bool Ok, string? Error);
 public sealed record UpdateExecutionResult(
     IReadOnlyList<QueryData> ResultSets,
     int AffectedRows);
+
+public sealed record ColumnRef(string Schema, string Table, string Column);
