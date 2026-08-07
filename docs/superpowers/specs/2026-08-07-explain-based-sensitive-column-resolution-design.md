@@ -13,7 +13,10 @@ matches **bare column names** against the sensitive list with no knowledge of
 which table each name belongs to. That produces two field-reported defects. This
 design replaces the resolution step with the PostgreSQL planner's own output
 (`EXPLAIN (VERBOSE, FORMAT JSON, COSTS OFF)`), which resolves names, aliases,
-views, and `*` expansion exactly, and keeps the tokenizer as a safe fallback.
+views, and `*` expansion exactly, and keeps the tokenizer as a safe fallback. It
+also closes a serialization vector neither mechanism can see — functions that take
+the target relation as a string literal (`query_to_xml`, `table_to_xml`, …) — with
+an explicit denylist.
 
 ## Problem
 
@@ -61,10 +64,10 @@ closing the view-indirection false-negative the tokenizer cannot see.
   views/functions, more code to maintain. Its one advantage (no per-query DB
   round-trip) does not outweigh the accuracy gap.
 - **Column-level `REVOKE` on the read role.** Strongest enforcement (Postgres
-  rejects the query itself, and it even catches text-argument functions — see
-  Known Limitations), but reworks credential provisioning, loses the structured
-  per-column 403 detail, and complicates per-user bypass. A possible future
-  hardening layer, not this fix.
+  rejects the query itself, and it catches at execution even the text-argument
+  functions the denylist handles by name), but reworks credential provisioning,
+  loses the structured per-column 403 detail, and complicates per-user bypass. A
+  possible future hardening layer, not this fix.
 
 ## Architecture
 
@@ -129,28 +132,71 @@ block-comment / dollar-quote scanning to split SQL on **top-level** semicolons.
 The guard EXPLAINs each statement and unions the resolved columns. This keeps the
 multi-statement update-preview path accurate.
 
-### 4. Guard rewrite (`SensitiveColumnGuard`)
+### 4. Serialization-function denylist (`SerializationFunctionDenylist`)
+
+A class of PostgreSQL functions takes the target relation or query as a **string
+literal / regclass argument** and serializes whole rows — the referenced columns
+never appear as parseable identifiers, so **both** EXPLAIN (a bare `Function Scan`)
+and the tokenizer (which skips string contents) are blind to them. Left unhandled,
+`query_to_xml('SELECT ssn FROM users', …)` would exfiltrate a sensitive column
+past the guard. These are closed with an explicit denylist rather than resolution.
+
+Denylisted functions (the XML export family, `pg_catalog`):
+
+```
+table_to_xml, table_to_xmlschema, table_to_xml_and_xmlschema,
+query_to_xml, query_to_xmlschema, query_to_xml_and_xmlschema,
+cursor_to_xml, cursor_to_xmlschema,
+schema_to_xml, schema_to_xmlschema, schema_to_xml_and_xmlschema,
+database_to_xml, database_to_xmlschema, database_to_xml_and_xmlschema
+```
+
+**Detection** reuses `SqlTokenizer`: any identifier token equal (case-insensitive)
+to a denylisted name is a hit. A relation/column literally named after one of
+these builtins is implausible; the false-positive risk is negligible and the
+safe direction.
+
+**Policy:** the denylist only bites when the database has ≥1 sensitive column
+(the guard already early-outs otherwise), so it never affects databases without
+sensitive data. A hit blocks the whole query — there is no per-column bypass for
+an opaque whole-relation dump, so the block ignores bypass grants. Analyst
+queries effectively never use these functions, so the conservative posture is
+cheap.
+
+### 5. Guard rewrite (`SensitiveColumnGuard`)
 
 Inject `IServerConnectionFactory` and `ITargetEngineRegistry`. The call-site
-signature stays `EvaluateAsync(userId, databaseId, sql, ct)` and the returned
-`SensitiveColumnDecision(BlockedHits, Touched)` shape is **unchanged**, so
-`IQueryService`, `UpdateEndpoints`, and the MCP `SensitiveColumnBlockPayload` are
-untouched.
+signature stays `EvaluateAsync(userId, databaseId, sql, ct)`. The decision record
+gains **one optional field** for the denylist path:
+
+```csharp
+internal sealed record SensitiveColumnDecision(
+    IReadOnlyList<SensitiveColumnHit> BlockedHits,
+    IReadOnlyList<string> Touched,
+    string? PolicyBlockReason = null);   // set when a denylisted function blocks
+```
+
+A query is blocked when `BlockedHits.Count > 0 || PolicyBlockReason is not null`.
+Existing consumers that only read `BlockedHits`/`Touched` keep compiling; the
+block-response path is updated to surface the reason (see Error Handling).
 
 New flow:
 
 1. Load sensitive columns for the database (unchanged). If none, early-out.
-2. Resolve the read connection string
+2. **Denylist scan** the tokenized SQL for a serialization function (§4). On a
+   hit, return immediately with `PolicyBlockReason` naming the function and empty
+   `BlockedHits`/`Touched` — resolution is neither needed nor trustworthy here.
+3. Resolve the read connection string
    (`IServerConnectionFactory.GetConnectionStringAsync(databaseId, CredentialKind.Read, ct)`)
    and the engine (`ITargetEngineRegistry.Resolve(server.Kind)`).
-3. Split the SQL into statements.
-4. Per statement, call `ResolveReferencedColumnsAsync`:
+4. Split the SQL into statements.
+5. Per statement, call `ResolveReferencedColumnsAsync`:
    - **Success** → intersect resolved `ColumnRef`s with the sensitive set
      (case-insensitive) → contributes to `Touched`; minus the user's bypasses →
      contributes to `BlockedHits`.
    - **Failure** (throws) → fall back to `SqlColumnChecker.FindBlockedColumns`
      for that statement (conservative over-block, never under-block).
-5. Union across statements and return the decision.
+6. Union across statements and return the decision.
 
 Both `Touched` (audit) and `BlockedHits` (block/403) become accurate on the
 resolved path.
@@ -166,6 +212,25 @@ resolved path.
   optimization can merge it with the advisory auto-explain estimate at
   `IQueryService.cs:168`. Out of scope here (YAGNI).
 
+### Denylist block-response plumbing
+
+A denylist block carries a reason, not columns, through the existing block path:
+
+- **`IQueryService`** — `AccessResult` gains the reason; `CheckAccessAsync` treats
+  `BlockedHits.Count > 0 || PolicyBlockReason is not null` as `Blocked`. The
+  `query_log` `Error` records the reason (in place of the
+  `"Sensitive columns: …"` string); `SensitiveColumns` (touched) is empty.
+- **403 response** (`QueryEndpoints`, both `/api/query` and `/api/query/explain`)
+  — keep `type: "sensitive_columns"`, emit `columns: []`, and add
+  `extensions.reason` with the message. Concrete-column blocks are unchanged
+  (`reason` absent, `columns` populated).
+- **Frontend** — the 403 handler renders the `reason` when `columns` is empty;
+  the existing column-list rendering is otherwise unchanged.
+- **MCP** — `SensitiveColumnBlockPayload` gains an optional reason; on a denylist
+  block, `blockedColumns` is empty and the `error`/`guidance` convey the reason.
+  The deterrence guidance already tells agents not to work around blocks, so no
+  new column identities leak.
+
 ## Decisions (locked)
 
 - EXPLAIN resolver is authoritative; tokenizer (`SqlTokenizer` +
@@ -174,8 +239,10 @@ resolved path.
 - Multi-statement SQL is **split and EXPLAINed per statement**, results unioned.
 - `EXPLAIN` runs **without `ANALYZE`** (plan only), in a read-only rolled-back
   transaction.
-- Guard owns the round-trip internally; call-site signatures and the decision
-  contract are unchanged.
+- Guard owns the round-trip internally; call-site signatures are unchanged and
+  `SensitiveColumnDecision` gains only an optional `PolicyBlockReason`.
+- Text/regclass-argument serializers (XML export family) are **blocked by an
+  explicit denylist**, active only when the database has sensitive columns.
 
 ## Testing
 
@@ -226,11 +293,18 @@ seeded sensitive columns of `users`, and nothing from other tables):
 For each, assert the resolved set contains `users.email` + `users.ssn` and no
 column from any other seeded table.
 
-**Text/regclass-argument serializers — opaque to both mechanisms** (see Known
-Limitations): `table_to_xml('users', true, false, '')`,
-`query_to_xml('SELECT email FROM users', true, false, '')`. Tests assert the
-**actual** behavior (no crash; documented pass-through under both resolver and
-fallback) rather than claiming coverage, and reference the follow-up.
+**Text/regclass-argument serializers — blocked by the denylist (§4).** Each is
+opaque to EXPLAIN and the tokenizer, so the denylist must catch them:
+`table_to_xml('users', true, false, '')`,
+`query_to_xml('SELECT ssn FROM users', true, false, '')`,
+`query_to_xmlschema(...)`, `cursor_to_xml(...)`, `schema_to_xml('public', …)`,
+`database_to_xml(…)`, plus case/whitespace variants (`Query_To_XML`,
+`table_to_xml (…)`). Assert each returns a **policy block** with a
+`PolicyBlockReason` naming the function and **no** fabricated column list. Also
+assert that when the database has **no** sensitive columns, the same query is
+**not** blocked (denylist is dormant), and that a denylisted name appearing only
+inside a string literal or comment does **not** trip the block (tokenizer skips
+those).
 
 **Robustness / non-crash inputs** (resolver must not throw uncaught; fallback
 engages cleanly): deeply nested subqueries, CTEs and recursive CTEs, `UNION`/
@@ -252,19 +326,18 @@ Separate from the automated tests, to demonstrate the fix in the running app:
 
 ## Known Limitations & Follow-up
 
-- **Text/regclass-argument functions** (`table_to_xml`, `query_to_xml`,
-  `database_to_xml`, and similar) embed the target relation as a **string
-  literal**. Both EXPLAIN (a bare `Function Scan`) and the tokenizer (which skips
-  string contents) are blind to them. This is a **pre-existing** blind spot, not a
-  regression. Mitigations for a follow-up: a denylist for these functions in the
-  guard, or column-level `REVOKE` on the read role (which enforces at execution
-  and would catch them). Out of scope for this change.
 - **Opaque PL/pgSQL / `SECURITY DEFINER` functions** that read sensitive columns
   internally show as `Function Scan` with no column detail — unchanged from today.
+  A custom function is not on the serialization denylist unless explicitly added;
+  the general case (arbitrary user-defined functions) remains outside static
+  analysis. Column-level `REVOKE` on the read role is the durable answer and is
+  parked as a future hardening layer.
 
 ## Out of Scope
 
 - Column-level `REVOKE` enforcement layer.
-- Function denylist for text-argument serializers.
+- Extending the denylist beyond the XML export family (e.g. user-defined
+  functions, `dblink`) — the family named in §4 is the closable set for this
+  change.
 - Merging the guard's EXPLAIN round-trip with the advisory auto-explain estimate.
 - Non-Postgres engines (none on main).
