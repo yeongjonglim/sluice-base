@@ -27,7 +27,8 @@ function DiagramPage() {
   const catalog = useCatalogServer();
   const exportDdl = useExportSchemaDdl();
 
-  // null = "all schemas" (the default). Becomes a concrete array once the user narrows it.
+  // null = "all schemas" (the initial default). A concrete array once the user narrows it;
+  // an empty array means the user explicitly cleared the picker (show nothing).
   const [selectedSchemas, setSelectedSchemas] = useState<Array<string> | null>(null);
 
   // Reset the schema filter to "all" whenever the selected database changes.
@@ -47,6 +48,9 @@ function DiagramPage() {
     () => (selectedSchemas === null ? undefined : new Set(selectedSchemas)),
     [selectedSchemas],
   );
+
+  // An explicitly emptied picker (not the initial "all" default) shows nothing.
+  const noSchemaSelected = selectedSchemas !== null && selectedSchemas.length === 0;
 
   function handleExport() {
     if (!selectedDatabaseId) return;
@@ -74,9 +78,7 @@ function DiagramPage() {
               <SchemaSelect
                 schemas={allSchemaNames}
                 value={effectiveSelected}
-                // Removing every pill snaps back to "all schemas" (null) — the meaningful
-                // reset — so the diagram can never blank.
-                onChange={(next) => setSelectedSchemas(next.length > 0 ? next : null)}
+                onChange={setSelectedSchemas}
               />
             )}
           </Group>
@@ -108,7 +110,12 @@ function DiagramPage() {
             {schema.error instanceof Error ? schema.error.message : "Unknown error"}
           </Alert>
         )}
-        {selectedDatabaseId && schema.data && (
+        {selectedDatabaseId && schema.data && noSchemaSelected && (
+          <Center h="100%">
+            <Text c="dimmed">Select one or more schemas to view the diagram</Text>
+          </Center>
+        )}
+        {selectedDatabaseId && schema.data && !noSchemaSelected && (
           <ErdCanvas tree={schema.data} visibleSchemas={visibleSchemas} />
         )}
       </Box>

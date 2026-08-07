@@ -23,6 +23,9 @@ export function DatabaseSelect({ value, onChange }: DatabaseSelectProps) {
       value={value}
       onChange={onChange}
       size="sm"
+      searchable
+      checkIconPosition="right"
+      nothingFoundMessage="No database found"
     />
   );
 }
