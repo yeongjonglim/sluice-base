@@ -68,4 +68,17 @@ public class PostgresPlanColumnExtractorTests
         var cols = PostgresPlanColumnExtractor.Extract(json);
         Assert.Contains(new ColumnRef("public", "users", "ssn"), cols);
     }
+
+    [Fact]
+    public void Extract_UnionSameAliasDifferentTables_AttributesEachToItsOwnRelation()
+    {
+        const string json = """
+        [{"Plan":{"Node Type":"Append","Plans":[
+          {"Node Type":"Seq Scan","Schema":"public","Relation Name":"secret_table","Alias":"t","Output":["t.ssn"]},
+          {"Node Type":"Seq Scan","Schema":"public","Relation Name":"public_table","Alias":"t","Output":["t.name"]}]}}]
+        """;
+        var cols = PostgresPlanColumnExtractor.Extract(json);
+        Assert.Contains(new ColumnRef("public", "secret_table", "ssn"), cols);
+        Assert.Contains(new ColumnRef("public", "public_table", "name"), cols);
+    }
 }

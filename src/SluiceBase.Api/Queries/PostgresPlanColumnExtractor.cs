@@ -25,22 +25,38 @@ internal static partial class PostgresPlanColumnExtractor
     public static IReadOnlyList<ColumnRef> Extract(string planJson)
     {
         using var doc = JsonDocument.Parse(planJson);
+        if (doc.RootElement.ValueKind != JsonValueKind.Array || doc.RootElement.GetArrayLength() == 0)
+        {
+            return [];
+        }
+
         var root = doc.RootElement[0].GetProperty("Plan");
-
-        // Pass 1: alias -> (schema, relation) for every scan node in the tree.
-        var aliasMap = new Dictionary<string, (string Schema, string Relation)>(StringComparer.Ordinal);
-        CollectAliases(root, aliasMap);
-
-        // Pass 2: extract qualified refs from every expression-bearing field, resolve via aliases.
         var hits = new HashSet<ColumnRef>();
-        CollectColumns(root, aliasMap, hits);
+        Walk(root, hits);
         return [.. hits];
     }
 
-    private static void CollectAliases(JsonElement node, Dictionary<string, (string, string)> map)
+    // Post-order walk. Returns the alias -> (schema, relation) map for THIS node's subtree, and
+    // resolves this node's own expression fields against that subtree map — so a reference is
+    // only ever attributed to a relation within its own branch, never a same-named alias in a
+    // sibling branch (e.g. a UNION arm). Column hits accumulate into `hits`.
+    private static Dictionary<string, (string Schema, string Relation)> Walk(
+        JsonElement node, HashSet<ColumnRef> hits)
     {
-        if (node.TryGetProperty("Relation Name", out var rel) &&
-            node.TryGetProperty("Schema", out var schema))
+        var map = new Dictionary<string, (string Schema, string Relation)>(StringComparer.Ordinal);
+
+        if (node.TryGetProperty("Plans", out var plans) && plans.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var child in plans.EnumerateArray())
+            {
+                foreach (var kv in Walk(child, hits))
+                {
+                    map[kv.Key] = kv.Value;
+                }
+            }
+        }
+
+        if (node.TryGetProperty("Relation Name", out var rel) && node.TryGetProperty("Schema", out var schema))
         {
             var alias = node.TryGetProperty("Alias", out var a) ? a.GetString() : rel.GetString();
             if (!string.IsNullOrEmpty(alias))
@@ -49,18 +65,6 @@ internal static partial class PostgresPlanColumnExtractor
             }
         }
 
-        if (node.TryGetProperty("Plans", out var plans) && plans.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var child in plans.EnumerateArray())
-            {
-                CollectAliases(child, map);
-            }
-        }
-    }
-
-    private static void CollectColumns(
-        JsonElement node, Dictionary<string, (string Schema, string Relation)> map, HashSet<ColumnRef> hits)
-    {
         foreach (var field in ExpressionFields)
         {
             if (!node.TryGetProperty(field, out var value))
@@ -84,13 +88,7 @@ internal static partial class PostgresPlanColumnExtractor
             }
         }
 
-        if (node.TryGetProperty("Plans", out var plans) && plans.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var child in plans.EnumerateArray())
-            {
-                CollectColumns(child, map, hits);
-            }
-        }
+        return map;
     }
 
     private static void ScanExpression(
