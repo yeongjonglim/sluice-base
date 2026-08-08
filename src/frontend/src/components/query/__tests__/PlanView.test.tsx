@@ -63,6 +63,18 @@ describe("PlanView", () => {
     expect(screen.getByText("public.users.ssn")).toBeInTheDocument();
   });
 
+  it("shows the policy-block reason for a denylisted-function block", () => {
+    const error = new ApiError(403, {
+      type: "sensitive_columns",
+      columns: [],
+      reason: "Query uses query_to_xml(), which can bypass column-level access checks.",
+    });
+    renderView(entry({ status: "blocked", plan: null, error }));
+    expect(
+      screen.getByText(/Query uses query_to_xml\(\), which can bypass column-level access checks\./),
+    ).toBeInTheDocument();
+  });
+
   it("toggles the raw plan JSON open when the button is clicked", async () => {
     renderView(entry());
     expect(screen.queryByText(/"Node Type"/)).not.toBeInTheDocument();

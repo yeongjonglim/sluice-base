@@ -19,17 +19,25 @@ export function ResultGrid({ entry }: { entry: RunEntry }) {
     const apiErr = entry.error instanceof ApiError ? entry.error : null;
     const body = apiErr?.body as {
       columns?: Array<{ schema: string; table: string; column: string }>;
+      reason?: string;
     } | null;
+    const columns = body?.columns ?? [];
     return (
       <Alert color="orange" title="Query blocked — restricted columns" m="xs">
-        <Text size="sm" mb="xs">
-          Your query references columns you are not authorised to access:
-        </Text>
-        {(body?.columns ?? []).map((c, i) => (
-          <Code key={i} display="block" fz="xs">
-            {c.schema}.{c.table}.{c.column}
-          </Code>
-        ))}
+        {columns.length > 0 ? (
+          <>
+            <Text size="sm" mb="xs">
+              Your query references columns you are not authorised to access:
+            </Text>
+            {columns.map((c, i) => (
+              <Code key={i} display="block" fz="xs">
+                {c.schema}.{c.table}.{c.column}
+              </Code>
+            ))}
+          </>
+        ) : (
+          <Text size="sm">{body?.reason ?? "This query is blocked by the sensitive-column policy."}</Text>
+        )}
       </Alert>
     );
   }

@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import type { RunEntry } from "@/api/useQueryRuns";
 import { ResultGrid } from "@/components/query/ResultGrid";
+import { ApiError } from "@/api/client";
 
 function base(): RunEntry {
   return {
@@ -39,6 +40,28 @@ describe("ResultGrid", () => {
       response: { columns: null, rows: null, rowCount: 0, durationMs: 2, error: "boom", estimate: null },
     });
     expect(screen.getByText("boom")).toBeInTheDocument();
+  });
+
+  it("shows the restricted columns for a blocked query", () => {
+    const error = new ApiError(403, {
+      type: "sensitive_columns",
+      columns: [{ schema: "public", table: "users", column: "ssn" }],
+    });
+    renderGrid({ ...base(), status: "blocked", error });
+    expect(screen.getByText(/restricted columns/i)).toBeInTheDocument();
+    expect(screen.getByText("public.users.ssn")).toBeInTheDocument();
+  });
+
+  it("shows the policy-block reason for a denylisted-function block", () => {
+    const error = new ApiError(403, {
+      type: "sensitive_columns",
+      columns: [],
+      reason: "Query uses query_to_xml(), which can bypass column-level access checks.",
+    });
+    renderGrid({ ...base(), status: "blocked", error });
+    expect(
+      screen.getByText(/Query uses query_to_xml\(\), which can bypass column-level access checks\./),
+    ).toBeInTheDocument();
   });
 
   it("shows an advisory estimate strip on a successful run", () => {
