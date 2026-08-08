@@ -50,7 +50,8 @@ internal sealed class QueryService(
         AccessCheck Check,
         Database? Database,
         IReadOnlyList<BlockedColumn>? BlockedColumns,
-        string[] TouchedSensitive);
+        string[] TouchedSensitive,
+        string? BlockReason);
 
     private async Task<AccessResult> CheckAccessAsync(
         User user, DatabaseId databaseId, string sql, CancellationToken ct)
@@ -60,29 +61,29 @@ internal sealed class QueryService(
             .SingleOrDefaultAsync(d => d.Id == databaseId, ct);
         if (database is null)
         {
-            return new AccessResult(AccessCheck.NotFound, null, null, []);
+            return new AccessResult(AccessCheck.NotFound, null, null, [], null);
         }
 
         // Enforce database role: user must have query:execute on this specific database (direct or via group)
         var hasRole = await resolver.HasDatabasePermissionAsync(user.Id, database.Id, Permissions.QueryExecute, ct);
         if (!hasRole)
         {
-            return new AccessResult(AccessCheck.Forbidden, null, null, []);
+            return new AccessResult(AccessCheck.Forbidden, null, null, [], null);
         }
 
         // ── sensitive column check (shared with the update-preview endpoint) ──
         var decision = await sensitiveGuard.EvaluateAsync(user.Id, database.Id, sql, ct);
         var touchedSensitive = decision.Touched.ToArray();
 
-        if (decision.BlockedHits.Count > 0)
+        if (decision.BlockedHits.Count > 0 || decision.PolicyBlockReason is not null)
         {
             var blockedList = decision.BlockedHits
                 .Select(h => new BlockedColumn(h.Schema, h.Table, h.Column))
                 .ToList();
-            return new AccessResult(AccessCheck.Blocked, database, blockedList, touchedSensitive);
+            return new AccessResult(AccessCheck.Blocked, database, blockedList, touchedSensitive, decision.PolicyBlockReason);
         }
 
-        return new AccessResult(AccessCheck.Ok, database, null, touchedSensitive);
+        return new AccessResult(AccessCheck.Ok, database, null, touchedSensitive, null);
     }
 
     public async Task<QueryExplainResult> ExplainAsync(
@@ -96,7 +97,7 @@ internal sealed class QueryService(
             case AccessCheck.Forbidden:
                 return new QueryExplainResult(QueryOutcome.Forbidden, null, null, null);
             case AccessCheck.Blocked:
-                return new QueryExplainResult(QueryOutcome.Blocked, null, access.BlockedColumns, null);
+                return new QueryExplainResult(QueryOutcome.Blocked, null, access.BlockedColumns, access.BlockReason);
         }
 
         var explainTimeoutSeconds = configuration.GetValue("Query:TimeoutSeconds", 30);
@@ -131,14 +132,14 @@ internal sealed class QueryService(
             case AccessCheck.Blocked:
             {
                 var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
+                var errorText = access.BlockReason
+                    ?? $"Sensitive columns: {string.Join(", ", access.BlockedColumns!.Select(c => $"{c.Schema}.{c.Table}.{c.Column}"))}";
                 var logEntry = QueryLog.Create(user.Id, access.Database!.Id, sql,
                     QueryLogStatus.Blocked, startedAt, durationMs, null,
-                    $"Sensitive columns: {string.Join(", ", access.BlockedColumns!.Select(c => $"{c.Schema}.{c.Table}.{c.Column}"))}",
-                    access.TouchedSensitive,
-                    source);
+                    errorText, access.TouchedSensitive, source);
                 db.QueryLogs.Add(logEntry);
                 await db.SaveChangesAsync(ct);
-                return new QueryExecutionResult(QueryOutcome.Blocked, null, access.BlockedColumns, null);
+                return new QueryExecutionResult(QueryOutcome.Blocked, null, access.BlockedColumns, access.BlockReason);
             }
         }
 

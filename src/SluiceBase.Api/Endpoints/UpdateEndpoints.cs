@@ -405,7 +405,7 @@ internal static class UpdateEndpoints
         // Sensitive-column gate — same policy as the read path. A hit blocks the run
         // entirely; the SQL never executes and no event is recorded.
         var decision = await sensitiveGuard.EvaluateAsync(user.Id, request.DatabaseId.Value, request.SqlText, ct);
-        if (decision.BlockedHits.Count > 0)
+        if (decision.BlockedHits.Count > 0 || decision.PolicyBlockReason is not null)
         {
             return TypedResults.Problem(
                 statusCode: StatusCodes.Status403Forbidden,
@@ -415,7 +415,8 @@ internal static class UpdateEndpoints
                 {
                     ["columns"] = decision.BlockedHits
                         .Select(c => new { schema = c.Schema, table = c.Table, column = c.Column })
-                        .ToArray()
+                        .ToArray(),
+                    ["reason"] = decision.PolicyBlockReason,
                 });
         }
 

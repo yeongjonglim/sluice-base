@@ -3,8 +3,11 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Aspire.Hosting.Testing;
 using IntegrationTests.Supports;
+using Npgsql;
 using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Targets;
+using SluiceBase.Core.Permissions;
+using SluiceBase.Core.Servers;
 
 namespace IntegrationTests;
 
@@ -16,6 +19,63 @@ public class SensitiveColumnResolutionTests(SluiceBaseStackFactory factory)
         var schema = await ResolutionSchemaFixture.CreateAsync(conn, ct);
         return (conn, schema);
     }
+
+    // Sets up Alice with a write-capable database and update:submit — enough to submit and
+    // preview her own update requests (mirrors UpdateEndpointTests.AliceWithBlueServerAsync).
+    private async Task<(AuthenticatedSession session, string xsrf, DatabaseId databaseId)>
+        AliceWithWritableBlueServerAsync(CancellationToken ct)
+    {
+        var loginHelper = new KeycloakLoginHelper(factory.InitialisedApp);
+        var session = await loginHelper.SignInAsync("alice", "dev", ct);
+        var xsrf = await session.FetchXsrfTokenAsync(ct);
+
+        var users = await session.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var alice = users!.Users.Single(u => u.Email == "alice@example.com");
+
+        using var grantServer = QueryTestSetup.MutationRequest(HttpMethod.Post,
+            $"/api/admin/user/{alice.Id}/permission", xsrf,
+            new { permission = Permissions.ServerManage });
+        (await session.Client.SendAsync(grantServer, ct)).EnsureSuccessStatusCode();
+
+        var blueConnStr = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        var blueBuilder = new NpgsqlConnectionStringBuilder(blueConnStr!);
+
+        var serverName = $"scp-{Guid.NewGuid():N}"[..24];
+        using var sReq = QueryTestSetup.MutationRequest(HttpMethod.Post, "/api/server", xsrf,
+            new ServerEndpoints.CreateServerRequest(serverName, "postgres", blueBuilder.Host!, blueBuilder.Port));
+        var sResp = await session.Client.SendAsync(sReq, ct);
+        sResp.EnsureSuccessStatusCode();
+        var server = (await sResp.Content.ReadFromJsonAsync<ServerEndpoints.ServerResponse>(ct))!;
+
+        using var rcReq = QueryTestSetup.MutationRequest(HttpMethod.Post,
+            $"/api/server/{server.Id}/credential", xsrf,
+            new CredentialEndpoints.AddCredentialRequest("Read-only role", "reader_blue", "reader_blue"));
+        var rcResp = await session.Client.SendAsync(rcReq, ct);
+        rcResp.EnsureSuccessStatusCode();
+        var readCred = (await rcResp.Content.ReadFromJsonAsync<CredentialEndpoints.CredentialResponse>(ct))!;
+
+        using var wcReq = QueryTestSetup.MutationRequest(HttpMethod.Post,
+            $"/api/server/{server.Id}/credential", xsrf,
+            new CredentialEndpoints.AddCredentialRequest("Write role", "writer_blue", "writer_blue"));
+        var wcResp = await session.Client.SendAsync(wcReq, ct);
+        wcResp.EnsureSuccessStatusCode();
+        var writeCred = (await wcResp.Content.ReadFromJsonAsync<CredentialEndpoints.CredentialResponse>(ct))!;
+
+        using var dbReq = QueryTestSetup.MutationRequest(HttpMethod.Post,
+            $"/api/server/{server.Id}/database", xsrf,
+            new DatabaseEndpoints.AddDatabaseRequest("App DB", "appdb", readCred.Id, writeCred.Id));
+        var dbResp = await session.Client.SendAsync(dbReq, ct);
+        dbResp.EnsureSuccessStatusCode();
+        var database = (await dbResp.Content.ReadFromJsonAsync<DatabaseEndpoints.DatabaseResponse>(ct))!;
+
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(
+            session, alice.Id, Permissions.UpdateSubmit, database.Id.ToString(), xsrf, ct);
+
+        return (session, xsrf, database.Id);
+    }
+
+    private sealed record ListUserBody(UserRow[] Users);
+    private sealed record UserRow(string Id, string Email);
 
     [Fact]
     public async Task Resolve_JoinWithWhere_AttributesColumnsToCorrectRelations()
@@ -114,6 +174,36 @@ public class SensitiveColumnResolutionTests(SluiceBaseStackFactory factory)
 
         // Cross-task: PolicyBlockReason only surfaces as a 403 with a reason once Task 7 wires
         // it through IQueryService/QueryEndpoints. Green in CI only after that task lands.
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Equal("sensitive_columns", body.GetProperty("type").GetString());
+        Assert.Empty(body.GetProperty("columns").EnumerateArray());
+        Assert.Contains("query_to_xml", body.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task UpdatePreview_DenylistedXmlFunction_BlockedWithReasonNoColumns()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AliceWithWritableBlueServerAsync(ct);
+        using var _ = session;
+
+        // Any sensitive column on the database is enough to activate the denylist check —
+        // the blocked query need not touch it (see SensitiveColumnGuard.EvaluateAsync).
+        await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
+
+        using var submitReq = QueryTestSetup.MutationRequest(HttpMethod.Post, "/api/update", xsrf,
+            new UpdateEndpoints.SubmitUpdateRequest(
+                databaseId, "SELECT query_to_xml('SELECT 1', true, false, '')", "preview test"));
+        var submitResp = await session.Client.SendAsync(submitReq, ct);
+        submitResp.EnsureSuccessStatusCode();
+        using var submitDoc = JsonDocument.Parse(await submitResp.Content.ReadAsStringAsync(ct));
+        var id = submitDoc.RootElement.GetProperty("id").GetGuid();
+
+        using var previewReq = QueryTestSetup.MutationRequest(HttpMethod.Post, $"/api/update/{id}/preview", xsrf);
+        var resp = await session.Client.SendAsync(previewReq, ct);
+
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
         var body = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
         Assert.Equal("sensitive_columns", body.GetProperty("type").GetString());
