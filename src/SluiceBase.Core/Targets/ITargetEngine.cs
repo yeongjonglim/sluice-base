@@ -32,6 +32,13 @@ public interface ITargetEngine
         bool analyze,
         CancellationToken ct);
 
+    // Resolves the base-table columns a single statement reads/writes, as the PostgreSQL
+    // planner sees them (EXPLAIN, plan only). Throws if the statement cannot be planned.
+    Task<IReadOnlyList<ColumnRef>> ResolveReferencedColumnsAsync(
+        string connectionString,
+        string sql,
+        CancellationToken ct);
+
     Task<UpdateExecutionResult> ExecuteUpdateAsync(
         string connectionString,
         string sql,
@@ -44,3 +51,5 @@ public sealed record ConnectivityResult(bool Ok, string? Error);
 public sealed record UpdateExecutionResult(
     IReadOnlyList<QueryData> ResultSets,
     int AffectedRows);
+
+public sealed record ColumnRef(string Schema, string Table, string Column);

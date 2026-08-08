@@ -45,7 +45,11 @@ internal static class QueryEndpoints
                 statusCode: StatusCodes.Status403Forbidden,
                 title: "Sensitive columns",
                 type: "sensitive_columns",
-                extensions: new Dictionary<string, object?> { ["columns"] = result.BlockedColumns!.Select(c => new { schema = c.Schema, table = c.Table, column = c.Column }).ToArray() }),
+                extensions: new Dictionary<string, object?>
+                {
+                    ["columns"] = result.BlockedColumns!.Select(c => new { schema = c.Schema, table = c.Table, column = c.Column }).ToArray(),
+                    ["reason"] = result.Error,
+                }),
             QueryOutcome.BadRequest => TypedResults.BadRequest(result.Error!),
             _ => TypedResults.Ok(result.Response!),
         };
@@ -68,7 +72,11 @@ internal static class QueryEndpoints
                 statusCode: StatusCodes.Status403Forbidden,
                 title: "Sensitive columns",
                 type: "sensitive_columns",
-                extensions: new Dictionary<string, object?> { ["columns"] = result.BlockedColumns!.Select(c => new { schema = c.Schema, table = c.Table, column = c.Column }).ToArray() }),
+                extensions: new Dictionary<string, object?>
+                {
+                    ["columns"] = result.BlockedColumns!.Select(c => new { schema = c.Schema, table = c.Table, column = c.Column }).ToArray(),
+                    ["reason"] = result.Error,
+                }),
             QueryOutcome.BadRequest => TypedResults.BadRequest(result.Error!),
             _ => TypedResults.Ok(new QueryPlanResponse(result.Plan!.PlanJson, result.Plan.Summary)),
         };

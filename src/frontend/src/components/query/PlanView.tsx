@@ -29,13 +29,21 @@ export function PlanView({ entry }: { entry: ExplainEntry }) {
 
   if (entry.status === "blocked") {
     const body = entry.error instanceof ApiError
-      ? (entry.error.body as { columns?: Array<{ schema: string; table: string; column: string }> } | null)
+      ? (entry.error.body as {
+          columns?: Array<{ schema: string; table: string; column: string }>;
+          reason?: string;
+        } | null)
       : null;
+    const columns = body?.columns ?? [];
     return (
       <Alert color="orange" title="Blocked — restricted columns" m="xs">
-        {(body?.columns ?? []).map((c, i) => (
-          <Code key={i} display="block" fz="xs">{c.schema}.{c.table}.{c.column}</Code>
-        ))}
+        {columns.length > 0 ? (
+          columns.map((c, i) => (
+            <Code key={i} display="block" fz="xs">{c.schema}.{c.table}.{c.column}</Code>
+          ))
+        ) : (
+          <Text size="sm">{body?.reason ?? "This query is blocked by the sensitive-column policy."}</Text>
+        )}
       </Alert>
     );
   }

@@ -59,7 +59,7 @@ internal sealed class DatabaseTools
             // Return a structured, instructive payload (not a throw): the MCP SDK serializes
             // this object into the tool result content the client model reads, steering a
             // cooperative agent to exclude the named columns rather than brute-forcing.
-            QueryOutcome.Blocked => SensitiveColumnBlockPayload.From(result.BlockedColumns!),
+            QueryOutcome.Blocked => SensitiveColumnBlockPayload.From(result.BlockedColumns!, result.Error),
             _ => throw new InvalidOperationException(result.Error ?? "Query error."),
         };
     }

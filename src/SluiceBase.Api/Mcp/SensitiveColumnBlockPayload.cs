@@ -24,9 +24,10 @@ internal sealed record SensitiveColumnBlockPayload(
         "every variation is blocked identically and each attempt is recorded. You cannot " +
         "override this from here; only an operator can grant a column bypass.";
 
-    public static SensitiveColumnBlockPayload From(IReadOnlyList<BlockedColumn> blockedColumns) =>
+    public static SensitiveColumnBlockPayload From(
+        IReadOnlyList<BlockedColumn> blockedColumns, string? reason = null) =>
         new(
             ErrorDiscriminator,
             [.. blockedColumns.Select(c => $"{c.Schema}.{c.Table}.{c.Column}")],
-            GuidanceText);
+            reason is null ? GuidanceText : $"{reason} {GuidanceText}");
 }
