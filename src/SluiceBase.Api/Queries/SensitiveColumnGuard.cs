@@ -19,7 +19,8 @@ internal sealed record SensitiveColumnDecision(
 internal sealed class SensitiveColumnGuard(
     AppDbContext db,
     IServerConnectionFactory connectionFactory,
-    ITargetEngineRegistry engineRegistry)
+    ITargetEngineRegistry engineRegistry,
+    IConfiguration configuration)
 {
     public async Task<SensitiveColumnDecision> EvaluateAsync(
         UserId userId, DatabaseId databaseId, string sql, CancellationToken ct)
@@ -77,8 +78,8 @@ internal sealed class SensitiveColumnGuard(
     }
 
     // Returns the sensitive columns the SQL actually touches. Uses EXPLAIN-based resolution per
-    // statement; on any failure for a statement, falls back to the SqlColumnChecker tokenizer
-    // (conservative — never under-blocks).
+    // statement; on any failure for a statement (including a resolution timeout), falls back to
+    // the SqlColumnChecker tokenizer (conservative — never under-blocks).
     private async Task<IReadOnlyList<SensitiveColumnHit>> ResolveTouchedAsync(
         DatabaseId databaseId,
         string sql,
@@ -87,20 +88,30 @@ internal sealed class SensitiveColumnGuard(
     {
         var hits = new HashSet<SensitiveColumnHit>();
 
+        // Bound EXPLAIN-based resolution the same way IQueryService bounds execution — a
+        // pathological statement shouldn't be able to tie up a connection for the ambient
+        // request timeout. A resolution timeout degrades to the tokenizer fallback below rather
+        // than failing the request.
+        var timeoutSeconds = configuration.GetValue("Query:TimeoutSeconds", 30);
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        var token = linkedCts.Token;
+
         ITargetEngine engine;
         string connectionString;
         try
         {
             var database = await db.Databases.AsNoTracking()
                 .Include(d => d.Server)
-                .SingleAsync(d => d.Id == databaseId, ct);
+                .SingleAsync(d => d.Id == databaseId, token);
             engine = engineRegistry.Resolve(database.Server!.Kind);
             connectionString = await connectionFactory.GetConnectionStringAsync(
-                databaseId, CredentialKind.Read, ct);
+                databaseId, CredentialKind.Read, token);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception) when (!ct.IsCancellationRequested)
         {
-            // Cannot connect / resolve engine — tokenizer over the whole SQL keeps us safe.
+            // Cannot connect / resolve engine, or resolution timed out — tokenizer over the
+            // whole SQL keeps us safe. A genuine caller cancellation (ct) still propagates.
             foreach (var h in SqlColumnChecker.FindBlockedColumns(sql, sensitiveTuples))
             {
                 hits.Add(h);
@@ -112,7 +123,7 @@ internal sealed class SensitiveColumnGuard(
         {
             try
             {
-                var resolved = await engine.ResolveReferencedColumnsAsync(connectionString, statement, ct);
+                var resolved = await engine.ResolveReferencedColumnsAsync(connectionString, statement, token);
                 foreach (var (schema, table, column) in sensitiveTuples)
                 {
                     var isTouched = resolved.Any(r =>
@@ -124,10 +135,11 @@ internal sealed class SensitiveColumnGuard(
                     }
                 }
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception) when (!ct.IsCancellationRequested)
             {
-                // EXPLAIN failed for this statement (unplannable, permission, opaque) —
-                // conservative tokenizer fallback for this statement only.
+                // EXPLAIN failed for this statement (unplannable, permission, opaque, or
+                // resolution timeout) — conservative tokenizer fallback for this statement only.
+                // A genuine caller cancellation (ct) still propagates.
                 foreach (var h in SqlColumnChecker.FindBlockedColumns(statement, sensitiveTuples))
                 {
                     hits.Add(h);
