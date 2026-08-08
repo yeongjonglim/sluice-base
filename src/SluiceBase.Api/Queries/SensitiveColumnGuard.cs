@@ -98,7 +98,7 @@ internal sealed class SensitiveColumnGuard(
             connectionString = await connectionFactory.GetConnectionStringAsync(
                 databaseId, CredentialKind.Read, ct);
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Cannot connect / resolve engine — tokenizer over the whole SQL keeps us safe.
             foreach (var h in SqlColumnChecker.FindBlockedColumns(sql, sensitiveTuples))
