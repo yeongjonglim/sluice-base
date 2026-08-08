@@ -8,6 +8,7 @@ using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Targets;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Servers;
+using SluiceBase.Core.Targets;
 
 namespace IntegrationTests;
 
@@ -209,5 +210,136 @@ public class SensitiveColumnResolutionTests(SluiceBaseStackFactory factory)
         Assert.Equal("sensitive_columns", body.GetProperty("type").GetString());
         Assert.Empty(body.GetProperty("columns").EnumerateArray());
         Assert.Contains("query_to_xml", body.GetProperty("reason").GetString());
+    }
+
+    // We have NOT empirically confirmed (Docker is unavailable in this environment) whether
+    // Postgres renders whole-row serialization of `u` in the scan node's Output as enumerated
+    // columns ("users.email", "users.ssn") or as a whole-row var, which
+    // PostgresPlanColumnExtractor surfaces as ColumnRef(schema, "users", "*") — see its doc
+    // comment and Extract_QualifiedStar_EmitsWholeRelationMarker in
+    // PostgresPlanColumnExtractorTests. Every serializer test below must accept EITHER form
+    // rather than pin an exact column name, so the resolver is never asserted to under-block.
+    private static bool CoversUsersSensitive(IReadOnlyList<ColumnRef> cols, string schema) =>
+        cols.Any(c => c.Schema == schema && c.Table == "users"
+                      && (c.Column == "*" || c.Column == "email" || c.Column == "ssn"));
+
+    // Brute-force battery: every documented way to serialize a whole row (or a sensitive
+    // column via a non-trivial expression) must still surface users.email/users.ssn to the
+    // resolver, whether as enumerated columns or the `*` whole-row marker. hstore(u) is
+    // intentionally omitted — it requires `CREATE EXTENSION hstore`, which the fixture does
+    // not install.
+    [Theory]
+    [InlineData("""SELECT to_jsonb(u) FROM "{0}".users u""")]
+    [InlineData("""SELECT to_json(u) FROM "{0}".users u""")]
+    [InlineData("""SELECT row_to_json(u) FROM "{0}".users u""")]
+    [InlineData("""SELECT json_agg(u) FROM "{0}".users u""")]
+    [InlineData("""SELECT jsonb_agg(u) FROM "{0}".users u""")]
+    [InlineData("""SELECT jsonb_build_object('e', u.email) FROM "{0}".users u""")]
+    [InlineData("""SELECT array_to_json(array_agg(u)) FROM "{0}".users u""")]
+    [InlineData("""SELECT array_agg(u) FROM "{0}".users u""")]
+    [InlineData("""SELECT xmlelement(name r, u.*) FROM "{0}".users u""")]
+    [InlineData("""SELECT xmlforest(u.email AS email, u.ssn AS ssn) FROM "{0}".users u""")]
+    [InlineData("""SELECT xmlagg(xmlelement(name r, u.*)) FROM "{0}".users u""")]
+    [InlineData("""SELECT u FROM "{0}".users u""")]
+    [InlineData("""SELECT u::text FROM "{0}".users u""")]
+    [InlineData("""SELECT u.* FROM "{0}".users u""")]
+    [InlineData("""SELECT * FROM "{0}".users""")]
+    [InlineData("""SELECT encode(convert_to(u.email,'UTF8'),'base64') FROM "{0}".users u""")]
+    public async Task Resolve_ExpressionArgSerializer_NeverUnderBlocksUsersSensitiveColumns(string sqlTemplate)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (conn, schema) = await SeedAsync(ct);
+        var engine = new PostgresTargetEngine();
+
+        var sql = sqlTemplate.Replace("{0}", schema, StringComparison.Ordinal);
+        var cols = await engine.ResolveReferencedColumnsAsync(conn, sql, ct);
+
+        Assert.True(CoversUsersSensitive(cols, schema),
+            $"Resolver failed to flag users.email/ssn (enumerated or whole-row '*') for: {sql}");
+        // No other seeded table's columns should show up for these single-table queries.
+        Assert.DoesNotContain(cols, c => c.Table is "contacts" or "orders");
+    }
+
+    [Fact]
+    public async Task Query_QueryToXml_NotBlocked_WhenNoSensitiveColumnsMarked()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await QueryTestSetup.AliceWithBlueServerAsync(factory, ct);
+        using var _ = session;
+
+        var conn = (await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct))!;
+        var schema = await ResolutionSchemaFixture.CreateAsync(conn, ct);
+
+        // Zero sensitive columns marked anywhere on this database: SensitiveColumnGuard.EvaluateAsync
+        // short-circuits (sensitiveColumns.Count == 0) BEFORE the denylist check ever runs, so a
+        // denylisted XML-export function is not blocked while the policy is dormant.
+        using var req = QueryTestSetup.MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId,
+                $"""SELECT query_to_xml('SELECT ssn FROM "{schema}".users', true, false, '')"""));
+        var resp = await session.Client.SendAsync(req, ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    [Fact]
+    public async Task Query_DenylistedNameInsideStringLiteral_DoesNotTripBlock()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await QueryTestSetup.AliceWithBlueServerAsync(factory, ct);
+        using var _ = session;
+
+        var conn = (await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct))!;
+        var schema = await ResolutionSchemaFixture.CreateAsync(conn, ct);
+
+        // Mark a sensitive column so the guard's denylist check actually runs — it is dormant,
+        // and therefore vacuously non-blocking, when the database has zero sensitive columns
+        // (see the test above). The literal query text below never selects users.email, so a
+        // block here could only come from a false-positive denylist match on "table_to_xml"
+        // appearing inside a string literal rather than as an identifier;
+        // SerializationFunctionDenylist.FindFirst tokenizes first, so it must not match here.
+        await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), schema, "users", "email", xsrf, ct);
+
+        using var req = QueryTestSetup.MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId,
+                $"""SELECT 'table_to_xml' FROM "{schema}".users"""));
+        var resp = await session.Client.SendAsync(req, ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    // Odd-shaped SQL (nested subqueries, recursion, set operations, DISTINCT ON, window
+    // functions) must never crash the resolver, and when it genuinely reads a sensitive
+    // column, that read must still be flagged — enumerated or via the `*` whole-row marker.
+    [Theory]
+    [InlineData("""SELECT x.ssn FROM (SELECT ssn FROM "{0}".users) x""")]
+    [InlineData("""
+        WITH RECURSIVE r AS (
+            SELECT id, ssn FROM "{0}".users WHERE id = 1
+            UNION ALL
+            SELECT u.id, u.ssn FROM "{0}".users u JOIN r ON u.id = r.id + 1
+        )
+        SELECT ssn FROM r
+        """)]
+    [InlineData("""SELECT ssn FROM "{0}".users UNION SELECT phone FROM "{0}".contacts""")]
+    [InlineData("""SELECT DISTINCT ON (u.ssn) u.ssn, u.name FROM "{0}".users u ORDER BY u.ssn""")]
+    [InlineData("""SELECT row_number() OVER (ORDER BY u.ssn) FROM "{0}".users u""")]
+    public async Task Resolve_RobustnessCase_DoesNotThrow_AndFlagsSsnWhereGenuinelyRead(string sqlTemplate)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (conn, schema) = await SeedAsync(ct);
+        var engine = new PostgresTargetEngine();
+        var sql = sqlTemplate.Replace("{0}", schema, StringComparison.Ordinal);
+
+        IReadOnlyList<ColumnRef>? cols = null;
+        var ex = await Record.ExceptionAsync(async () =>
+        {
+            cols = await engine.ResolveReferencedColumnsAsync(conn, sql, ct);
+        });
+
+        Assert.Null(ex);
+        Assert.NotNull(cols);
+        Assert.True(CoversUsersSensitive(cols!, schema),
+            $"Resolver failed to flag users.ssn (enumerated or whole-row '*') for: {sql}");
     }
 }
