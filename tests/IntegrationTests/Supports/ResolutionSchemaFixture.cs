@@ -22,6 +22,8 @@ internal static class ResolutionSchemaFixture
             INSERT INTO "{schema}".users(name,email,ssn) VALUES ('a','a@x.com','111');
             INSERT INTO "{schema}".contacts(email,phone) VALUES ('c@x.com','555');
             INSERT INTO "{schema}".orders(customer_id,amount) VALUES (1, 9.99);
+            GRANT USAGE ON SCHEMA "{schema}" TO PUBLIC;
+            GRANT SELECT ON ALL TABLES IN SCHEMA "{schema}" TO PUBLIC;
             """, conn);
         await cmd.ExecuteNonQueryAsync(ct);
         return schema;
