@@ -39,12 +39,14 @@ jobs:
       - name: Run unit tests
         shell: bash
         run: |
-          dotnet test tests/SluiceBase.Api.Tests \
+          dotnet test --project tests/SluiceBase.Api.Tests \
             --configuration Release --no-build \
-            --logger "console;verbosity=normal" --logger "trx"
-          dotnet test tests/SluiceBase.Core.Tests \
+            --results-directory TestResults \
+            -- --report-trx --report-trx-filename api-tests.trx
+          dotnet test --project tests/SluiceBase.Core.Tests \
             --configuration Release --no-build \
-            --logger "console;verbosity=normal" --logger "trx"
+            --results-directory TestResults \
+            -- --report-trx --report-trx-filename core-tests.trx
 
       - name: Install latest PostgreSQL client (pg_dump)
         run: |
@@ -61,12 +63,10 @@ jobs:
       - name: Run integration tests
         shell: bash
         run: |
-          dotnet test tests/IntegrationTests \
-          --logger "console;verbosity=normal" \
-          --logger "trx" \
-          --configuration Release \
-          --no-build \
-          ${{ inputs.project-path }}
+          dotnet test --project tests/IntegrationTests \
+            --configuration Release --no-build \
+            --results-directory TestResults \
+            -- --report-trx --report-trx-filename integration-tests.trx
 
       - name: Report test results
         if: always()
