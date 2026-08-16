@@ -3,9 +3,11 @@ using Aspire.Hosting.Testing;
 using IntegrationTests.Supports;
 using IntegrationTests.Supports.Extensions;
 using Microsoft.Extensions.DependencyInjection;
+using Xunit.Sdk;
+using Xunit.v3;
 
 [assembly: AssemblyFixture(typeof(SluiceBaseStackFactory))]
-[assembly: CollectionBehavior(DisableTestParallelization = true)]
+[assembly: Parallelization(Mode = ParallelMode.None)]
 
 namespace IntegrationTests.Supports;
 
