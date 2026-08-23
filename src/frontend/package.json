@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@codemirror/lang-sql": "^6.10.0",
-    "@dagrejs/dagre": "^3.0.0",
+    "@dagrejs/dagre": "^3.1.1",
     "@mantine/core": "^9.5.1",
     "@mantine/dates": "^9.5.1",
     "@mantine/hooks": "^9.5.1",
