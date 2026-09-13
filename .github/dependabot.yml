@@ -71,6 +71,7 @@ updates:
           - "@testing-library/*"
           - "@playwright/*"
           - "vitest"
+          - "@vitest/*"
           - "jsdom"
       build-tooling:
         patterns:
