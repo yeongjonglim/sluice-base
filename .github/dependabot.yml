@@ -33,6 +33,7 @@ updates:
           - "xunit.*"
           - "Testcontainers.*"
           - "Microsoft.NET.Test.Sdk"
+          - "Microsoft.Testing.*"
 
   - package-ecosystem: npm
     directory: /src/frontend
