@@ -9,7 +9,9 @@ internal static class CimdDocument
     {
         url = null!;
 
-        if (!Uri.TryCreate(clientId, UriKind.Absolute, out var parsed)
+        if (!clientId.StartsWith("https://", StringComparison.Ordinal)
+            || clientId.Any(c => c <= 0x20 || c == 0x7F || c == '\\')
+            || !Uri.TryCreate(clientId, UriKind.Absolute, out var parsed)
             || parsed.Scheme != Uri.UriSchemeHttps
             || string.IsNullOrEmpty(parsed.Host)
             || !string.IsNullOrEmpty(parsed.UserInfo)
@@ -63,19 +65,19 @@ internal static class CimdDocument
 
     private static bool AllowsNoneAuth(JsonElement document)
     {
-        if (document.TryGetProperty("token_endpoint_auth_methods_supported", out var supported)
-            && supported.ValueKind == JsonValueKind.Array
-            && supported.EnumerateArray().Any(e => e.ValueKind == JsonValueKind.String && e.GetString() == "none"))
+        if (document.TryGetProperty("token_endpoint_auth_method", out var method)
+            && !(method.ValueKind == JsonValueKind.String && method.GetString() == "none"))
         {
-            return true;
+            return false;
         }
 
-        if (!document.TryGetProperty("token_endpoint_auth_method", out var method))
+        if (document.TryGetProperty("token_endpoint_auth_methods_supported", out var supported))
         {
-            return !document.TryGetProperty("token_endpoint_auth_methods_supported", out _);
+            return supported.ValueKind == JsonValueKind.Array
+                && supported.EnumerateArray().Any(e => e.ValueKind == JsonValueKind.String && e.GetString() == "none");
         }
 
-        return method.ValueKind == JsonValueKind.String && method.GetString() == "none";
+        return true;
     }
 
     // Uri normalises dot segments away, so the raw string is the only place they are visible.
