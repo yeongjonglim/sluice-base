@@ -96,6 +96,7 @@ The app is available at `http://localhost:8080`.
 | `Mcp__AccessTokenMinutes` | | `60` | Lifetime of an MCP access token in minutes |
 | `Mcp__RefreshTokenDays` | | `30` | Lifetime of an MCP refresh token in days |
 | `Mcp__AuthCodeSeconds` | | `120` | Lifetime of an MCP OAuth authorization code in seconds |
+| `Mcp__AllowedRedirectUris__0`, `__1`, … | | _(empty)_ | Extra OAuth redirect URIs (exact match) that MCP clients may register, e.g. `https://claude.ai/api/mcp/auth_callback` for a web client. Loopback and Cursor callbacks are always allowed (see [Sign-in and consent](#sign-in-and-consent)) |
 
 ### Branding colours
 
@@ -185,6 +186,14 @@ Codex runs the same OAuth flow on first use.
 | `run_query` | Executes a read-only SQL query (subject to the user's `query:execute` permission, sensitive-column blocking, and audit logging — MCP-origin queries are tagged in the history) |
 
 Set `Mcp__Enabled=false` to disable the MCP server and its OAuth endpoints entirely.
+
+### Sign-in and consent
+
+Any MCP client can register itself, so SluiceBase limits where an authorization code can be sent and asks the user before sending one:
+
+- **Redirect URIs.** A client may only register `http://localhost`, `http://127.0.0.1` or `http://[::1]` callbacks (any port, per RFC 8252), or Cursor's `cursor://anysphere.cursor-mcp/oauth/callback`. Anything else is dropped at registration. Claude Code, Codex, VS Code/GitHub Copilot, Cursor and MCP Inspector all work with this out of the box. To allow a web-based client, add its exact callback to `Mcp__AllowedRedirectUris`.
+- **Consent.** After signing in, the user sees which tool is asking and where access will be handed (for example, "an app running on this computer, `127.0.0.1:33418`") and must choose **Allow**. If they didn't start the connection themselves, they choose **Deny**.
+- **Cleanup on upgrade.** On startup, any stored client with a redirect URI outside these rules has that URI removed and its tokens revoked. Each one is logged as a warning naming the `client_id`.
 
 ## Development setup
 

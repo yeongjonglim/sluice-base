@@ -20,4 +20,7 @@ public sealed class McpOAuthClient
         RedirectUris = redirectUris.ToList(),
         CreatedAt = at,
     };
+
+    public void RestrictRedirectUris(Func<string, bool> isAllowed) =>
+        RedirectUris = RedirectUris.Where(isAllowed).ToList();
 }

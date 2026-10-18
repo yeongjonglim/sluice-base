@@ -21,6 +21,8 @@ namespace IntegrationTests;
 /// </summary>
 public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
 {
+    private const string LoopbackRedirectUri = "http://127.0.0.1:43123/callback";
+
     private KeycloakLoginHelper LoginHelper => new(factory.InitialisedApp);
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -42,6 +44,18 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         return result.GetProperty("client_id").GetString()!;
     }
 
+    private static Task<HttpResponseMessage> PostRegistrationAsync(HttpClient client, string[] redirectUris, CancellationToken ct) =>
+        client.PostAsJsonAsync("/mcp/oauth/register", new { client_name = "OAuthFlowTest Client", redirect_uris = redirectUris }, ct);
+
+    private static string AuthorizeUrl(string clientId, string redirectUri, string challenge, string state) =>
+        $"/mcp/oauth/authorize" +
+        $"?client_id={Uri.EscapeDataString(clientId)}" +
+        $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+        $"&response_type=code" +
+        $"&code_challenge={Uri.EscapeDataString(challenge)}" +
+        $"&code_challenge_method=S256" +
+        $"&state={Uri.EscapeDataString(state)}";
+
     /// <summary>Computes the PKCE S256 code challenge for a given verifier.</summary>
     private static string S256Challenge(string verifier)
     {
@@ -60,13 +74,13 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://registered.example.com/callback", ct);
+        var clientId = await RegisterClientAsync(client, LoopbackRedirectUri, ct);
         var verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var challenge = S256Challenge(verifier);
 
         var url = $"/mcp/oauth/authorize" +
                   $"?client_id={Uri.EscapeDataString(clientId)}" +
-                  $"&redirect_uri={Uri.EscapeDataString("https://UNREGISTERED.example.com/callback")}" +
+                  $"&redirect_uri={Uri.EscapeDataString("http://127.0.0.1:43123/other")}" +
                   $"&response_type=code" +
                   $"&code_challenge={Uri.EscapeDataString(challenge)}" +
                   $"&code_challenge_method=S256" +
@@ -105,11 +119,11 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://example.com/callback", ct);
+        var clientId = await RegisterClientAsync(client, LoopbackRedirectUri, ct);
 
         var url = $"/mcp/oauth/authorize" +
                   $"?client_id={Uri.EscapeDataString(clientId)}" +
-                  $"&redirect_uri={Uri.EscapeDataString("https://example.com/callback")}" +
+                  $"&redirect_uri={Uri.EscapeDataString(LoopbackRedirectUri)}" +
                   $"&response_type=code" +
                   $"&code_challenge_method=S256" +
                   $"&state=somestate";
@@ -126,13 +140,13 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://example.com/callback", ct);
+        var clientId = await RegisterClientAsync(client, LoopbackRedirectUri, ct);
         var verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var challenge = S256Challenge(verifier);
 
         var url = $"/mcp/oauth/authorize" +
                   $"?client_id={Uri.EscapeDataString(clientId)}" +
-                  $"&redirect_uri={Uri.EscapeDataString("https://example.com/callback")}" +
+                  $"&redirect_uri={Uri.EscapeDataString(LoopbackRedirectUri)}" +
                   $"&response_type=token" + // invalid — must be "code"
                   $"&code_challenge={Uri.EscapeDataString(challenge)}" +
                   $"&code_challenge_method=S256" +
@@ -149,14 +163,14 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://example.com/callback", ct);
+        var clientId = await RegisterClientAsync(client, LoopbackRedirectUri, ct);
 
         var form = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "authorization_code",
             ["client_id"] = clientId,
             ["code"] = "this-is-not-a-real-code",
-            ["redirect_uri"] = "https://example.com/callback",
+            ["redirect_uri"] = LoopbackRedirectUri,
             ["code_verifier"] = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
         });
 
@@ -174,7 +188,7 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://example.com/callback", ct);
+        var clientId = await RegisterClientAsync(client, LoopbackRedirectUri, ct);
 
         var form = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -197,7 +211,7 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://example.com/callback", ct);
+        var clientId = await RegisterClientAsync(client, LoopbackRedirectUri, ct);
 
         var form = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -213,56 +227,173 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         Assert.Equal("invalid_grant", error.GetString());
     }
 
+    [Theory]
+    [InlineData("https://attacker.example/cb")]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("myapp://callback")]
+    [InlineData("https://vscode.dev/redirect")]
+    public async Task Register_WithRedirectUriThatCanReachAThirdParty_Returns400(string redirectUri)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var client = ApiClient();
+
+        var response = await PostRegistrationAsync(client, [redirectUri], ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Equal("invalid_redirect_uri", body.GetProperty("error").GetString());
+    }
+
+    [Fact]
+    public async Task Register_WithMixedRedirectUris_KeepsOnlyAllowedOnes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var client = ApiClient();
+
+        // What VS Code sends: relay URIs alongside its loopback callbacks.
+        var response = await PostRegistrationAsync(client,
+            ["https://vscode.dev/redirect", "https://insiders.vscode.dev/redirect", "http://127.0.0.1/", "http://127.0.0.1:33418/"], ct);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+        var registered = body.GetProperty("redirect_uris").EnumerateArray().Select(u => u.GetString()).ToArray();
+        Assert.Equal(["http://127.0.0.1/", "http://127.0.0.1:33418/"], registered);
+    }
+
+    [Fact]
+    public async Task Token_WithUnknownClient_Returns401InvalidClient()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var client = ApiClient();
+
+        var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["grant_type"] = "refresh_token",
+            ["client_id"] = "does-not-exist",
+            ["refresh_token"] = "not-a-real-refresh-token",
+        });
+
+        var response = await client.PostAsync("/mcp/oauth/token", form, ct);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Equal("invalid_client", body.GetProperty("error").GetString());
+    }
+
     // ── Full OAuth flow (CI-gated: requires Keycloak + running Aspire stack) ──
     //
-    // The full dance: register → authorize → capture code from redirect → POST /token
-    // with code_verifier → assert tokens → POST /token with refresh_token → assert new tokens.
+    // The full dance: register → authorize (consent page) → approve → capture code from redirect →
+    // POST /token with code_verifier → assert tokens → POST /token with refresh_token → assert new tokens.
     //
     // Authentication reuses KeycloakLoginHelper.SignInAsync (the proven login path used by
     // every other authenticated test), which returns a session whose Client carries the
     // sb.auth cookie and uses AllowAutoRedirect=false. Because the session is already
-    // authenticated, GET /mcp/oauth/authorize issues the code immediately and returns a
-    // 302 to redirect_uri?code=...&state=... — no Keycloak login form scraping required.
+    // authenticated, GET /mcp/oauth/authorize renders the consent page straight away; its
+    // antiforgery cookie lands in the same cookie container for the approval POST.
 
     [Fact]
-    public async Task FullFlow_AuthorizeCodeExchange_ReturnsTokens()
+    public async Task Authorize_WhenSignedIn_ShowsConsentWithoutIssuingCode()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        string clientId;
+        using (var setupClient = ApiClient())
+        {
+            clientId = await RegisterClientAsync(setupClient, LoopbackRedirectUri, ct);
+        }
+
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var response = await session.Client.GetAsync(
+            AuthorizeUrl(clientId, LoopbackRedirectUri, S256Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"), "s"), ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+        Assert.Contains("frame-ancestors 'none'", response.Headers.GetValues("Content-Security-Policy").Single());
+        var html = await response.Content.ReadAsStringAsync(ct);
+        Assert.Contains("127.0.0.1:43123", html);
+    }
+
+    [Fact]
+    public async Task Authorize_PostWithoutAntiforgeryToken_Returns400()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        string clientId;
+        using (var setupClient = ApiClient())
+        {
+            clientId = await RegisterClientAsync(setupClient, LoopbackRedirectUri, ct);
+        }
+
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["client_id"] = clientId,
+            ["redirect_uri"] = LoopbackRedirectUri,
+            ["response_type"] = "code",
+            ["code_challenge"] = S256Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+            ["code_challenge_method"] = "S256",
+            ["state"] = "s",
+            ["decision"] = "allow",
+        });
+
+        var response = await session.Client.PostAsync("/mcp/oauth/authorize", form, ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Authorize_Deny_RedirectsWithAccessDenied()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        string clientId;
+        using (var setupClient = ApiClient())
+        {
+            clientId = await RegisterClientAsync(setupClient, LoopbackRedirectUri, ct);
+        }
+
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var consent = await session.Client.GetAsync(
+            AuthorizeUrl(clientId, LoopbackRedirectUri, S256Challenge("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"), "deny-state"), ct);
+        var fields = McpConsentForm.Fields(await consent.Content.ReadAsStringAsync(ct), "deny");
+
+        var response = await session.Client.PostAsync("/mcp/oauth/authorize", new FormUrlEncodedContent(fields), ct);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var qs = HttpUtility.ParseQueryString(response.Headers.Location!.Query);
+        Assert.Equal("access_denied", qs["error"]);
+        Assert.Equal("deny-state", qs["state"]);
+        Assert.Null(qs["code"]);
+    }
+
+    [Fact]
+    public async Task FullFlow_ConsentApproveCodeExchange_ReturnsTokens()
     {
         var ct = TestContext.Current.CancellationToken;
 
-        // Redirect URI must be registered. We use a localhost path we control so we
-        // can capture the code from the Location header when the redirect fires.
-        var redirectUri = "https://localhost/mcp-test/callback";
+        // Native clients bind an ephemeral port per sign-in, so the authorize request uses a
+        // different loopback port from the one registered (RFC 8252 §7.3).
+        var requestedRedirectUri = "http://127.0.0.1:51234/callback";
         const string verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var challenge = S256Challenge(verifier);
         const string state = "test-state-abc123";
 
-        // Use a plain client to register the OAuth client (no redirect needed).
         string clientId;
         using (var setupClient = ApiClient())
         {
-            clientId = await RegisterClientAsync(setupClient, redirectUri, ct);
+            clientId = await RegisterClientAsync(setupClient, LoopbackRedirectUri, ct);
         }
 
-        var authorizeUrl = $"/mcp/oauth/authorize" +
-                           $"?client_id={Uri.EscapeDataString(clientId)}" +
-                           $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
-                           $"&response_type=code" +
-                           $"&code_challenge={Uri.EscapeDataString(challenge)}" +
-                           $"&code_challenge_method=S256" +
-                           $"&state={Uri.EscapeDataString(state)}";
-
-        // Sign in via KeycloakLoginHelper — the session Client carries the sb.auth cookie
-        // and has AllowAutoRedirect=false. Because the session is already authenticated,
-        // GET /mcp/oauth/authorize returns 302 directly to redirect_uri?code=...
         using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
 
-        var authorizeResponse = await session.Client.GetAsync(authorizeUrl, ct);
+        // Step 1: the consent page.
+        var consentResponse = await session.Client.GetAsync(AuthorizeUrl(clientId, requestedRedirectUri, challenge, state), ct);
+        Assert.Equal(HttpStatusCode.OK, consentResponse.StatusCode);
+        var fields = McpConsentForm.Fields(await consentResponse.Content.ReadAsStringAsync(ct), "allow");
 
-        // The endpoint should redirect us to our redirect_uri with ?code=...&state=...
+        // Step 2: approve → redirect to redirect_uri?code=...&state=...
+        var authorizeResponse = await session.Client.PostAsync("/mcp/oauth/authorize", new FormUrlEncodedContent(fields), ct);
         Assert.Equal(HttpStatusCode.Redirect, authorizeResponse.StatusCode);
         var location = authorizeResponse.Headers.Location!;
         Assert.NotNull(location);
-        Assert.StartsWith(redirectUri, location.ToString());
+        Assert.StartsWith(requestedRedirectUri, location.ToString());
 
         var qs = HttpUtility.ParseQueryString(location.Query);
         var code = qs["code"];
@@ -270,7 +401,7 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         Assert.False(string.IsNullOrEmpty(code), "Expected 'code' in redirect query string");
         Assert.Equal(state, returnedState);
 
-        // Step 2: Exchange code for tokens via POST /mcp/oauth/token (on the api directly).
+        // Step 3: Exchange code for tokens via POST /mcp/oauth/token (on the api directly).
         using var tokenClient = ApiClient();
 
         var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
@@ -278,7 +409,7 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
             ["grant_type"] = "authorization_code",
             ["client_id"] = clientId,
             ["code"] = code!,
-            ["redirect_uri"] = redirectUri,
+            ["redirect_uri"] = requestedRedirectUri,
             ["code_verifier"] = verifier,
         });
         var tokenResponse = await tokenClient.PostAsync("/mcp/oauth/token", tokenForm, ct);
@@ -294,7 +425,7 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         Assert.True(tokenBody.TryGetProperty("expires_in", out var expiresIn));
         Assert.True(expiresIn.GetInt32() > 0);
 
-        // Step 3: Use the refresh token to get a new token pair.
+        // Step 4: Use the refresh token to get a new token pair.
         var refreshForm = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "refresh_token",

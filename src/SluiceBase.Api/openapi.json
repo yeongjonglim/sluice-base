@@ -450,6 +450,16 @@
             "description": "OK"
           }
         }
+      },
+      "post": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
       }
     },
     "/mcp/oauth/token": {
