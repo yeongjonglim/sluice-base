@@ -8,6 +8,7 @@ using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Extensions;
 using SluiceBase.Api.Mcp;
+using SluiceBase.Api.Mcp.Clients;
 using SluiceBase.Api.Mcp.Oauth;
 using SluiceBase.Api.Mcp.Tools;
 using SluiceBase.Api.Middleware;
@@ -61,9 +62,26 @@ builder.Services.AddScoped<SensitiveColumnGuard>();
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
 builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
 
+var cimdAllowLoopback = builder.Configuration.GetValue<bool>(
+    $"{McpOptions.SectionName}:{nameof(McpOptions.Cimd)}:{nameof(McpCimdOptions.AllowLoopbackForTesting)}");
+if (cimdAllowLoopback && !builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        "Mcp:Cimd:AllowLoopbackForTesting is only permitted in the Development environment.");
+}
+
 var mcpEnabled = builder.Configuration.GetValue($"{McpOptions.SectionName}:Enabled", true);
 if (mcpEnabled)
 {
+    // The service-default resilience handler would retry and stretch the 5 s budget, multiplying
+    // outbound fetches an anonymous caller can trigger.
+#pragma warning disable EXTEXP0001
+    builder.Services.AddHttpClient(CimdFetcher.HttpClientName, c => c.Timeout = CimdFetcher.FetchTimeout)
+        .ConfigurePrimaryHttpMessageHandler(() => CimdFetcher.CreateHandler(cimdAllowLoopback))
+        .RemoveAllResilienceHandlers();
+#pragma warning restore EXTEXP0001
+    builder.Services.AddSingleton<ICimdFetcher, CimdFetcher>();
+
     builder.Services.AddMcpServer(options =>
         {
             // House rule surfaced to every client session up front. Best-effort deterrence:

@@ -20,6 +20,8 @@ internal sealed partial class McpOptions
 
     public List<McpConfiguredClient> Clients { get; set; } = [];
 
+    public McpCimdOptions Cimd { get; set; } = new();
+
     // The server name becomes a client-side alias used verbatim in a TOML table
     // name ([mcp_servers.<name>]) and JSON keys, so it must be a safe identifier.
     public string GetValidatedServerName(ILogger? logger = null)
@@ -88,6 +90,13 @@ internal sealed partial class McpOptions
 
     [GeneratedRegex("^[A-Za-z0-9_-]+$")]
     private static partial Regex ServerNameRegex();
+}
+
+internal sealed class McpCimdOptions
+{
+    // Lets the integration tests fetch canned documents from a loopback stub; startup refuses it
+    // outside Development so SSRF protection can't be weakened in a real deployment.
+    public bool AllowLoopbackForTesting { get; set; }
 }
 
 internal sealed class McpConfiguredClient
