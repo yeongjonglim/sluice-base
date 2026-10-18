@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Mcp;
-using SluiceBase.Core.Mcp;
 using SluiceBase.Core.Users;
 using Testcontainers.PostgreSql;
 
@@ -72,10 +71,6 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         const string redirectUri = "https://example.com/callback";
         const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var codeChallenge = TokenHasher.ComputePkceS256Challenge(codeVerifier);
-
-        // Register a placeholder client so ClientId can be matched
-        db.McpOAuthClients.Add(McpOAuthClient.Register("Test Client", [redirectUri], DateTimeOffset.UtcNow));
-        await db.SaveChangesAsync(ct);
 
         var code = await svc.IssueAuthCodeAsync(ClientId, userId, redirectUri, codeChallenge, ct);
         var tokens = await svc.RedeemAuthCodeAsync(ClientId, code, redirectUri, codeVerifier, ct);

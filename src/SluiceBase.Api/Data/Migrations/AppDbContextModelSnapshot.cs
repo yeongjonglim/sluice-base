@@ -17,7 +17,7 @@ namespace SluiceBase.Api.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.10")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -94,41 +94,6 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasDatabaseName("ix_mcp_auth_code_user_id");
 
                     b.ToTable("mcp_auth_code", (string)null);
-                });
-
-            modelBuilder.Entity("SluiceBase.Core.Mcp.McpOAuthClient", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<string>("ClientId")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("client_id");
-
-                    b.Property<string>("ClientName")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("client_name");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.PrimitiveCollection<string>("RedirectUris")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("redirect_uris");
-
-                    b.HasKey("Id")
-                        .HasName("pk_mcp_oauth_client");
-
-                    b.HasIndex("ClientId")
-                        .IsUnique()
-                        .HasDatabaseName("ix_mcp_oauth_client_client_id");
-
-                    b.ToTable("mcp_oauth_client", (string)null);
                 });
 
             modelBuilder.Entity("SluiceBase.Core.Mcp.McpToken", b =>

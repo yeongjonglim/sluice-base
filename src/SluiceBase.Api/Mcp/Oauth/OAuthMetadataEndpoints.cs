@@ -31,7 +31,6 @@ internal static class OAuthMetadataEndpoints
                 ["issuer"] = baseUrl,
                 ["authorization_endpoint"] = $"{baseUrl}/mcp/oauth/authorize",
                 ["token_endpoint"] = $"{baseUrl}/mcp/oauth/token",
-                ["registration_endpoint"] = $"{baseUrl}/mcp/oauth/register",
                 ["response_types_supported"] = ResponseTypes,
                 ["grant_types_supported"] = GrantTypes,
                 ["code_challenge_methods_supported"] = CodeChallengeMethods,

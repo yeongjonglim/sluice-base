@@ -418,28 +418,6 @@
         }
       }
     },
-    "/mcp/oauth/register": {
-      "post": {
-        "tags": [
-          "SluiceBase.Api"
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RegisterClientRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/mcp/oauth/authorize": {
       "get": {
         "tags": [
@@ -3509,30 +3487,6 @@
           "Mcp"
         ],
         "type": "string"
-      },
-      "RegisterClientRequest": {
-        "required": [
-          "client_name",
-          "redirect_uris"
-        ],
-        "type": "object",
-        "properties": {
-          "client_name": {
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "redirect_uris": {
-            "type": [
-              "null",
-              "array"
-            ],
-            "items": {
-              "type": "string"
-            }
-          }
-        }
       },
       "ReviewUpdateRequest": {
         "required": [

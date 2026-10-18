@@ -9,7 +9,6 @@ using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Extensions;
 using SluiceBase.Api.Mcp;
 using SluiceBase.Api.Mcp.Clients;
-using SluiceBase.Api.Mcp.Oauth;
 using SluiceBase.Api.Mcp.Tools;
 using SluiceBase.Api.Middleware;
 using SluiceBase.Api.Queries;
@@ -120,15 +119,6 @@ if (builder.Configuration.GetValue("Migrations:AutoApply", true)
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
-}
-
-if (builder.Configuration.GetConnectionString("Metadata") is not null)
-{
-    using var scope = app.Services.CreateScope();
-    await McpOAuthClientRemediation.RunAsync(
-        scope.ServiceProvider.GetRequiredService<AppDbContext>(),
-        scope.ServiceProvider.GetRequiredService<IOptions<McpOptions>>().Value,
-        scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(McpOAuthClientRemediation)));
 }
 
 if (mcpEnabled)
