@@ -18,6 +18,8 @@ internal sealed partial class McpOptions
     // to (rather than replaces) a non-empty default list.
     public List<string> AllowedRedirectUris { get; set; } = [];
 
+    public List<McpConfiguredClient> Clients { get; set; } = [];
+
     // The server name becomes a client-side alias used verbatim in a TOML table
     // name ([mcp_servers.<name>]) and JSON keys, so it must be a safe identifier.
     public string GetValidatedServerName(ILogger? logger = null)
@@ -52,8 +54,47 @@ internal sealed partial class McpOptions
         return null;
     }
 
+    public IReadOnlyList<McpConfiguredClient> GetValidatedClients(ILogger? logger = null)
+    {
+        var valid = new List<McpConfiguredClient>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var client in Clients)
+        {
+            if (string.IsNullOrWhiteSpace(client.ClientId))
+            {
+                logger?.WarningInvalidConfiguredClient(client.Name, "ClientId is empty");
+            }
+            else if (client.RedirectUris is not { Count: > 0 })
+            {
+                logger?.WarningInvalidConfiguredClient(client.ClientId, "no RedirectUris");
+            }
+            else if (client.RedirectUris.Any(u => !Uri.TryCreate(u, UriKind.Absolute, out _)))
+            {
+                logger?.WarningInvalidConfiguredClient(client.ClientId, "a RedirectUri is not an absolute URI");
+            }
+            else if (!seen.Add(client.ClientId))
+            {
+                logger?.WarningInvalidConfiguredClient(client.ClientId, "duplicate ClientId");
+            }
+            else
+            {
+                valid.Add(client);
+            }
+        }
+
+        return valid;
+    }
+
     [GeneratedRegex("^[A-Za-z0-9_-]+$")]
     private static partial Regex ServerNameRegex();
+}
+
+internal sealed class McpConfiguredClient
+{
+    public string ClientId { get; set; } = "";
+    public string Name { get; set; } = "";
+    public List<string> RedirectUris { get; set; } = [];
 }
 
 internal static partial class McpLoggerMessage
@@ -72,4 +113,9 @@ internal static partial class McpLoggerMessage
         LogLevel.Warning,
         Message = "Mcp:PublicBaseUrl is not set; the OAuth issuer is derived from request headers. Set it when running behind a reverse proxy.")]
     public static partial void WarningPublicBaseUrlNotSet(this ILogger logger);
+
+    [LoggerMessage(
+        LogLevel.Warning,
+        Message = "Mcp:Clients entry '{ClientId}' ignored: {Reason}.")]
+    public static partial void WarningInvalidConfiguredClient(this ILogger logger, string clientId, string reason);
 }
