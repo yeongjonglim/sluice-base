@@ -13,11 +13,6 @@ internal sealed partial class McpOptions
 
     public string? PublicBaseUrl { get; set; }
 
-    // Exact-match redirect URIs accepted on top of loopback and the built-in native-app callbacks,
-    // e.g. a web client's https callback. Kept empty by default: the configuration binder appends
-    // to (rather than replaces) a non-empty default list.
-    public List<string> AllowedRedirectUris { get; set; } = [];
-
     public List<McpConfiguredClient> Clients { get; set; } = [];
 
     public McpCimdOptions Cimd { get; set; } = new();
