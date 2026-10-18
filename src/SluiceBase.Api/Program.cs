@@ -114,7 +114,8 @@ if (builder.Configuration.GetConnectionString("Metadata") is not null)
 if (mcpEnabled)
 {
     var mcpLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<McpOptions>();
-    if (app.Services.GetRequiredService<IOptions<McpOptions>>().Value.GetValidatedPublicBaseUrl(mcpLogger) is null)
+    var mcpOptions = app.Services.GetRequiredService<IOptions<McpOptions>>().Value;
+    if (mcpOptions.GetValidatedPublicBaseUrl(mcpLogger) is null && string.IsNullOrWhiteSpace(mcpOptions.PublicBaseUrl))
     {
         mcpLogger.WarningPublicBaseUrlNotSet();
     }
