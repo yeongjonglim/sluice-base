@@ -81,6 +81,8 @@ if (mcpEnabled)
         .RemoveAllResilienceHandlers();
 #pragma warning restore EXTEXP0001
     builder.Services.AddSingleton<ICimdFetcher, CimdFetcher>();
+    builder.Services.AddSingleton<ICimdClientSource, CimdClientSource>();
+    builder.Services.AddSingleton<IMcpClientResolver, McpClientResolver>();
 
     builder.Services.AddMcpServer(options =>
         {
