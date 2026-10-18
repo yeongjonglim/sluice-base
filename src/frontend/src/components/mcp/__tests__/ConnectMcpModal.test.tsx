@@ -77,7 +77,7 @@ describe("ConnectMcpModal", () => {
     expect(screen.getByText(/run_query/)).toBeInTheDocument();
   });
 
-  it("shows no Cursor tab or deeplink", () => {
+  it("shows no Add to Cursor link on the default tab", () => {
     renderModal();
 
     expect(screen.queryByRole("link", { name: /add to cursor/i })).not.toBeInTheDocument();
