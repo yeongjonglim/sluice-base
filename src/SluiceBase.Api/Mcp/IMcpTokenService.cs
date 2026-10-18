@@ -16,6 +16,7 @@ internal interface IMcpTokenService
     Task<IssuedTokens?> RedeemAuthCodeAsync(string clientId, string code, string redirectUri, string codeVerifier, CancellationToken ct);
     Task<IssuedTokens?> RefreshAsync(string clientId, string refreshToken, CancellationToken ct);
     Task<UserId?> ValidateAccessTokenAsync(string accessToken, CancellationToken ct);
+    Task<bool> HasLiveGrantAsync(string grantType, string clientId, string secret, CancellationToken ct);
 }
 
 internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOptions<McpOptions> options) : IMcpTokenService
@@ -157,6 +158,21 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
         token.Touch(now);
         await db.SaveChangesAsync(ct);
         return token.UserId;
+    }
+
+    public Task<bool> HasLiveGrantAsync(string grantType, string clientId, string secret, CancellationToken ct)
+    {
+        var hash = TokenHasher.Hash(secret);
+        var now = clock.GetUtcNow();
+        return grantType switch
+        {
+            "authorization_code" => db.McpAuthCodes.AsNoTracking().AnyAsync(
+                c => c.CodeHash == hash && c.ClientId == clientId && !c.Consumed && c.ExpiresAt > now, ct),
+            "refresh_token" => db.McpTokens.AsNoTracking().AnyAsync(
+                t => t.TokenHash == hash && t.ClientId == clientId && t.Type == McpTokenType.Refresh
+                    && !t.Revoked && t.ExpiresAt > now, ct),
+            _ => Task.FromResult(false),
+        };
     }
 
     private async Task<IssuedTokens> IssueTokenPairAsync(UserId userId, string clientId, CancellationToken ct)

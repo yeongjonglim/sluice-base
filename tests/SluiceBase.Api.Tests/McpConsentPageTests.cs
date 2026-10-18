@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using SluiceBase.Api.Mcp.Clients;
 using SluiceBase.Api.Mcp.Oauth;
 using SluiceBase.Core.Branding;
 
@@ -8,7 +9,8 @@ namespace SluiceBase.Api.Tests;
 
 public class McpConsentPageTests
 {
-    private static async Task<(HttpContext Ctx, string Html)> RenderAsync(string redirectUri, string clientName)
+    private static async Task<(HttpContext Ctx, string Html)> RenderAsync(
+        string redirectUri, string clientName, string verifiedHost = "tool.example")
     {
         var ctx = new DefaultHttpContext
         {
@@ -18,7 +20,10 @@ public class McpConsentPageTests
         var request = new AuthorizeRequest("client-1", redirectUri, "code", "challenge", "S256", "st\"ate");
         var tokens = new AntiforgeryTokenSet("request-token", "cookie-token", "__RequestVerificationToken", "X-XSRF-TOKEN");
 
-        var result = McpConsentPage.Render(ctx, request, clientName, "alice@example.com", tokens, new BrandingOptions());
+        var client = new ResolvedClient(
+            "https://tool.example/client.json", clientName, verifiedHost, [redirectUri], ClientKind.Cimd);
+
+        var result = McpConsentPage.Render(ctx, request, client, "alice@example.com", tokens, new BrandingOptions());
         await result.ExecuteAsync(ctx);
 
         ctx.Response.Body.Position = 0;
@@ -67,5 +72,37 @@ public class McpConsentPageTests
 
         Assert.Contains($"<p class=\"host\">{destination}</p>", html);
         Assert.Contains(kind, html);
+    }
+
+    [Fact]
+    public async Task Render_HeadlinesTheVerifiedHostWithClientNameSecondary()
+    {
+        var (_, html) = await RenderAsync("https://chatgpt.com/cb", "ChatGPT", "chatgpt.com");
+
+        Assert.Contains("<strong>chatgpt.com</strong>", html);
+        Assert.Contains("ChatGPT", html);
+        Assert.True(html.IndexOf("chatgpt.com</strong>", StringComparison.Ordinal)
+            < html.IndexOf("ChatGPT", StringComparison.Ordinal));
+        Assert.DoesNotContain("can't verify it", html);
+        Assert.Contains("verified", html);
+    }
+
+    [Fact]
+    public async Task Render_EncodesVerifiedHost()
+    {
+        var (_, html) = await RenderAsync("https://x.example/cb", "Tool", "<b>evil</b>");
+
+        Assert.DoesNotContain("<b>evil</b>", html);
+        Assert.Contains("&lt;b&gt;evil&lt;/b&gt;", html);
+    }
+
+    [Fact]
+    public async Task Render_TruncatesLongClientName()
+    {
+        var (_, html) = await RenderAsync("https://x.example/cb", new string('a', 81) + "TAIL");
+
+        Assert.DoesNotContain("TAIL", html);
+        Assert.Contains(new string('a', 79) + "…", html);
+        Assert.DoesNotContain(new string('a', 80), html);
     }
 }

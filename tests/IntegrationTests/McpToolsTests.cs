@@ -42,30 +42,15 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
     /// <summary>Creates a plain (non-authenticated, non-redirect-following) HTTP client pointed at the api.</summary>
     private HttpClient ApiClient() => factory.InitialisedApp.CreateHttpClient("api", "https");
 
-    /// <summary>Registers a new MCP OAuth client via /mcp/oauth/register and returns the client_id.</summary>
-    private static async Task<string> RegisterOAuthClientAsync(HttpClient client, string redirectUri, CancellationToken ct)
-    {
-        var body = new { client_name = "McpToolsTest", redirect_uris = new[] { redirectUri } };
-        var resp = await client.PostAsJsonAsync("/mcp/oauth/register", body, ct);
-        resp.EnsureSuccessStatusCode();
-        var json = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(ct);
-        return json.GetProperty("client_id").GetString()!;
-    }
-
     /// <summary>Mints a valid MCP access token for the given Keycloak user via the full OAuth flow.</summary>
     private async Task<string> MintAccessTokenAsync(string username, string password, CancellationToken ct)
     {
-        // Use a synthetic loopback redirect URI — after consent the authorize endpoint redirects
-        // there with ?code=…; we catch it with AllowAutoRedirect=false.
-        const string redirectUri = "http://127.0.0.1:43124/mcp-test-tools/callback";
+        // The configured dev client with a loopback redirect gets its code without a consent page;
+        // the authorize endpoint redirects there with ?code=…, which we catch with AllowAutoRedirect=false.
+        const string clientId = "sluicebase-dev";
+        const string redirectUri = "http://127.0.0.1:43123/callback";
         const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var codeChallenge = S256Challenge(codeVerifier);
-
-        string clientId;
-        using (var setupClient = ApiClient())
-        {
-            clientId = await RegisterOAuthClientAsync(setupClient, redirectUri, ct);
-        }
 
         // Step 1: sign in via the proven KeycloakLoginHelper — returns an authenticated session
         // whose Client carries the sb.auth cookie and has AllowAutoRedirect=false.
@@ -76,12 +61,7 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
                            $"&code_challenge={Uri.EscapeDataString(codeChallenge)}&code_challenge_method=S256" +
                            $"&state=mcptools-test";
 
-        // The session is already authenticated — the authorize endpoint sees ctx.User and
-        // shows the consent page; approving it returns 302 to redirect_uri?code=...
-        var consentResp = await session.Client.GetAsync(authorizeUrl, ct);
-        Assert.Equal(HttpStatusCode.OK, consentResp.StatusCode);
-        var consentFields = McpConsentForm.Fields(await consentResp.Content.ReadAsStringAsync(ct), "allow");
-        var authResp = await session.Client.PostAsync("/mcp/oauth/authorize", new FormUrlEncodedContent(consentFields), ct);
+        var authResp = await session.Client.GetAsync(authorizeUrl, ct);
         Assert.Equal(HttpStatusCode.Redirect, authResp.StatusCode);
         var code = HttpUtility.ParseQueryString(authResp.Headers.Location!.Query)["code"];
         Assert.False(string.IsNullOrEmpty(code), "Expected authorization code in redirect");

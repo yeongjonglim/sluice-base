@@ -1,12 +1,15 @@
 using System.Security.Cryptography;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Antiforgery;
+using SluiceBase.Api.Mcp.Clients;
 using SluiceBase.Core.Branding;
 
 namespace SluiceBase.Api.Mcp.Oauth;
 
 internal static class McpConsentPage
 {
+    private const int MaxDisplayNameLength = 80;
+
     // Mantine shades matching the frontend theme's primaryShade (light 7, dark 5).
     private static readonly Dictionary<string, (string Light, string Dark)> PrimaryShades = new()
     {
@@ -29,7 +32,7 @@ internal static class McpConsentPage
     public static IResult Render(
         HttpContext ctx,
         AuthorizeRequest request,
-        string clientName,
+        ResolvedClient client,
         string? userLabel,
         AntiforgeryTokenSet antiforgery,
         BrandingOptions branding)
@@ -44,13 +47,13 @@ internal static class McpConsentPage
         headers.CacheControl = "no-store";
         headers["Referrer-Policy"] = "no-referrer";
 
-        return Results.Content(Html(nonce, request, clientName, userLabel, antiforgery, branding), "text/html; charset=utf-8");
+        return Results.Content(Html(nonce, request, client, userLabel, antiforgery, branding), "text/html; charset=utf-8");
     }
 
     private static string Html(
         string nonce,
         AuthorizeRequest request,
-        string clientName,
+        ResolvedClient client,
         string? userLabel,
         AntiforgeryTokenSet antiforgery,
         BrandingOptions branding)
@@ -64,6 +67,8 @@ internal static class McpConsentPage
             .Append(new(antiforgery.FormFieldName, antiforgery.RequestToken ?? ""))
             .Select(f => $"""<input type="hidden" name="{e.Encode(f.Key)}" value="{e.Encode(f.Value)}">"""));
 
+        var host = e.Encode(client.VerifiedHost ?? client.ClientId);
+        var displayName = DisplayName(client.DisplayName, e);
         var asUser = userLabel is null ? "" : $" as <strong>{e.Encode(userLabel)}</strong>";
 
         return $$"""
@@ -107,8 +112,8 @@ internal static class McpConsentPage
             <main>
             <p class="app">{{appName}}</p>
             <h1>Allow this AI tool to access {{appName}}?</h1>
-            <p><strong>{{e.Encode(clientName)}}</strong> wants to use {{appName}}{{asUser}}.
-            <span class="dimmed">The tool chose this name itself; {{appName}} can't verify it.</span></p>
+            <p><strong>{{host}}</strong> wants to use {{appName}}{{asUser}}.
+            <span class="dimmed">It calls itself “{{displayName}}”. The name comes from the tool; the domain {{host}} is verified.</span></p>
             <div class="destination">
             <p class="label">Access will be handed to {{destinationKind}}</p>
             <p class="host">{{e.Encode(destination)}}</p>
@@ -132,6 +137,12 @@ internal static class McpConsentPage
             </html>
             """;
     }
+
+    // The name comes from an untrusted CIMD document, so a very long one must not push the verified host off the page.
+    private static string DisplayName(string name, HtmlEncoder e) =>
+        name.Length <= MaxDisplayNameLength
+            ? e.Encode(name)
+            : e.Encode(name[..(MaxDisplayNameLength - 1)]) + "…";
 
     // White text on light shades (e.g. teal 5 in dark mode) is hard to read on the one button that matters.
     private static string OnPrimary(string hex)

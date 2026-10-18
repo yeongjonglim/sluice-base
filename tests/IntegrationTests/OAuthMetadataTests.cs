@@ -1,6 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Web;
 using Aspire.Hosting.Testing;
 using IntegrationTests.Supports;
 using Npgsql;
@@ -76,6 +79,17 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
         Assert.Equal(issuer, firstAuthServer);
         Assert.False(issuer.EndsWith('/'));
         Assert.False(firstAuthServer.EndsWith('/'));
+
+        using var session = await new KeycloakLoginHelper(factory.InitialisedApp).SignInAsync("alice", "dev", ct);
+        var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var authorize = await session.Client.GetAsync(
+            $"/mcp/oauth/authorize?client_id={Uri.EscapeDataString(CimdStubServer.LoopbackClientId)}" +
+            $"&redirect_uri={Uri.EscapeDataString("http://127.0.0.1:43123/callback")}&response_type=code" +
+            $"&code_challenge={challenge}&code_challenge_method=S256&state=iss", ct);
+        Assert.Equal(HttpStatusCode.Redirect, authorize.StatusCode);
+        var iss = HttpUtility.ParseQueryString(authorize.Headers.Location!.Query)["iss"];
+        Assert.Equal(issuer, iss);
     }
 
     // ── Dynamic Client Registration ───────────────────────────────────────────

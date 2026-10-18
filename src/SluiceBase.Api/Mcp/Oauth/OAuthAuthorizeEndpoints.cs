@@ -1,13 +1,11 @@
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using SluiceBase.Api.Auth;
-using SluiceBase.Api.Data;
+using SluiceBase.Api.Mcp.Clients;
 using SluiceBase.Core.Branding;
-using SluiceBase.Core.Mcp;
 
 namespace SluiceBase.Api.Mcp.Oauth;
 
@@ -17,36 +15,49 @@ internal static class OAuthAuthorizeEndpoints
     {
         app.MapGet("/mcp/oauth/authorize", async (
             HttpContext ctx,
-            AppDbContext db,
+            IMcpClientResolver resolver,
             IAntiforgery antiforgery,
+            IMcpTokenService tokens,
             IOptions<McpOptions> mcpOptions,
             IOptions<BrandingOptions> branding,
             CancellationToken ct) =>
         {
             var q = ctx.Request.Query;
             var request = AuthorizeRequest.From(key => q[key]);
-            var (client, error) = await ValidateAsync(request, db, mcpOptions.Value, ct);
-            if (error is not null)
+            if (!HasValidShape(request))
             {
-                return error;
+                return Results.BadRequest("invalid_request");
             }
 
-            if (!(ctx.User?.TryGetInternalUserId(out _) ?? false))
+            // Sign-in comes before resolving so an anonymous caller can't make us fetch arbitrary CIMD URLs.
+            if (!(ctx.User?.TryGetInternalUserId(out var userId) ?? false))
             {
                 // Not logged in yet: bounce through the existing OIDC provider, then return here.
                 return ChallengeBackTo(request);
             }
 
-            // Never issue a code straight from a GET: registration is open, so the user must see
-            // where the code is going and approve it (the confused-deputy guidance in the MCP spec).
-            var tokens = antiforgery.GetAndStoreTokens(ctx);
-            return McpConsentPage.Render(
-                ctx, request, client!.ClientName, ctx.User.GetEmail() ?? ctx.User.GetName(), tokens, branding.Value);
+            var (client, error) = await ResolveAsync(request, resolver, ct);
+            if (error is not null)
+            {
+                return error;
+            }
+
+            if (RequiresConsent(client!, request.RedirectUri))
+            {
+                // A web or private-scheme callback can deliver the code off this machine, so the user
+                // must see where it is going and approve it (the confused-deputy guidance in the MCP spec).
+                var antiforgeryTokens = antiforgery.GetAndStoreTokens(ctx);
+                return McpConsentPage.Render(
+                    ctx, request, client!, ctx.User.GetEmail() ?? ctx.User.GetName(), antiforgeryTokens, branding.Value);
+            }
+
+            var code = await tokens.IssueAuthCodeAsync(request.ClientId, userId, request.RedirectUri, request.CodeChallenge, ct);
+            return RedirectToClient(ctx, mcpOptions.Value, request, ("code", code), ("state", request.State));
         }).AllowAnonymous();
 
         app.MapPost("/mcp/oauth/authorize", async (
             HttpContext ctx,
-            AppDbContext db,
+            IMcpClientResolver resolver,
             IAntiforgery antiforgery,
             IMcpTokenService tokens,
             IOptions<McpOptions> mcpOptions,
@@ -54,15 +65,20 @@ internal static class OAuthAuthorizeEndpoints
         {
             var form = await ctx.Request.ReadFormAsync(ct);
             var request = AuthorizeRequest.From(key => form[key]);
-            var (_, error) = await ValidateAsync(request, db, mcpOptions.Value, ct);
-            if (error is not null)
+            if (!HasValidShape(request))
             {
-                return error;
+                return Results.BadRequest("invalid_request");
             }
 
             if (!(ctx.User?.TryGetInternalUserId(out var userId) ?? false))
             {
                 return ChallengeBackTo(request);
+            }
+
+            var (_, error) = await ResolveAsync(request, resolver, ct);
+            if (error is not null)
+            {
+                return error;
             }
 
             if (!await antiforgery.IsRequestValidAsync(ctx))
@@ -72,35 +88,36 @@ internal static class OAuthAuthorizeEndpoints
 
             if (form["decision"] != "allow")
             {
-                return RedirectToClient(request, ("error", "access_denied"), ("state", request.State));
+                return RedirectToClient(ctx, mcpOptions.Value, request, ("error", "access_denied"), ("state", request.State));
             }
 
             var code = await tokens.IssueAuthCodeAsync(request.ClientId, userId, request.RedirectUri, request.CodeChallenge, ct);
-            return RedirectToClient(request, ("code", code), ("state", request.State));
+            return RedirectToClient(ctx, mcpOptions.Value, request, ("code", code), ("state", request.State));
         }).AllowAnonymous();
     }
 
-    private static async Task<(McpOAuthClient? Client, IResult? Error)> ValidateAsync(
-        AuthorizeRequest request, AppDbContext db, McpOptions options, CancellationToken ct)
+    // A loopback callback can only reach the user's own machine and a configured client is
+    // operator-vetted, so only a CIMD client with a web or private-scheme callback needs consent.
+    public static bool RequiresConsent(ResolvedClient client, string redirectUri) =>
+        client.Kind == ClientKind.Cimd && !McpRedirectUriPolicy.IsLoopback(redirectUri);
+
+    private static bool HasValidShape(AuthorizeRequest request) =>
+        request.ResponseType == "code" && request.CodeChallengeMethod == "S256"
+        && !string.IsNullOrEmpty(request.CodeChallenge);
+
+    private static async Task<(ResolvedClient? Client, IResult? Error)> ResolveAsync(
+        AuthorizeRequest request, IMcpClientResolver resolver, CancellationToken ct)
     {
-        if (request.ResponseType != "code" || request.CodeChallengeMethod != "S256"
-            || string.IsNullOrEmpty(request.CodeChallenge))
+        switch (await resolver.ResolveAsync(request.ClientId, ct))
         {
-            return (null, Results.BadRequest("invalid_request"));
+            case ClientResolution.Found { Client: var client }
+                when client.RedirectUris.Any(r => McpRedirectUriPolicy.Matches(r, request.RedirectUri)):
+                return (client, null);
+            case ClientResolution.TemporarilyUnavailable:
+                return (null, Results.BadRequest("temporarily_unavailable"));
+            default:
+                return (null, Results.BadRequest("invalid_client_or_redirect_uri"));
         }
-
-        var client = await db.McpOAuthClients.AsNoTracking()
-            .SingleOrDefaultAsync(c => c.ClientId == request.ClientId, ct);
-        // The policy is re-checked here, not just at registration, so a URI that is no longer
-        // allowed (or a client registered before the policy existed) can't receive a code.
-        if (client is null
-            || !McpRedirectUriPolicy.IsAllowed(request.RedirectUri, options.AllowedRedirectUris)
-            || !client.RedirectUris.Any(r => McpRedirectUriPolicy.Matches(r, request.RedirectUri)))
-        {
-            return (null, Results.BadRequest("invalid_client_or_redirect_uri"));
-        }
-
-        return (client, null);
     }
 
     private static IResult ChallengeBackTo(AuthorizeRequest request) =>
@@ -109,10 +126,13 @@ internal static class OAuthAuthorizeEndpoints
                 request.Fields().Select(f => new KeyValuePair<string, string?>(f.Key, f.Value))) },
             [OpenIdConnectDefaults.AuthenticationScheme]);
 
-    private static IResult RedirectToClient(AuthorizeRequest request, params (string Key, string Value)[] parameters)
+    private static IResult RedirectToClient(
+        HttpContext ctx, McpOptions options, AuthorizeRequest request, params (string Key, string Value)[] parameters)
     {
         var sep = request.RedirectUri.Contains('?') ? '&' : '?';
-        var query = string.Join('&', parameters.Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value)}"));
+        var query = string.Join('&', parameters
+            .Append((Key: "iss", Value: McpIssuer.BaseUrl(ctx, options)))
+            .Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value)}"));
         return Results.Redirect($"{request.RedirectUri}{sep}{query}");
     }
 }
