@@ -26,6 +26,12 @@ public class CimdDocumentTests
     [InlineData("https://x.example/./c")]
     [InlineData("https://x.example/a/%2e%2e/c")]
     [InlineData("http://x.example/c")]
+    [InlineData("https://x.example/a/.%2e/c")]
+    [InlineData("https://x.example/a/%2e./c")]
+    [InlineData("https://x.example/a\\..\\c")]
+    [InlineData(" https://x.example/c")]
+    [InlineData("https://x.example/c\n")]
+    [InlineData("HTTPS://x.example/c")]
     [InlineData("not a url")]
     public void IsAcceptableClientIdUrl_Rejects(string url)
     {
@@ -100,6 +106,37 @@ public class CimdDocumentTests
             """);
 
         Assert.Null(CimdDocument.Validate(new Uri(ChatGptUrl), doc));
+    }
+
+    [Fact]
+    public void Validate_SingularNotNonePluralNone_Null()
+    {
+        var doc = Parse($$"""
+            {"client_id":"{{ChatGptUrl}}","redirect_uris":["https://chatgpt.com/cb"],
+             "token_endpoint_auth_method":"private_key_jwt",
+             "token_endpoint_auth_methods_supported":["none"]}
+            """);
+
+        Assert.Null(CimdDocument.Validate(new Uri(ChatGptUrl), doc));
+    }
+
+    [Theory]
+    [InlineData("\"token_endpoint_auth_method\":\"none\"")]
+    [InlineData("\"token_endpoint_auth_methods_supported\":[\"none\"]")]
+    [InlineData("\"x\":1")]
+    public void Validate_AuthMethodValidForms_Ok(string extra)
+    {
+        var doc = Parse($$"""{"client_id":"{{ChatGptUrl}}","redirect_uris":["https://chatgpt.com/cb"],{{extra}}}""");
+
+        Assert.NotNull(CimdDocument.Validate(new Uri(ChatGptUrl), doc));
+    }
+
+    [Fact]
+    public void Validate_NonStringClientName_DisplaysHost()
+    {
+        var doc = Parse($$"""{"client_id":"{{ChatGptUrl}}","client_name":5,"redirect_uris":["https://chatgpt.com/cb"]}""");
+
+        Assert.Equal("chatgpt.com", CimdDocument.Validate(new Uri(ChatGptUrl), doc)?.DisplayName);
     }
 
     [Fact]
