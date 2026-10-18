@@ -49,10 +49,10 @@ describe("ConnectMcpModal", () => {
     renderModal();
 
     expect(screen.getByRole("tab", { name: /claude code/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /cursor/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /vs code/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /github copilot/i })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /codex/i })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /cursor/i })).not.toBeInTheDocument();
 
     const endpoint = `${window.location.origin}/mcp`;
     expect(
@@ -77,15 +77,9 @@ describe("ConnectMcpModal", () => {
     expect(screen.getByText(/run_query/)).toBeInTheDocument();
   });
 
-  it("shows an Add to Cursor deeplink only on the Cursor tab, not on Claude Code", async () => {
+  it("shows no Cursor tab or deeplink", () => {
     renderModal();
-    const user = userEvent.setup();
 
     expect(screen.queryByRole("link", { name: /add to cursor/i })).not.toBeInTheDocument();
-
-    await user.click(screen.getByRole("tab", { name: /cursor/i }));
-
-    const link = await screen.findByRole("link", { name: /add to cursor/i });
-    expect(link).toHaveAttribute("href", expect.stringMatching(/^cursor:\/\//));
   });
 });
