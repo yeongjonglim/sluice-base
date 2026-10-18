@@ -42,8 +42,29 @@ internal static class McpRedirectUriPolicy
             && string.Equals(r.PathAndQuery, q.PathAndQuery, StringComparison.Ordinal);
     }
 
-    private static bool IsLoopback(string redirectUri)
+    public static bool IsAllowedForCimd(string redirectUri)
     {
+        if (!TryParseSafe(redirectUri, out var uri))
+        {
+            return false;
+        }
+
+        return uri.Scheme switch
+        {
+            "http" => uri.IsLoopback,
+            "https" => !string.IsNullOrEmpty(uri.Host),
+            "javascript" or "data" or "file" or "vbscript" => false,
+            _ => true,
+        };
+    }
+
+    public static bool IsLoopback(string redirectUri) =>
+        TryParseSafe(redirectUri, out var uri) && uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback;
+
+    private static bool TryParseSafe(string redirectUri, out Uri uri)
+    {
+        uri = null!;
+
         // Backslashes, userinfo and control characters are where URI parsers disagree about the
         // host; reject them rather than risk .NET and the browser resolving different hosts.
         if (redirectUri.Contains('\\') || redirectUri.Any(char.IsControl) || redirectUri.Any(char.IsWhiteSpace))
@@ -51,10 +72,14 @@ internal static class McpRedirectUriPolicy
             return false;
         }
 
-        return Uri.TryCreate(redirectUri, UriKind.Absolute, out var uri)
-            && uri.Scheme == Uri.UriSchemeHttp
-            && uri.IsLoopback
-            && string.IsNullOrEmpty(uri.UserInfo)
-            && string.IsNullOrEmpty(uri.Fragment);
+        if (!Uri.TryCreate(redirectUri, UriKind.Absolute, out var parsed)
+            || !string.IsNullOrEmpty(parsed.UserInfo)
+            || !string.IsNullOrEmpty(parsed.Fragment))
+        {
+            return false;
+        }
+
+        uri = parsed;
+        return true;
     }
 }
