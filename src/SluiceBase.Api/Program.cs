@@ -111,6 +111,15 @@ if (builder.Configuration.GetConnectionString("Metadata") is not null)
         scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(McpOAuthClientRemediation)));
 }
 
+if (mcpEnabled)
+{
+    var mcpLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<McpOptions>();
+    if (app.Services.GetRequiredService<IOptions<McpOptions>>().Value.GetValidatedPublicBaseUrl(mcpLogger) is null)
+    {
+        mcpLogger.WarningPublicBaseUrlNotSet();
+    }
+}
+
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost,

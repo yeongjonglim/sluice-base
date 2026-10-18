@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Options;
+
 namespace SluiceBase.Api.Mcp.Oauth;
 
 internal static class OAuthMetadataEndpoints
@@ -10,9 +12,9 @@ internal static class OAuthMetadataEndpoints
 
     public static void Map(IEndpointRouteBuilder app)
     {
-        app.MapGet("/.well-known/oauth-protected-resource", (HttpContext ctx) =>
+        app.MapGet("/.well-known/oauth-protected-resource", (HttpContext ctx, IOptions<McpOptions> mcpOptions) =>
         {
-            var baseUrl = BaseUrl(ctx);
+            var baseUrl = McpIssuer.BaseUrl(ctx, mcpOptions.Value);
             return Results.Ok(new Dictionary<string, object?>
             {
                 ["resource"] = baseUrl,
@@ -21,9 +23,9 @@ internal static class OAuthMetadataEndpoints
             });
         }).AllowAnonymous();
 
-        app.MapGet("/.well-known/oauth-authorization-server", (HttpContext ctx) =>
+        app.MapGet("/.well-known/oauth-authorization-server", (HttpContext ctx, IOptions<McpOptions> mcpOptions) =>
         {
-            var baseUrl = BaseUrl(ctx);
+            var baseUrl = McpIssuer.BaseUrl(ctx, mcpOptions.Value);
             return Results.Ok(new Dictionary<string, object?>
             {
                 ["issuer"] = baseUrl,
@@ -34,9 +36,11 @@ internal static class OAuthMetadataEndpoints
                 ["grant_types_supported"] = GrantTypes,
                 ["code_challenge_methods_supported"] = CodeChallengeMethods,
                 ["token_endpoint_auth_methods_supported"] = TokenEndpointAuthMethods,
+                ["authorization_response_iss_parameter_supported"] = true,
+                ["client_id_metadata_document_supported"] = true,
             });
         }).AllowAnonymous();
     }
 
-    private static string BaseUrl(HttpContext ctx) => $"{ctx.Request.Scheme}://{ctx.Request.Host}";
+    private static string BaseUrl(HttpContext ctx, IOptions<McpOptions> mcpOptions) => $"{ctx.Request.Scheme}://{ctx.Request.Host}";
 }

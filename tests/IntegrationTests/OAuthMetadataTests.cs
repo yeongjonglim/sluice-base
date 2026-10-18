@@ -57,6 +57,25 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
         Assert.True(body.TryGetProperty("code_challenge_methods_supported", out var pkce));
         var methods = pkce.EnumerateArray().Select(e => e.GetString()!).ToArray();
         Assert.Equal(["S256"], methods);
+
+        Assert.True(body.GetProperty("authorization_response_iss_parameter_supported").GetBoolean());
+        Assert.True(body.GetProperty("client_id_metadata_document_supported").GetBoolean());
+    }
+
+    [Fact]
+    public async Task Issuer_IsIdenticalAcrossMetadataAndIss()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
+
+        var resource = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-protected-resource", ct);
+        var server = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-authorization-server", ct);
+
+        var issuer = server.GetProperty("issuer").GetString()!;
+        var firstAuthServer = resource.GetProperty("authorization_servers").EnumerateArray().First().GetString()!;
+        Assert.Equal(issuer, firstAuthServer);
+        Assert.False(issuer.EndsWith('/'));
+        Assert.False(firstAuthServer.EndsWith('/'));
     }
 
     // ── Dynamic Client Registration ───────────────────────────────────────────
