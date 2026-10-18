@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using SluiceBase.Api.Data;
 using SluiceBase.Core.Mcp;
 
@@ -13,17 +14,29 @@ internal static class OAuthRegistrationEndpoints
             [FromBody] RegisterClientRequest request,
             AppDbContext db,
             TimeProvider timeProvider,
+            IOptions<McpOptions> options,
             CancellationToken ct) =>
         {
-            if (request.RedirectUris is null or { Count: 0 }
-                || request.RedirectUris.Any(u => !Uri.TryCreate(u, UriKind.Absolute, out _)))
+            // Disallowed URIs are dropped rather than failing the registration (RFC 7591 §3.2.1 lets the
+            // server replace requested metadata): VS Code registers its loopback callback alongside
+            // vscode.dev relay URIs, and only the loopback one is usable here.
+            var redirectUris = (request.RedirectUris ?? [])
+                .Where(u => McpRedirectUriPolicy.IsAllowed(u, options.Value.AllowedRedirectUris))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+            if (redirectUris.Count == 0)
             {
-                return Results.BadRequest(new { error = "invalid_redirect_uri" });
+                return Results.BadRequest(new
+                {
+                    error = "invalid_redirect_uri",
+                    error_description = "Redirect URIs must be http loopback (localhost, 127.0.0.1 or [::1]) "
+                        + "or explicitly allowed by the server operator.",
+                });
             }
 
             var client = McpOAuthClient.Register(
                 request.ClientName ?? "MCP Client",
-                request.RedirectUris,
+                redirectUris,
                 timeProvider.GetUtcNow());
 
             db.McpOAuthClients.Add(client);

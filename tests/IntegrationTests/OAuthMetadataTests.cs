@@ -70,7 +70,7 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
         var body = new
         {
             client_name = "Test MCP Client",
-            redirect_uris = new[] { "https://example.com/callback" },
+            redirect_uris = new[] { "http://127.0.0.1:43123/callback" },
         };
 
         var response = await client.PostAsJsonAsync("/mcp/oauth/register", body, ct);
@@ -87,7 +87,7 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
 
         Assert.True(result.TryGetProperty("redirect_uris", out var redirectUris));
         var uris = redirectUris.EnumerateArray().Select(e => e.GetString()).ToArray();
-        Assert.Contains("https://example.com/callback", uris);
+        Assert.Contains("http://127.0.0.1:43123/callback", uris);
 
         // Verify the row exists in the metadata DB
         var metaConnStr = await factory.InitialisedApp.GetConnectionStringAsync("metadata-db", ct);

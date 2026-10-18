@@ -11,6 +11,11 @@ internal sealed partial class McpOptions
     public int RefreshTokenDays { get; set; } = 30;
     public int AuthCodeSeconds { get; set; } = 120;
 
+    // Exact-match redirect URIs accepted on top of loopback and the built-in native-app callbacks,
+    // e.g. a web client's https callback. Kept empty by default: the configuration binder appends
+    // to (rather than replaces) a non-empty default list.
+    public List<string> AllowedRedirectUris { get; set; } = [];
+
     // The server name becomes a client-side alias used verbatim in a TOML table
     // name ([mcp_servers.<name>]) and JSON keys, so it must be a safe identifier.
     public string GetValidatedServerName(ILogger? logger = null)
