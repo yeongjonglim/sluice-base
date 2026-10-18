@@ -96,7 +96,8 @@ The app is available at `http://localhost:8080`.
 | `Mcp__AccessTokenMinutes` | | `60` | Lifetime of an MCP access token in minutes |
 | `Mcp__RefreshTokenDays` | | `30` | Lifetime of an MCP refresh token in days |
 | `Mcp__AuthCodeSeconds` | | `120` | Lifetime of an MCP OAuth authorization code in seconds |
-| `Mcp__AllowedRedirectUris__0`, `__1`, … | | _(empty)_ | Extra OAuth redirect URIs (exact match) that MCP clients may register, e.g. `https://claude.ai/api/mcp/auth_callback` for a web client. Loopback and Cursor callbacks are always allowed (see [Sign-in and consent](#sign-in-and-consent)) |
+| `Mcp__PublicBaseUrl` | | _(derived from request)_ | Public origin of this server, e.g. `https://sluice.example.com` (scheme, host, optional port; no path). Strongly recommended behind a reverse proxy such as nginx; becomes the OAuth issuer and the `iss` value. If unset it is derived from the request (`X-Forwarded-*`) and a warning is logged at startup |
+| `Mcp__Clients__N__ClientId`, `__Name`, `__RedirectUris__M` | | _(empty)_ | Pre-registered public MCP clients (PKCE, no secret) for tools without CIMD support. Their redirect URIs are trusted as configured and skip the consent screen (see [Sign-in and consent](#sign-in-and-consent)) |
 
 ### Branding colours
 
@@ -189,11 +190,27 @@ Set `Mcp__Enabled=false` to disable the MCP server and its OAuth endpoints entir
 
 ### Sign-in and consent
 
-Any MCP client can register itself, so SluiceBase limits where an authorization code can be sent and asks the user before sending one:
+There is no client self-registration. An MCP client identifies itself in one of two ways:
 
-- **Redirect URIs.** A client may only register `http://localhost`, `http://127.0.0.1` or `http://[::1]` callbacks (any port, per RFC 8252), or Cursor's `cursor://anysphere.cursor-mcp/oauth/callback`. Anything else is dropped at registration. Claude Code, Codex, VS Code/GitHub Copilot, Cursor and MCP Inspector all work with this out of the box. To allow a web-based client, add its exact callback to `Mcp__AllowedRedirectUris`.
-- **Consent.** After signing in, the user sees which tool is asking and where access will be handed (for example, "an app running on this computer, `127.0.0.1:33418`") and must choose **Allow**. If they didn't start the connection themselves, they choose **Deny**.
-- **Cleanup on upgrade.** On startup, any stored client with a redirect URI outside these rules has that URI removed and its tokens revoked. Each one is logged as a warning naming the `client_id`.
+- **CIMD (Client ID Metadata Documents).** The `client_id` is an `https://` URL pointing at the tool's own metadata document. SluiceBase fetches it, validates it, and caches it per its `Cache-Control` (5 minutes to 24 hours). This needs direct outbound HTTPS from SluiceBase (no proxy support); private, loopback and link-local targets are refused. In proxy-only networks only configured clients work.
+- **Configured clients.** For tools without CIMD, an operator pre-registers a public client (PKCE, no secret) with `Mcp__Clients__N__ClientId`, `__Name` and `__RedirectUris__M`. Its redirect URIs are trusted as configured.
+
+**Consent.** After signing in, the user sees a consent screen, with the verified domain of the tool, only when a CIMD client's callback is not loopback (for example claude.ai or ChatGPT on the web). Loopback callbacks (Claude Code, Codex, VS Code, MCP Inspector) and configured clients go straight through. If a user didn't start the connection themselves, they choose **Deny**.
+
+**Public URL.** Set `Mcp__PublicBaseUrl` to the origin users reach SluiceBase at. The trailing slash is removed and the host lowercased. It becomes the OAuth issuer and the `iss` parameter returned on authorization responses.
+
+| Tool | Support |
+|---|---|
+| Claude Code, Claude Desktop, claude.ai | CIMD |
+| ChatGPT | CIMD |
+| Codex | CIMD |
+| VS Code, GitHub Copilot in VS Code | CIMD (VS Code 1.106+; Copilot inferred from VS Code) |
+| MCP Inspector | CIMD, enable **Use CIMD** under Client Settings → OAuth |
+| Cursor | Not supported out of the box (no CIMD yet); add a configured client |
+
+**Cursor.** Add a configured client with redirect URI `cursor://anysphere.cursor-mcp/oauth/callback`, then have users set that client id in Cursor's `mcp.json`.
+
+**Upgrading.** Self-registration was removed, so existing MCP connections must sign in again once.
 
 ## Development setup
 
@@ -234,7 +251,7 @@ The MCP endpoint is served through the gateway at **`https://localhost:5443/mcp`
    NODE_TLS_REJECT_UNAUTHORIZED=0 npx @modelcontextprotocol/inspector
    ```
 
-   Set Transport to **Streamable HTTP**, URL to `https://localhost:5443/mcp`, and connect. (`NODE_TLS_REJECT_UNAUTHORIZED=0` is only needed to accept the local dev certificate.)
+   Set Transport to **Streamable HTTP**, URL to `https://localhost:5443/mcp`, enable **Use CIMD** under Client Settings → OAuth, and connect. Alternatively, use the dev configured client: set the OAuth client ID to `sluicebase-dev` and pin the Inspector's callback to `http://127.0.0.1:43123/callback`. (`NODE_TLS_REJECT_UNAUTHORIZED=0` is only needed to accept the local dev certificate.)
 
    **Claude Code:**
 
@@ -254,7 +271,7 @@ The MCP endpoint is served through the gateway at **`https://localhost:5443/mcp`
 The OAuth + tool round-trip is also covered by the integration tests:
 
 ```bash
-dotnet test tests/IntegrationTests --filter "McpTokenServiceTests|OAuthFlowTests|McpToolsTests"
+dotnet test tests/IntegrationTests --filter "McpTokenServiceTests|OAuthFlowTests|OAuthMetadataTests|McpToolsTests"
 ```
 
 ## License
