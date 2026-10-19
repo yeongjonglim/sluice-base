@@ -333,6 +333,30 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
     }
 
     [Fact]
+    public async Task Authorize_PostWithoutAntiforgeryToken_DoesNotFetchCimd()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+        factory.CimdStub.Clear();
+        var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["client_id"] = "https://localhost:47443/forged-post.json",
+            ["redirect_uri"] = WebRedirectUri,
+            ["response_type"] = "code",
+            ["code_challenge"] = S256Challenge(Verifier),
+            ["code_challenge_method"] = "S256",
+            ["state"] = "s",
+            ["decision"] = "allow",
+        });
+
+        var response = await session.Client.PostAsync("/mcp/oauth/authorize", form, ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid_csrf_token", await response.Content.ReadAsStringAsync(ct));
+        Assert.DoesNotContain("/forged-post.json", factory.CimdStub.RequestedPaths);
+    }
+
+    [Fact]
     public async Task Authorize_CimdWeb_Allow_RedirectsWithCodeAndIss()
     {
         var ct = TestContext.Current.CancellationToken;
