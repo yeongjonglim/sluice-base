@@ -136,7 +136,9 @@ public class CimdFetcherTests
     [InlineData(HttpStatusCode.InternalServerError)]
     [InlineData(HttpStatusCode.BadGateway)]
     [InlineData(HttpStatusCode.ServiceUnavailable)]
-    public async Task Fetch_5xx_Transient(HttpStatusCode status)
+    [InlineData(HttpStatusCode.RequestTimeout)]
+    [InlineData(HttpStatusCode.TooManyRequests)]
+    public async Task Fetch_RetryableStatus_Transient(HttpStatusCode status)
     {
         var fetcher = Fetcher((_, _) => Task.FromResult(Json("{}", status)));
 
@@ -320,49 +322,49 @@ public class CimdFetcherTests
     [InlineData("::")]
     [InlineData("100.64.1.1")]
     [InlineData("127.0.0.1")]
-    public void SelectVettedAddress_RefusesNonPublic(string address)
+    public void VetAddresses_RefusesNonPublic(string address)
     {
         Assert.Throws<CimdTargetRefusedException>(() =>
-            CimdFetcher.SelectVettedAddress("client.example", [IPAddress.Parse(address)], allowLoopback: false));
+            CimdFetcher.VetAddresses("client.example", [IPAddress.Parse(address)], allowLoopback: false));
     }
 
     [Fact]
-    public void SelectVettedAddress_MixedPublicAndPrivate_Refuses()
+    public void VetAddresses_MixedPublicAndPrivate_Refuses()
     {
-        Assert.Throws<CimdTargetRefusedException>(() => CimdFetcher.SelectVettedAddress(
+        Assert.Throws<CimdTargetRefusedException>(() => CimdFetcher.VetAddresses(
             "client.example",
             [IPAddress.Parse("10.0.0.1"), IPAddress.Parse("1.1.1.1")],
             allowLoopback: false));
     }
 
     [Fact]
-    public void SelectVettedAddress_AllPublic_ReturnsFirst()
+    public void VetAddresses_AllPublic_ReturnsAllInOrder()
     {
-        var chosen = CimdFetcher.SelectVettedAddress(
+        var vetted = CimdFetcher.VetAddresses(
             "client.example",
             [IPAddress.Parse("2606:4700:4700::1111"), IPAddress.Parse("1.1.1.1")],
             allowLoopback: false);
 
-        Assert.Equal(IPAddress.Parse("2606:4700:4700::1111"), chosen);
+        Assert.Equal([IPAddress.Parse("2606:4700:4700::1111"), IPAddress.Parse("1.1.1.1")], vetted);
     }
 
     [Fact]
-    public void SelectVettedAddress_NoAddresses_IsDnsFailureNotRefusal()
+    public void VetAddresses_NoAddresses_IsDnsFailureNotRefusal()
     {
         Assert.Throws<SocketException>(() =>
-            CimdFetcher.SelectVettedAddress("client.example", [], allowLoopback: false));
+            CimdFetcher.VetAddresses("client.example", [], allowLoopback: false));
     }
 
     [Fact]
-    public void SelectVettedAddress_AllowLoopback_PermitsLoopbackButNotPrivate()
+    public void VetAddresses_AllowLoopback_PermitsLoopbackButNotPrivate()
     {
         Assert.Equal(
-            IPAddress.Loopback,
-            CimdFetcher.SelectVettedAddress("localhost", [IPAddress.Loopback], allowLoopback: true));
+            [IPAddress.Loopback],
+            CimdFetcher.VetAddresses("localhost", [IPAddress.Loopback], allowLoopback: true));
         Assert.Throws<CimdTargetRefusedException>(() =>
-            CimdFetcher.SelectVettedAddress("client.example", [IPAddress.Parse("10.0.0.1")], allowLoopback: true));
+            CimdFetcher.VetAddresses("client.example", [IPAddress.Parse("10.0.0.1")], allowLoopback: true));
         Assert.Throws<CimdTargetRefusedException>(() =>
-            CimdFetcher.SelectVettedAddress("localhost", [IPAddress.Parse("1.1.1.1")], allowLoopback: true));
+            CimdFetcher.VetAddresses("localhost", [IPAddress.Parse("1.1.1.1")], allowLoopback: true));
     }
 
     [Fact]
@@ -382,6 +384,49 @@ public class CimdFetcherTests
         using var accepted = await accept;
 
         Assert.True(accepted.Connected);
+    }
+
+    [Fact]
+    public async Task ConnectGuard_FirstAddressFails_FallsBackToNext()
+    {
+        var attempted = new List<IPAddress>();
+        var second = new MemoryStream();
+
+        var stream = await CimdFetcher.ConnectAsync(
+            new DnsEndPoint("client.example", 443),
+            allowLoopback: false,
+            (_, _) => Task.FromResult(new[] { IPAddress.Parse("2606:4700:4700::1111"), IPAddress.Parse("1.1.1.1") }),
+            (endpoint, _) =>
+            {
+                Assert.Equal(443, endpoint.Port);
+                attempted.Add(endpoint.Address);
+                return attempted.Count == 1
+                    ? ValueTask.FromException<Stream>(new SocketException((int)SocketError.NetworkUnreachable))
+                    : ValueTask.FromResult<Stream>(second);
+            },
+            TestContext.Current.CancellationToken);
+
+        Assert.Same(second, stream);
+        Assert.Equal([IPAddress.Parse("2606:4700:4700::1111"), IPAddress.Parse("1.1.1.1")], attempted);
+    }
+
+    [Fact]
+    public async Task ConnectGuard_AllAddressesFail_Throws()
+    {
+        var attempts = 0;
+
+        await Assert.ThrowsAsync<SocketException>(async () => await CimdFetcher.ConnectAsync(
+            new DnsEndPoint("client.example", 443),
+            allowLoopback: false,
+            (_, _) => Task.FromResult(new[] { IPAddress.Parse("1.1.1.1"), IPAddress.Parse("1.0.0.1") }),
+            (_, _) =>
+            {
+                attempts++;
+                return ValueTask.FromException<Stream>(new SocketException((int)SocketError.ConnectionRefused));
+            },
+            TestContext.Current.CancellationToken));
+
+        Assert.Equal(2, attempts);
     }
 
     [Theory]
