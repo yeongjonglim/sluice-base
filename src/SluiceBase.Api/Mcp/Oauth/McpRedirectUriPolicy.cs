@@ -27,7 +27,8 @@ internal static class McpRedirectUriPolicy
 
     public static bool IsAllowedForCimd(string redirectUri)
     {
-        if (!TryParseSafe(redirectUri, out var uri))
+        // Non-ASCII would let a homograph host pass for a familiar one on the consent page.
+        if (redirectUri.Any(c => c > 0x7E) || !TryParseSafe(redirectUri, out var uri))
         {
             return false;
         }

@@ -11,6 +11,7 @@ public class CimdDocumentTests
     [InlineData("https://claude.ai/oauth/claude-code-client-metadata")]
     [InlineData(ChatGptUrl)]
     [InlineData("https://x.example:8443/c.json")]
+    [InlineData("https://xn--chtgpt-4nf.com/oauth/client.json")]
     public void IsAcceptableClientIdUrl_Accepts(string url)
     {
         Assert.True(CimdDocument.IsAcceptableClientIdUrl(url, out var parsed));
@@ -33,6 +34,8 @@ public class CimdDocumentTests
     [InlineData("https://x.example/c\n")]
     [InlineData("HTTPS://x.example/c")]
     [InlineData("not a url")]
+    [InlineData("https://ch\u0430tgpt.com/oauth/client.json")]
+    [InlineData("https://x.example/caf\u00e9")]
     public void IsAcceptableClientIdUrl_Rejects(string url)
     {
         Assert.False(CimdDocument.IsAcceptableClientIdUrl(url, out _));
@@ -109,7 +112,7 @@ public class CimdDocumentTests
     }
 
     [Fact]
-    public void Validate_SingularNotNonePluralNone_Null()
+    public void Validate_SingularNotNonePluralNone_Ok()
     {
         var doc = Parse($$"""
             {"client_id":"{{ChatGptUrl}}","redirect_uris":["https://chatgpt.com/cb"],
@@ -117,7 +120,64 @@ public class CimdDocumentTests
              "token_endpoint_auth_methods_supported":["none"]}
             """);
 
+        Assert.NotNull(CimdDocument.Validate(new Uri(ChatGptUrl), doc));
+    }
+
+    [Fact]
+    public void Validate_SingularNotNoneWithoutPlural_Null()
+    {
+        var doc = Parse($$"""
+            {"client_id":"{{ChatGptUrl}}","redirect_uris":["https://chatgpt.com/cb"],
+             "token_endpoint_auth_method":"private_key_jwt"}
+            """);
+
         Assert.Null(CimdDocument.Validate(new Uri(ChatGptUrl), doc));
+    }
+
+    [Fact]
+    public void Validate_PluralNotArray_Null()
+    {
+        var doc = Parse($$"""
+            {"client_id":"{{ChatGptUrl}}","redirect_uris":["https://chatgpt.com/cb"],
+             "token_endpoint_auth_method":"none",
+             "token_endpoint_auth_methods_supported":"none"}
+            """);
+
+        Assert.Null(CimdDocument.Validate(new Uri(ChatGptUrl), doc));
+    }
+
+    // Verbatim copies of the live documents, fetched 2026-10-19.
+    public static TheoryData<string, string> RealWorldDocuments => new()
+    {
+        {
+            "https://chatgpt.com/oauth/client.json",
+            """{"client_id":"https://chatgpt.com/oauth/client.json","client_uri":"https://chatgpt.com/","redirect_uris":["https://chatgpt.com/connector_platform_oauth_redirect"],"token_endpoint_auth_method":"private_key_jwt","token_endpoint_auth_methods_supported":["none","private_key_jwt"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"client_name":"ChatGPT","logo_uri":"https://persistent.oaistatic.com/sonic/misc/openai-logo.png","token_endpoint_auth_signing_alg":"RS256","jwks_uri":"https://chatgpt.com/oauth/jwks.json"}"""
+        },
+        {
+            "https://claude.ai/oauth/claude-code-client-metadata",
+            """{"client_id":"https://claude.ai/oauth/claude-code-client-metadata","client_name":"Claude Code","client_uri":"https://claude.ai","redirect_uris":["http://localhost/callback","http://127.0.0.1/callback"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"token_endpoint_auth_method":"none"}"""
+        },
+        {
+            "https://chatgpt.com/oauth/codex/client.json",
+            """{"client_id":"https://chatgpt.com/oauth/codex/client.json","client_uri":"https://chatgpt.com/codex","application_type":"native","redirect_uris":["http://127.0.0.1/callback","http://localhost/callback"],"token_endpoint_auth_method":"none","token_endpoint_auth_methods_supported":["none"],"grant_types":["authorization_code","refresh_token"],"response_types":["code"],"client_name":"Codex","logo_uri":"https://persistent.oaistatic.com/sonic/misc/openai-logo.png"}"""
+        },
+        {
+            "https://vscode.dev/oauth/client-metadata.json",
+            """{"client_name":"Visual Studio Code","logo_uri":"https://code.visualstudio.com/assets/branding/code-stable.png","grant_types":["authorization_code","refresh_token","urn:ietf:params:oauth:grant-type:device_code"],"response_types":["code"],"token_endpoint_auth_method":"none","application_type":"native","client_id":"https://vscode.dev/oauth/client-metadata.json","client_uri":"https://vscode.dev/product","redirect_uris":["http://127.0.0.1:33418/","https://vscode.dev/redirect"]}"""
+        },
+    };
+
+    [Theory]
+    [MemberData(nameof(RealWorldDocuments))]
+    public void Validate_RealWorldDocuments_Accepted(string clientId, string json)
+    {
+        Assert.True(CimdDocument.IsAcceptableClientIdUrl(clientId, out var url));
+
+        var client = CimdDocument.Validate(url, Parse(json));
+
+        Assert.NotNull(client);
+        Assert.Equal(clientId, client.ClientId);
+        Assert.NotEmpty(client.RedirectUris);
     }
 
     [Theory]

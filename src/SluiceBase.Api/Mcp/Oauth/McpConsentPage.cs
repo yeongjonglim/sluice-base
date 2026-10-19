@@ -113,7 +113,7 @@ internal static class McpConsentPage
             <p class="app">{{appName}}</p>
             <h1>Allow this AI tool to access {{appName}}?</h1>
             <p><strong>{{host}}</strong> wants to use {{appName}}{{asUser}}.
-            <span class="dimmed">It calls itself “{{displayName}}”. The name comes from the tool; the domain {{host}} is verified.</span></p>
+            <span class="dimmed">It calls itself “<bdi>{{displayName}}</bdi>”. The name comes from the tool; the domain {{host}} is verified.</span></p>
             <div class="destination">
             <p class="label">Access will be handed to {{destinationKind}}</p>
             <p class="host">{{e.Encode(destination)}}</p>
@@ -139,10 +139,21 @@ internal static class McpConsentPage
     }
 
     // The name comes from an untrusted CIMD document, so a very long one must not push the verified host off the page.
-    private static string DisplayName(string name, HtmlEncoder e) =>
-        name.Length <= MaxDisplayNameLength
-            ? e.Encode(name)
-            : e.Encode(name[..(MaxDisplayNameLength - 1)]) + "…";
+    private static string DisplayName(string name, HtmlEncoder e)
+    {
+        if (name.Length <= MaxDisplayNameLength)
+        {
+            return e.Encode(name);
+        }
+
+        var cut = MaxDisplayNameLength - 1;
+        if (char.IsHighSurrogate(name[cut - 1]))
+        {
+            cut--;
+        }
+
+        return e.Encode(name[..cut]) + "…";
+    }
 
     // White text on light shades (e.g. teal 5 in dark mode) is hard to read on the one button that matters.
     private static string OnPrimary(string hex)
@@ -160,13 +171,14 @@ internal static class McpConsentPage
     private static (string Destination, string Kind) Describe(string redirectUri)
     {
         var uri = new Uri(redirectUri);
+        // IdnHost shows punycode, so a homograph can't render as the host it imitates.
         if (uri.IsLoopback)
         {
-            return ($"{uri.Host}:{uri.Port}", "an app running on this computer");
+            return ($"{uri.IdnHost}:{uri.Port}", "an app running on this computer");
         }
 
         return uri.Scheme == Uri.UriSchemeHttps
-            ? (uri.Host, "this website")
-            : ($"{uri.Scheme}://{uri.Host}", "this desktop app");
+            ? (uri.IdnHost, "this website")
+            : ($"{uri.Scheme}://{uri.IdnHost}", "this desktop app");
     }
 }

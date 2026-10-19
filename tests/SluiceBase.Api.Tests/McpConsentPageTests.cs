@@ -66,6 +66,8 @@ public class McpConsentPageTests
     [InlineData("http://127.0.0.1:33418/", "127.0.0.1:33418", "an app running on this computer")]
     [InlineData("https://claude.ai/api/mcp/auth_callback", "claude.ai", "this website")]
     [InlineData("cursor://anysphere.cursor-mcp/oauth/callback", "cursor://anysphere.cursor-mcp", "this desktop app")]
+    [InlineData("https://xn--chtgpt-4nf.com/cb", "xn--chtgpt-4nf.com", "this website")]
+    [InlineData("https://ch\u0430tgpt.com/cb", "xn--chtgpt-4nf.com", "this website")]
     public async Task Render_ShowsWhereTheCodeWillBeSent(string redirectUri, string destination, string kind)
     {
         var (_, html) = await RenderAsync(redirectUri, "Some Client");
@@ -104,5 +106,23 @@ public class McpConsentPageTests
         Assert.DoesNotContain("TAIL", html);
         Assert.Contains(new string('a', 79) + "…", html);
         Assert.DoesNotContain(new string('a', 80), html);
+    }
+
+    [Fact]
+    public async Task Render_IsolatesClientNameDirection()
+    {
+        var (_, html) = await RenderAsync("https://x.example/cb", "Tool");
+
+        Assert.Contains("<bdi>Tool</bdi>", html);
+    }
+
+    [Fact]
+    public async Task Render_TruncationDoesNotSplitSurrogatePair()
+    {
+        var (_, html) = await RenderAsync("https://x.example/cb", new string('a', 78) + "\U0001F600TAIL");
+
+        Assert.Contains(new string('a', 78) + "…", html);
+        Assert.DoesNotContain("&#xFFFD;", html);
+        Assert.DoesNotContain("\uFFFD", html);
     }
 }

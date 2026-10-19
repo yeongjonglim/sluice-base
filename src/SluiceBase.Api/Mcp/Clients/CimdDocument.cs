@@ -10,7 +10,9 @@ internal static class CimdDocument
         url = null!;
 
         if (!clientId.StartsWith("https://", StringComparison.Ordinal)
-            || clientId.Any(c => c <= 0x20 || c == 0x7F || c == '\\')
+            // Non-ASCII is refused so a homograph host (Cyrillic 'а' in chаtgpt.com) can't pose as
+            // a real one on the consent page; punycode (xn--) ids are still accepted and shown as such.
+            || clientId.Any(c => c <= 0x20 || c >= 0x7F || c == '\\')
             || !Uri.TryCreate(clientId, UriKind.Absolute, out var parsed)
             || parsed.Scheme != Uri.UriSchemeHttps
             || string.IsNullOrEmpty(parsed.Host)
@@ -57,27 +59,24 @@ internal static class CimdDocument
 
         return new ResolvedClient(
             clientIdUrl.OriginalString,
-            string.IsNullOrEmpty(name) ? clientIdUrl.Host : name,
-            clientIdUrl.Host,
+            string.IsNullOrEmpty(name) ? clientIdUrl.IdnHost : name,
+            clientIdUrl.IdnHost,
             redirectUris,
             ClientKind.Cimd);
     }
 
+    // The plural list states every method the client can use, so it wins over the singular
+    // preference: ChatGPT prefers private_key_jwt but also lists "none".
     private static bool AllowsNoneAuth(JsonElement document)
     {
-        if (document.TryGetProperty("token_endpoint_auth_method", out var method)
-            && !(method.ValueKind == JsonValueKind.String && method.GetString() == "none"))
-        {
-            return false;
-        }
-
         if (document.TryGetProperty("token_endpoint_auth_methods_supported", out var supported))
         {
             return supported.ValueKind == JsonValueKind.Array
                 && supported.EnumerateArray().Any(e => e.ValueKind == JsonValueKind.String && e.GetString() == "none");
         }
 
-        return true;
+        return !document.TryGetProperty("token_endpoint_auth_method", out var method)
+            || (method.ValueKind == JsonValueKind.String && method.GetString() == "none");
     }
 
     // Uri normalises dot segments away, so the raw string is the only place they are visible.
