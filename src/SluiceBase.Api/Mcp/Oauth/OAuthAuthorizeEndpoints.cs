@@ -75,15 +75,16 @@ internal static class OAuthAuthorizeEndpoints
                 return ChallengeBackTo(request);
             }
 
+            // Before resolving, so a forged cross-site POST can't make us fetch arbitrary CIMD URLs.
+            if (!await antiforgery.IsRequestValidAsync(ctx))
+            {
+                return Results.BadRequest("invalid_csrf_token");
+            }
+
             var (_, error) = await ResolveAsync(request, resolver, ct);
             if (error is not null)
             {
                 return error;
-            }
-
-            if (!await antiforgery.IsRequestValidAsync(ctx))
-            {
-                return Results.BadRequest("invalid_csrf_token");
             }
 
             if (form["decision"] != "allow")

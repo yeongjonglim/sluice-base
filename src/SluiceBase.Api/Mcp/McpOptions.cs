@@ -70,6 +70,10 @@ internal sealed partial class McpOptions
             {
                 logger?.WarningInvalidConfiguredClient(client.ClientId, "a RedirectUri is not an absolute URI");
             }
+            else if (client.RedirectUris.Any(u => u.Contains('#')))
+            {
+                logger?.WarningInvalidConfiguredClient(client.ClientId, "a RedirectUri contains a fragment");
+            }
             else if (!seen.Add(client.ClientId))
             {
                 logger?.WarningInvalidConfiguredClient(client.ClientId, "duplicate ClientId");
