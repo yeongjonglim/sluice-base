@@ -192,7 +192,7 @@ Set `Mcp__Enabled=false` to disable the MCP server and its OAuth endpoints entir
 
 There is no client self-registration. An MCP client identifies itself in one of two ways:
 
-- **CIMD (Client ID Metadata Documents).** The `client_id` is an `https://` URL pointing at the tool's own metadata document. SluiceBase fetches it, validates it, and caches it per its `Cache-Control` (5 minutes to 24 hours). This needs direct outbound HTTPS from SluiceBase (no proxy support); private, loopback and link-local targets are refused. In proxy-only networks only configured clients work.
+- **CIMD (Client ID Metadata Documents).** The `client_id` is an `https://` URL pointing at the tool's own metadata document. SluiceBase fetches it, validates it, and caches it per its `Cache-Control` (5 minutes to 24 hours). This needs direct outbound HTTPS from SluiceBase (no proxy support); private, loopback and link-local targets are refused. In proxy-only networks only configured clients work. NAT64-only egress (IPv6 hosts reaching IPv4 through `64:ff9b::/96`) isn't supported either: those addresses are refused as non-public.
 - **Configured clients.** For tools without CIMD, an operator pre-registers a public client (PKCE, no secret) with `Mcp__Clients__N__ClientId`, `__Name` and `__RedirectUris__M`. Its redirect URIs are trusted as configured.
 
 **Consent.** After signing in, the user sees a consent screen, with the verified domain of the tool, only when a CIMD client's callback is not loopback (for example claude.ai or ChatGPT on the web). Loopback callbacks (Claude Code, Codex, VS Code, MCP Inspector) and configured clients go straight through. If a user didn't start the connection themselves, they choose **Deny**.
@@ -205,7 +205,7 @@ There is no client self-registration. An MCP client identifies itself in one of 
 | ChatGPT | CIMD |
 | Codex | CIMD |
 | VS Code, GitHub Copilot in VS Code | CIMD (VS Code 1.106+; Copilot inferred from VS Code) |
-| MCP Inspector | CIMD, enable **Use CIMD** under Client Settings → OAuth |
+| MCP Inspector | CIMD, using a metadata URL entered under **Client Settings → Client ID Metadata Document** |
 | Cursor | Not supported out of the box (no CIMD yet); add a configured client |
 
 **Cursor.** Add a configured client with redirect URI `cursor://anysphere.cursor-mcp/oauth/callback`, then have users set that client id in Cursor's `mcp.json`.
@@ -251,7 +251,9 @@ The MCP endpoint is served through the gateway at **`https://localhost:5443/mcp`
    NODE_TLS_REJECT_UNAUTHORIZED=0 npx @modelcontextprotocol/inspector
    ```
 
-   Set Transport to **Streamable HTTP**, URL to `https://localhost:5443/mcp`, enable **Use CIMD** under Client Settings → OAuth, and connect. Alternatively, use the dev configured client: set the OAuth client ID to `sluicebase-dev` and pin the Inspector's callback to `http://127.0.0.1:43123/callback`. (`NODE_TLS_REJECT_UNAUTHORIZED=0` is only needed to accept the local dev certificate.)
+   Set Transport to **Streamable HTTP** and URL to `https://localhost:5443/mcp`. The web Inspector has no metadata document of its own, so under **Client Settings → Client ID Metadata Document** paste a public one that lists the Inspector's callback (`http://localhost:6274/oauth/callback`), such as MCPJam's `https://www.mcpjam.com/.well-known/oauth/client-metadata.json`, enable **Use Client ID Metadata Document**, and connect. The web callback follows the address bar, so open the Inspector at `http://localhost:6274`, not `127.0.0.1`. (`NODE_TLS_REJECT_UNAUTHORIZED=0` is only needed to accept the local dev certificate.)
+
+   To use the dev configured client instead, run the Inspector's CLI or TUI, which can pin the callback: `--client-id sluicebase-dev --callback-url http://127.0.0.1:43123/callback`.
 
    **Claude Code:**
 
