@@ -72,13 +72,7 @@ if (cimdAllowLoopback && !builder.Environment.IsDevelopment())
 var mcpEnabled = builder.Configuration.GetValue($"{McpOptions.SectionName}:Enabled", true);
 if (mcpEnabled)
 {
-    // The service-default resilience handler would retry and stretch the 5 s budget, multiplying
-    // outbound fetches an anonymous caller can trigger.
-#pragma warning disable EXTEXP0001
-    builder.Services.AddHttpClient(CimdFetcher.HttpClientName, c => c.Timeout = CimdFetcher.FetchTimeout)
-        .ConfigurePrimaryHttpMessageHandler(() => CimdFetcher.CreateHandler(cimdAllowLoopback))
-        .RemoveAllResilienceHandlers();
-#pragma warning restore EXTEXP0001
+    builder.Services.AddCimdHttpClient(cimdAllowLoopback);
     builder.Services.AddSingleton<ICimdFetcher, CimdFetcher>();
     builder.Services.AddSingleton<ICimdClientSource, CimdClientSource>();
     builder.Services.AddSingleton<IMcpClientResolver, McpClientResolver>();
@@ -129,6 +123,9 @@ if (mcpEnabled)
     {
         mcpLogger.WarningPublicBaseUrlNotSet();
     }
+
+    // Logs any misconfigured Mcp:Clients entry at boot instead of on the first sign-in.
+    mcpOptions.GetValidatedClients(mcpLogger);
 }
 
 app.UseForwardedHeaders(new ForwardedHeadersOptions

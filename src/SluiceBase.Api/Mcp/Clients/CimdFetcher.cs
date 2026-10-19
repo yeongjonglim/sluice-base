@@ -105,7 +105,8 @@ internal sealed class CimdFetcher : ICimdFetcher
 
         using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
 
-        if ((int)response.StatusCode >= 500)
+        if ((int)response.StatusCode >= 500
+            || response.StatusCode is HttpStatusCode.RequestTimeout or HttpStatusCode.TooManyRequests)
         {
             return FetchResult.Transient.Instance;
         }
@@ -195,19 +196,43 @@ internal sealed class CimdFetcher : ICimdFetcher
     }
 
     // Resolving and vetting at connect time (rather than before the request) defeats DNS rebinding.
+    internal static ValueTask<Stream> ConnectAsync(
+        DnsEndPoint endpoint,
+        bool allowLoopback,
+        Func<string, CancellationToken, Task<IPAddress[]>> resolve,
+        CancellationToken ct) =>
+        ConnectAsync(endpoint, allowLoopback, resolve, ConnectSocketAsync, ct);
+
     internal static async ValueTask<Stream> ConnectAsync(
         DnsEndPoint endpoint,
         bool allowLoopback,
         Func<string, CancellationToken, Task<IPAddress[]>> resolve,
+        Func<IPEndPoint, CancellationToken, ValueTask<Stream>> connect,
         CancellationToken ct)
     {
         var addresses = await resolve(endpoint.Host, ct);
-        var target = SelectVettedAddress(endpoint.Host, addresses, allowLoopback);
+        var targets = VetAddresses(endpoint.Host, addresses, allowLoopback);
 
+        // Every address is already vetted, so falling back (e.g. from an unreachable IPv6 address
+        // to IPv4) can't widen what we reach; the caller's deadline still bounds all attempts.
+        for (var i = 0; ; i++)
+        {
+            try
+            {
+                return await connect(new IPEndPoint(targets[i], endpoint.Port), ct);
+            }
+            catch when (i < targets.Count - 1 && !ct.IsCancellationRequested)
+            {
+            }
+        }
+    }
+
+    private static async ValueTask<Stream> ConnectSocketAsync(IPEndPoint target, CancellationToken ct)
+    {
         var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
         try
         {
-            await socket.ConnectAsync(new IPEndPoint(target, endpoint.Port), ct);
+            await socket.ConnectAsync(target, ct);
             return new NetworkStream(socket, ownsSocket: true);
         }
         catch
@@ -217,7 +242,7 @@ internal sealed class CimdFetcher : ICimdFetcher
         }
     }
 
-    internal static IPAddress SelectVettedAddress(string host, IReadOnlyList<IPAddress> addresses, bool allowLoopback)
+    internal static IReadOnlyList<IPAddress> VetAddresses(string host, IReadOnlyList<IPAddress> addresses, bool allowLoopback)
     {
         if (addresses.Count == 0)
         {
@@ -239,7 +264,7 @@ internal sealed class CimdFetcher : ICimdFetcher
             }
         }
 
-        return addresses[0];
+        return addresses;
     }
 
     internal static bool IsCertificateAcceptable(string targetHost, SslPolicyErrors errors, bool allowLoopback)
