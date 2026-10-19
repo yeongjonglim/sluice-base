@@ -52,6 +52,8 @@ public class McpRedirectUriPolicyTests
     [InlineData("vbscript:x")]
     [InlineData("")]
     [InlineData("not a uri")]
+    [InlineData("https://ch\u0430tgpt.com/cb")]
+    [InlineData("https://chatgpt.com/caf\u00e9")]
     public void IsAllowedForCimd_Rejects(string uri)
     {
         Assert.False(McpRedirectUriPolicy.IsAllowedForCimd(uri));
