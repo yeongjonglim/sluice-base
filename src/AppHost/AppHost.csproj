@@ -13,6 +13,7 @@
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.Keycloak.Extensions" Version="13.6.0-preview.1.261001-0243" />
     <!-- Overrides StreamJsonRpc's transitive MessagePack 2.5.302 (GHSA-qhrr-8q5h-9q3h); remove once Aspire ships a patched version -->
     <PackageReference Include="MessagePack" Version="2.5.307" />
+    <PackageReference Include="ModelContextProtocol" Version="2.3.0" />
   </ItemGroup>
 
   <ItemGroup>
