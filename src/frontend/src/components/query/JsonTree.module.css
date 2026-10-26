@@ -1,0 +1,61 @@
+/* A tree line is a fixed chevron gutter plus the line's text. The gutter is
+   present on every line (even closing brackets and scalars) so content stays
+   aligned with the nodes that have a toggle. */
+.tree {
+  font-family: var(--mantine-font-family-monospace);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.line {
+  display: flex;
+  align-items: flex-start;
+}
+
+.gutter {
+  flex: 0 0 16px;
+  display: flex;
+  align-items: center;
+  height: 1.6em;
+}
+
+.content {
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--mantine-color-dimmed);
+  cursor: pointer;
+  font: inherit;
+}
+
+.chevron:hover {
+  color: var(--mantine-color-text);
+  background: var(--mantine-color-default-hover);
+}
+
+.chevron:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+
+.chevronIcon {
+  transition: transform 120ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevronIcon {
+    transition: none;
+  }
+}

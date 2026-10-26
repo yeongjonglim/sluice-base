@@ -1,0 +1,8 @@
+/* Cells are read-only but interactive: a click opens the cell's full value.
+   They are programmatically focusable so focus returns to the cell when the
+   value panel closes — without this, the browser paints its default blue ring
+   inside a teal interface. */
+.cell:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: -2px;
+}
