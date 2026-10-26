@@ -1,8 +1,10 @@
 import { useMemo, useRef, useState } from "react";
 import { Button, CloseButton, Flex, Group, Highlight, Table, Text, TextInput } from "@mantine/core";
-import { IconDownload, IconSearch } from "@tabler/icons-react";
+import { IconDownload, IconSearch, IconTextWrap } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import { CellValuePopover } from "@/components/query/CellValuePopover";
+import classes from "@/components/query/ResultTable.module.css";
 import { useColumnWidths } from "@/components/query/useColumnWidths";
 import { exportToCsv } from "@/utils/csv.ts";
 import { filterRows } from "@/utils/filterRows";
@@ -21,6 +23,14 @@ const ELLIPSIS: CSSProperties = {
   whiteSpace: "nowrap",
   overflow: "hidden",
   textOverflow: "ellipsis",
+};
+
+// Wrapping is opt-in: it is the fastest way to read several long values at once,
+// at the cost of the grid's uniform row rhythm. `overflow-wrap: anywhere` covers
+// the unbroken strings (URLs, JSON) that would otherwise widen the cell.
+const WRAP: CSSProperties = {
+  whiteSpace: "pre-wrap",
+  overflowWrap: "anywhere",
 };
 
 function ColumnResizeHandle({
@@ -71,6 +81,26 @@ export function ResultTable({
   const filtered = useMemo(() => filterRows(rows, query), [rows, query]);
   const { widths, totalWidth, onResizeStart, onAutoFit } = useColumnWidths(columns, rows);
 
+  // Which cell's full value is open. Kept as indices, so a fresh result (same
+  // columns, different rows) would leave the popover pointing at the wrong row —
+  // close it when the result data changes, mirroring the column-widths reset.
+  const [inspected, setInspected] = useState<{ row: number; col: number } | null>(null);
+  const [wrap, setWrap] = useState(false);
+  const rowsRef = useRef(rows);
+  if (rowsRef.current !== rows) {
+    rowsRef.current = rows;
+    if (inspected) setInspected(null);
+  }
+
+  // The cell that opened the popover, so focus can go back to it on close.
+  const cellRef = useRef<HTMLTableCellElement | null>(null);
+  function closeInspector() {
+    setInspected(null);
+    // preventScroll: the cell may have scrolled just out of view; returning focus
+    // must not yank the grid back to it.
+    cellRef.current?.focus({ preventScroll: true });
+  }
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
     count: filtered.length,
@@ -78,6 +108,7 @@ export function ResultTable({
     estimateSize: () => ROW_HEIGHT,
     overscan: 12,
   });
+  const cellStyle = wrap ? WRAP : ELLIPSIS;
 
   const virtualItems = virtualizer.getVirtualItems();
   const paddingTop = virtualItems.length > 0 ? virtualItems[0].start : 0;
@@ -121,6 +152,15 @@ export function ResultTable({
         />
         <Button
           size="xs"
+          variant={wrap ? "light" : "subtle"}
+          leftSection={<IconTextWrap size={12} />}
+          aria-pressed={wrap}
+          onClick={() => setWrap((value) => !value)}
+        >
+          Wrap
+        </Button>
+        <Button
+          size="xs"
           variant="subtle"
           leftSection={<IconDownload size={12} />}
           onClick={() =>
@@ -131,7 +171,16 @@ export function ResultTable({
         </Button>
       </Group>
 
-      <div ref={scrollRef} style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+      <div
+        ref={scrollRef}
+        style={{ flex: 1, minHeight: 0, overflow: "auto" }}
+        onScroll={() => {
+          // The popover is anchored to a cell that virtualization can recycle;
+          // scrolling away from it would leave the panel floating over the wrong
+          // row, so dismiss instead of tracking.
+          if (inspected) closeInspector();
+        }}
+      >
         <Table
           stickyHeader
           withTableBorder
@@ -177,9 +226,9 @@ export function ResultTable({
                   ref={virtualizer.measureElement}
                   bg={vi.index % 2 === 1 ? "var(--mantine-color-default-hover)" : undefined}
                 >
-                  {row.map((cell, j) => (
-                    <Table.Td key={j} style={ELLIPSIS}>
-                      {cell === null ? (
+                  {row.map((cell, j) => {
+                    const content =
+                      cell === null ? (
                         <Text size="xs" c="dimmed" fs="italic">
                           NULL
                         </Text>
@@ -189,9 +238,45 @@ export function ResultTable({
                         </Highlight>
                       ) : (
                         cell
-                      )}
-                    </Table.Td>
-                  ))}
+                      );
+                    const open = inspected !== null && inspected.row === vi.index && inspected.col === j;
+                    return (
+                      <Table.Td
+                        key={j}
+                        className={classes.cell}
+                        style={{ ...cellStyle, cursor: cell === null ? undefined : "cell" }}
+                        // Always programmatically focusable so focus can return to the
+                        // cell after its panel closes (tabIndex -1 keeps cells out of
+                        // the tab order; only the panel and toolbar are tab stops).
+                        tabIndex={-1}
+                        onClick={
+                          cell === null
+                            ? undefined
+                            : (event) => {
+                                // A drag-select inside a cell ends in a click too;
+                                // don't open the value over the text the user just
+                                // selected.
+                                if (window.getSelection()?.toString()) return;
+                                cellRef.current = event.currentTarget;
+                                setInspected({ row: vi.index, col: j });
+                              }
+                        }
+                      >
+                        {open && cell !== null ? (
+                          <CellValuePopover
+                            column={columns[j]}
+                            rowNumber={vi.index + 1}
+                            value={cell}
+                            onClose={closeInspector}
+                          >
+                            {content}
+                          </CellValuePopover>
+                        ) : (
+                          content
+                        )}
+                      </Table.Td>
+                    );
+                  })}
                 </Table.Tr>
               );
             })}

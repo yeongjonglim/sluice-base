@@ -1,0 +1,31 @@
+/* The value box scrolls whenever a value is taller than the panel. macOS hides
+   overlay scrollbars until the user scrolls, which makes a clipped JSON block
+   read as truncated — the exact problem this panel exists to solve. A thin,
+   themed scrollbar keeps the "there is more" cue visible. */
+.scroll::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scroll::-webkit-scrollbar-thumb {
+  background-color: var(--mantine-color-gray-4);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 6px;
+}
+
+.scroll:hover::-webkit-scrollbar-thumb {
+  background-color: var(--mantine-color-gray-5);
+}
+
+/* The value box is a scroll region: focusable so it can be scrolled from the
+   keyboard (Tab enters it, arrows/PageDown move through the value). */
+.scroll:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: -2px;
+  border-radius: var(--mantine-radius-xs);
+}
