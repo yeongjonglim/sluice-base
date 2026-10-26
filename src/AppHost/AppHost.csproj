@@ -1,18 +1,24 @@
-<Project Sdk="Aspire.AppHost.Sdk/13.6.1">
+<Project Sdk="Aspire.AppHost.Sdk/13.6.4">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <UserSecretsId>18047986-20a2-49d9-b2c2-aa10fc1f4fe1</UserSecretsId>
+    <!-- Deliberately stay on the NuGet-delivered DCP and dashboard, which Aspire is deprecating in favour of the
+         CLI bundle. The bundle makes every AppHost build resolve a matching Aspire CLI (PATH or dnx), which
+         dotnet test and CI don't install. Set explicitly because the SDK default already flipped to true once
+         (microsoft/aspire#18188, reverted by #18850). Revisit when microsoft/aspire#19937 (skip bundle
+         resolution in CI) ships or the NuGet path gets a removal date. -->
+    <AspireUseCliBundle>false</AspireUseCliBundle>
+    <!-- ASPIRE010 only reminds us of the choice above, so it carries no action. -->
+    <NoWarn>$(NoWarn);ASPIRE010</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.JavaScript" Version="13.6.1" />
-    <PackageReference Include="Aspire.Hosting.Keycloak" Version="13.6.1-preview.1.26506.6" />
-    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.6.1" />
-    <PackageReference Include="Aspire.Hosting.Yarp" Version="13.6.1" />
-    <PackageReference Include="CommunityToolkit.Aspire.Hosting.Keycloak.Extensions" Version="13.6.0-preview.1.261001-0243" />
-    <!-- Overrides StreamJsonRpc's transitive MessagePack 2.5.302 (GHSA-qhrr-8q5h-9q3h); remove once Aspire ships a patched version -->
-    <PackageReference Include="MessagePack" Version="2.5.307" />
+    <PackageReference Include="Aspire.Hosting.JavaScript" Version="13.6.4" />
+    <PackageReference Include="Aspire.Hosting.Keycloak" Version="13.6.4-preview.1.26523.11" />
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.6.4" />
+    <PackageReference Include="Aspire.Hosting.Yarp" Version="13.6.4" />
+    <PackageReference Include="CommunityToolkit.Aspire.Hosting.Keycloak.Extensions" Version="13.6.1-beta.938" />
   </ItemGroup>
 
   <ItemGroup>
