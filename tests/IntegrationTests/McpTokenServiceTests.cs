@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Mcp;
-using SluiceBase.Core.Mcp;
 using SluiceBase.Core.Users;
 using Testcontainers.PostgreSql;
 
@@ -72,10 +71,6 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         const string redirectUri = "https://example.com/callback";
         const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var codeChallenge = TokenHasher.ComputePkceS256Challenge(codeVerifier);
-
-        // Register a placeholder client so ClientId can be matched
-        db.McpOAuthClients.Add(McpOAuthClient.Register("Test Client", [redirectUri], DateTimeOffset.UtcNow));
-        await db.SaveChangesAsync(ct);
 
         var code = await svc.IssueAuthCodeAsync(ClientId, userId, redirectUri, codeChallenge, ct);
         var tokens = await svc.RedeemAuthCodeAsync(ClientId, code, redirectUri, codeVerifier, ct);
@@ -233,6 +228,58 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         var futureService = CreateService(db, new FrozenTimeProvider(DateTimeOffset.UtcNow.AddHours(2)));
         var validated = await futureService.ValidateAccessTokenAsync(tokens.AccessToken, ct);
         Assert.Null(validated);
+    }
+
+    [Fact]
+    public async Task HasLiveGrant_AuthCode_TrueOnlyWhileUnconsumedForSameClient()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var svc = CreateService(db);
+
+        var userId = await SeedUserAsync(db, ct);
+        const string redirectUri = "https://example.com/callback";
+        const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        var code = await svc.IssueAuthCodeAsync(
+            ClientId, userId, redirectUri, TokenHasher.ComputePkceS256Challenge(codeVerifier), ct);
+
+        Assert.True(await svc.HasLiveGrantAsync("authorization_code", ClientId, code, ct));
+        Assert.False(await svc.HasLiveGrantAsync("authorization_code", "other-client", code, ct));
+        Assert.False(await svc.HasLiveGrantAsync("refresh_token", ClientId, code, ct));
+        Assert.False(await svc.HasLiveGrantAsync("authorization_code", ClientId, "bogus", ct));
+
+        var expired = CreateService(db, new FrozenTimeProvider(DateTimeOffset.UtcNow.AddHours(1)));
+        Assert.False(await expired.HasLiveGrantAsync("authorization_code", ClientId, code, ct));
+
+        Assert.NotNull(await svc.RedeemAuthCodeAsync(ClientId, code, redirectUri, codeVerifier, ct));
+        Assert.False(await svc.HasLiveGrantAsync("authorization_code", ClientId, code, ct));
+    }
+
+    [Fact]
+    public async Task HasLiveGrant_RefreshToken_TrueOnlyWhileUnrevokedAndDoesNotTrack()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var svc = CreateService(db);
+
+        var userId = await SeedUserAsync(db, ct);
+        const string redirectUri = "https://example.com/callback";
+        const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        var code = await svc.IssueAuthCodeAsync(
+            ClientId, userId, redirectUri, TokenHasher.ComputePkceS256Challenge(codeVerifier), ct);
+        var tokens = await svc.RedeemAuthCodeAsync(ClientId, code, redirectUri, codeVerifier, ct);
+        Assert.NotNull(tokens);
+        db.ChangeTracker.Clear();
+
+        Assert.True(await svc.HasLiveGrantAsync("refresh_token", ClientId, tokens.RefreshToken, ct));
+        Assert.False(await svc.HasLiveGrantAsync("refresh_token", "other-client", tokens.RefreshToken, ct));
+        Assert.False(await svc.HasLiveGrantAsync("refresh_token", ClientId, tokens.AccessToken, ct));
+        Assert.Empty(db.ChangeTracker.Entries());
+
+        Assert.NotNull(await svc.RefreshAsync(ClientId, tokens.RefreshToken, ct));
+        Assert.False(await svc.HasLiveGrantAsync("refresh_token", ClientId, tokens.RefreshToken, ct));
     }
 
     /// <summary>Minimal <see cref="TimeProvider"/> that always returns the same instant.</summary>
