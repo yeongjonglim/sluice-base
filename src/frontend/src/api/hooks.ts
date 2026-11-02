@@ -985,7 +985,11 @@ export interface QueryHistoryFilters {
   sensitiveColumn?: Array<string>;
 }
 
-export function useQueryHistory(filters: QueryHistoryFilters) {
+export function useQueryHistory(
+  filters: QueryHistoryFilters,
+  options: { live?: boolean } = {},
+) {
+  const live = options.live ?? true;
   return useQuery({
     queryKey: ["query", "history", filters] as const,
     queryFn: () => {
@@ -1005,7 +1009,9 @@ export function useQueryHistory(filters: QueryHistoryFilters) {
         qs ? `/api/query/history?${qs}` : "/api/query/history",
       );
     },
-    refetchInterval: 10_000,
+    // The history page polls because it is a live audit surface; the home page
+    // reads the same data once and does not need the interval.
+    refetchInterval: live ? 10_000 : false,
   });
 }
 
