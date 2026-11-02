@@ -18,7 +18,7 @@ internal static class OAuthAuthorizeEndpoints
             IMcpClientResolver resolver,
             IAntiforgery antiforgery,
             IMcpTokenService tokens,
-            IOptions<McpOptions> mcpOptions,
+            IMcpIssuer issuer,
             IOptions<BrandingOptions> branding,
             CancellationToken ct) =>
         {
@@ -52,7 +52,7 @@ internal static class OAuthAuthorizeEndpoints
             }
 
             var code = await tokens.IssueAuthCodeAsync(request.ClientId, userId, request.RedirectUri, request.CodeChallenge, ct);
-            return RedirectToClient(ctx, mcpOptions.Value, request, ("code", code), ("state", request.State));
+            return RedirectToClient(issuer, request, ("code", code), ("state", request.State));
         }).AllowAnonymous();
 
         app.MapPost("/mcp/oauth/authorize", async (
@@ -60,7 +60,7 @@ internal static class OAuthAuthorizeEndpoints
             IMcpClientResolver resolver,
             IAntiforgery antiforgery,
             IMcpTokenService tokens,
-            IOptions<McpOptions> mcpOptions,
+            IMcpIssuer issuer,
             CancellationToken ct) =>
         {
             var form = await ctx.Request.ReadFormAsync(ct);
@@ -89,11 +89,11 @@ internal static class OAuthAuthorizeEndpoints
 
             if (form["decision"] != "allow")
             {
-                return RedirectToClient(ctx, mcpOptions.Value, request, ("error", "access_denied"), ("state", request.State));
+                return RedirectToClient(issuer, request, ("error", "access_denied"), ("state", request.State));
             }
 
             var code = await tokens.IssueAuthCodeAsync(request.ClientId, userId, request.RedirectUri, request.CodeChallenge, ct);
-            return RedirectToClient(ctx, mcpOptions.Value, request, ("code", code), ("state", request.State));
+            return RedirectToClient(issuer, request, ("code", code), ("state", request.State));
         }).AllowAnonymous();
     }
 
@@ -128,11 +128,11 @@ internal static class OAuthAuthorizeEndpoints
             [OpenIdConnectDefaults.AuthenticationScheme]);
 
     private static IResult RedirectToClient(
-        HttpContext ctx, McpOptions options, AuthorizeRequest request, params (string Key, string Value)[] parameters)
+        IMcpIssuer issuer, AuthorizeRequest request, params (string Key, string Value)[] parameters)
     {
         var sep = request.RedirectUri.Contains('?') ? '&' : '?';
         var query = string.Join('&', parameters
-            .Append((Key: "iss", Value: McpIssuer.BaseUrl(ctx, options)))
+            .Append((Key: "iss", Value: issuer.BaseUrl()))
             .Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value)}"));
         return Results.Redirect($"{request.RedirectUri}{sep}{query}");
     }

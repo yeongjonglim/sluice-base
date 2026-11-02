@@ -60,6 +60,8 @@ builder.Services.AddScoped<SensitiveColumnGuard>();
 
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
 builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IMcpIssuer, McpIssuer>();
 
 var cimdAllowLoopback = builder.Configuration.GetValue<bool>(
     $"{McpOptions.SectionName}:{nameof(McpOptions.Cimd)}:{nameof(McpCimdOptions.AllowLoopbackForTesting)}");

@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Endpoints;
@@ -36,18 +35,15 @@ internal sealed class UpdateTools
             "the key and changed columns, and leave out sensitive columns (preview blocks them just like reads do).")] string sql,
         [Description("Why this change is needed — shown to the human reviewer. If your SQL includes a " +
             "before/after comparison, briefly note what the reviewer should look for in its preview result sets.")] string reason,
-        IUpdateRequestService updates, ICurrentUserAccessor currentUser, IHttpContextAccessor http,
-        IOptions<McpOptions> mcpOptions, CancellationToken ct)
+        IUpdateRequestService updates, ICurrentUserAccessor currentUser, IMcpIssuer issuer, CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct) ?? throw new InvalidOperationException("No authenticated user.");
         if (!Guid.TryParse(databaseId, out var g)) { throw new ArgumentException("databaseId must be a GUID."); }
-        var baseUrl = McpIssuer.BaseUrl(
-            http.HttpContext ?? throw new InvalidOperationException("No HTTP context."), mcpOptions.Value);
 
         var result = await updates.SubmitAsync(user, DatabaseId.From(g), sql, reason, null, ct);
         return result.Outcome switch
         {
-            SubmitOutcome.Ok => BuildSubmitResponse(result.Detail!, baseUrl),
+            SubmitOutcome.Ok => BuildSubmitResponse(result.Detail!, issuer.BaseUrl()),
             SubmitOutcome.NotFound => throw new InvalidOperationException("Database not found."),
             SubmitOutcome.Forbidden => throw new InvalidOperationException(
                 "You do not have permission to submit update requests for this database."),

@@ -85,7 +85,7 @@ The container listens on HTTP only, so deploy it behind a reverse proxy (nginx, 
    proxy_set_header X-Forwarded-Proto $scheme;
    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
    ```
-3. **`Mcp__PublicBaseUrl=https://your-domain`** pins the MCP OAuth issuer so it doesn't depend on request headers at all (see [Public URL](#sign-in-and-consent)).
+3. **`Mcp__PublicBaseUrl=https://your-domain`** pins the MCP OAuth issuer and the links MCP tools return, so they don't depend on request headers at all (see [Public URL](#sign-in-and-consent)).
 
 ## Environment variables
 
@@ -108,7 +108,7 @@ The container listens on HTTP only, so deploy it behind a reverse proxy (nginx, 
 | `Mcp__AccessTokenMinutes` | | `60` | Lifetime of an MCP access token in minutes |
 | `Mcp__RefreshTokenDays` | | `30` | Lifetime of an MCP refresh token in days |
 | `Mcp__AuthCodeSeconds` | | `120` | Lifetime of an MCP OAuth authorization code in seconds |
-| `Mcp__PublicBaseUrl` | | _(derived from request)_ | Public origin of this server, e.g. `https://sluice.example.com` (scheme, host, optional port; no path). Strongly recommended behind a reverse proxy; becomes the OAuth issuer and the `iss` value. If unset it is built from the request's scheme and `Host` header (correct only when the [proxy setup](#behind-a-reverse-proxy) is right) and a warning is logged at startup |
+| `Mcp__PublicBaseUrl` | | _(derived from request)_ | Public origin of this server, e.g. `https://sluice.example.com` (scheme, host, optional port; no path; trailing slash removed, host lowercased). Strongly recommended behind a reverse proxy; becomes the OAuth issuer, the `iss` value and the base of links MCP tools return. If unset it is built from the request's scheme and `Host` header (correct only when the [proxy setup](#behind-a-reverse-proxy) is right) and a warning is logged at startup |
 | `Mcp__Clients__N__ClientId`, `__Name`, `__RedirectUris__M` | | _(empty)_ | Pre-registered public MCP clients (PKCE, no secret) for tools without CIMD support. Their redirect URIs are trusted as configured and skip the consent screen (see [Sign-in and consent](#sign-in-and-consent)) |
 
 ### Branding colours

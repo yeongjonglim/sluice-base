@@ -11,7 +11,7 @@ internal sealed class McpBearerAuthenticationHandler(
     ILoggerFactory logger,
     UrlEncoder encoder,
     IMcpTokenService tokens,
-    IOptions<McpOptions> mcpOptions)
+    IMcpIssuer issuer)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "McpBearer";
@@ -39,7 +39,7 @@ internal sealed class McpBearerAuthenticationHandler(
 
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
-        var baseUrl = McpIssuer.BaseUrl(Context, mcpOptions.Value);
+        var baseUrl = issuer.BaseUrl();
         Response.StatusCode = 401;
         Response.Headers.WWWAuthenticate =
             $"Bearer resource_metadata=\"{baseUrl}/.well-known/oauth-protected-resource\"";
