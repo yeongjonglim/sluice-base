@@ -3,6 +3,7 @@ using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 using SluiceBase.Api.Auth;
+using SluiceBase.Api.Services;
 
 namespace SluiceBase.Api.Mcp;
 
@@ -10,7 +11,8 @@ internal sealed class McpBearerAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
     UrlEncoder encoder,
-    IMcpTokenService tokens)
+    IMcpTokenService tokens,
+    IBaseUrlResolver baseUrlResolver)
     : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "McpBearer";
@@ -38,7 +40,7 @@ internal sealed class McpBearerAuthenticationHandler(
 
     protected override Task HandleChallengeAsync(AuthenticationProperties properties)
     {
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        var baseUrl = baseUrlResolver.Resolve();
         Response.StatusCode = 401;
         Response.Headers.WWWAuthenticate =
             $"Bearer resource_metadata=\"{baseUrl}/.well-known/oauth-protected-resource\"";

@@ -74,7 +74,18 @@ docker run -p 8080:8080 \
 
 The app is available at `http://localhost:8080`.
 
-> **HTTPS:** deploy behind a reverse proxy (nginx, Caddy, Traefik) that terminates TLS. The container listens on HTTP only.
+### Behind a reverse proxy
+
+The container listens on HTTP only, so deploy it behind a reverse proxy (nginx, Caddy, Traefik, a Kubernetes ingress) that terminates TLS. Three things make the app see its public `https://` address:
+
+1. **`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`** on the container. ASP.NET Core then honours `X-Forwarded-Proto` and `X-Forwarded-For` from any proxy address. Without it every request looks like plain `http`, so the OIDC redirect URI becomes `http://…/signin-oidc` and sign-in fails. Since any sender is trusted, only the proxy should be able to reach port 8080.
+2. **The proxy forwards the original `Host` header and sets `X-Forwarded-Proto`.** `X-Forwarded-Host` is not honoured, so the public hostname must arrive in `Host`. ingress-nginx does both by default. Plain nginx needs:
+   ```nginx
+   proxy_set_header Host $host;
+   proxy_set_header X-Forwarded-Proto $scheme;
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   ```
+3. **`PublicBaseUrl=https://your-domain`** pins the app's absolute URLs (the MCP OAuth issuer, links MCP tools return), so they don't depend on request headers at all. Without it each request's own scheme and `Host` are used, so a user reaching the app at an internal hostname gets URLs with that hostname.
 
 ## Environment variables
 
@@ -84,6 +95,8 @@ The app is available at `http://localhost:8080`.
 | `Oidc__Authority` | ✓ | — | OIDC authority URL (e.g. `https://keycloak/realms/myrealm`) |
 | `Oidc__ClientId` | ✓ | — | OIDC client ID |
 | `Oidc__ClientSecret` | ✓ | — | OIDC client secret |
+| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | ✓ behind a proxy | `false` | Trust `X-Forwarded-Proto`/`X-Forwarded-For` from the TLS-terminating proxy — see [Behind a reverse proxy](#behind-a-reverse-proxy) |
+| `PublicBaseUrl` | | _(derived from request)_ | Public origin of this server, e.g. `https://sluice.example.com` (scheme, host, optional port; no path; trailing slash removed, host lowercased). Strongly recommended behind a reverse proxy; used for absolute URLs such as the MCP OAuth issuer and links MCP tools return. If unset it is built from the request's scheme and `Host` header (correct only when the [proxy setup](#behind-a-reverse-proxy) is right) and a warning is logged at startup |
 | `Migrations__AutoApply` | | `true` | Apply pending DB migrations on startup |
 | `Permissions__Bootstrap__Admins__0` | | — | Email of the first admin (granted full permissions on first login) |
 | `Branding__AppName` | | `SluiceBase` | Application name shown in the UI |

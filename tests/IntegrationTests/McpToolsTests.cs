@@ -476,10 +476,8 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
 
         var submitText = ContentText(submitResult);
         Assert.Contains("Pending", submitText);
-        // A server-relative path to the detail page is returned for the client to resolve against
-        // its own MCP base URL — never an absolute link built from the (proxy-unreliable) server host.
-        Assert.Contains("/update/", submitText);
-        Assert.DoesNotContain("http", submitText, StringComparison.OrdinalIgnoreCase);
+        // The AppHost sets PublicBaseUrl, so the link uses it rather than the API's internal host.
+        Assert.Contains("https://localhost:5443/update/", submitText);
 
         var idMatch = System.Text.RegularExpressions.Regex.Match(
             submitText, "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
