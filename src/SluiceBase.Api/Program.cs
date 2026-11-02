@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
@@ -58,6 +59,8 @@ builder.Services.AddScoped<SensitiveColumnGuard>();
 
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
 builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IMcpIssuer, McpIssuer>();
 
 var mcpEnabled = builder.Configuration.GetValue($"{McpOptions.SectionName}:Enabled", true);
 if (mcpEnabled)
@@ -73,9 +76,8 @@ if (mcpEnabled)
                 "resubmitting); it cannot be bypassed from here. Write access is request-only: use " +
                 "submit_update_request to propose changes for human review. You cannot approve or " +
                 "execute update requests. Update SQL runs inside a system-managed transaction — never " +
-                "include BEGIN/COMMIT/ROLLBACK. Tool results return server-relative paths (e.g. " +
-                "/update/{id}); prefix them with this MCP server's base URL — the origin you connect " +
-                "to, without the /mcp suffix — to present clickable links to the user.";
+                "include BEGIN/COMMIT/ROLLBACK. submit_update_request returns a 'url' to the request's " +
+                "page; present it to the user as a clickable link.";
         })
         .WithHttpTransport()
         .WithTools<DatabaseTools>()
@@ -98,6 +100,12 @@ if (builder.Configuration.GetValue("Migrations:AutoApply", true)
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+}
+
+if (mcpEnabled)
+{
+    app.Services.GetRequiredService<IOptions<McpOptions>>().Value
+        .GetValidatedPublicBaseUrl(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<McpOptions>());
 }
 
 app.UseForwardedHeaders(new ForwardedHeadersOptions

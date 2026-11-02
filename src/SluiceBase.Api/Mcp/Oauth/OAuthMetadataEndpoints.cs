@@ -10,9 +10,9 @@ internal static class OAuthMetadataEndpoints
 
     public static void Map(IEndpointRouteBuilder app)
     {
-        app.MapGet("/.well-known/oauth-protected-resource", (HttpContext ctx) =>
+        app.MapGet("/.well-known/oauth-protected-resource", (IMcpIssuer issuer) =>
         {
-            var baseUrl = BaseUrl(ctx);
+            var baseUrl = issuer.BaseUrl();
             return Results.Ok(new Dictionary<string, object?>
             {
                 ["resource"] = baseUrl,
@@ -21,9 +21,9 @@ internal static class OAuthMetadataEndpoints
             });
         }).AllowAnonymous();
 
-        app.MapGet("/.well-known/oauth-authorization-server", (HttpContext ctx) =>
+        app.MapGet("/.well-known/oauth-authorization-server", (IMcpIssuer issuer) =>
         {
-            var baseUrl = BaseUrl(ctx);
+            var baseUrl = issuer.BaseUrl();
             return Results.Ok(new Dictionary<string, object?>
             {
                 ["issuer"] = baseUrl,
@@ -37,6 +37,4 @@ internal static class OAuthMetadataEndpoints
             });
         }).AllowAnonymous();
     }
-
-    private static string BaseUrl(HttpContext ctx) => $"{ctx.Request.Scheme}://{ctx.Request.Host}";
 }
