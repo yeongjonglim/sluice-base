@@ -92,25 +92,27 @@ describe("PermissionsAdminPage provenance", () => {
     const bobRow = rowFor("bob@example.com");
     // Bob's server:manage is inherited via "Platform"
     expect(within(bobRow).getByText("Platform")).toBeInTheDocument();
-    // The inherited switch is disabled (not directly granted)
-    expect(within(bobRow).getByLabelText("Manage servers")).toBeDisabled();
+    // It reads as granted, and is not a switch the admin can toggle off.
+    const inheritedMark = within(bobRow).getByLabelText(/manage servers.*inherited via platform/i);
+    expect(inheritedMark.tagName).toBe("SPAN");
+    expect(within(bobRow).queryByRole("checkbox", { name: /manage servers for bob@example.com/i })).toBeNull();
   });
 
-  it("checks the switch for a directly-granted permission", () => {
+  it("checks the box for a directly-granted permission", () => {
     render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
     // Alice's permission:manage is direct → checked & enabled
     const aliceRow = rowFor("alice@example.com");
-    expect(within(aliceRow).getByLabelText("Manage permissions")).toBeChecked();
+    expect(within(aliceRow).getByLabelText(/manage permissions for alice@example.com/i)).toBeChecked();
   });
 
-  it("grants a permission when toggling an unchecked direct switch on", async () => {
+  it("grants a permission when toggling an unchecked direct box on", async () => {
     const grantFn = vi.fn();
     mockUseGrantPermission.mockReturnValue({ mutate: grantFn, isPending: false, variables: undefined });
     render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
     // Alice's server:manage is absent → unchecked & enabled; toggling it on grants.
-    const aliceServerSwitch = within(rowFor("alice@example.com")).getByLabelText("Manage servers");
-    expect(aliceServerSwitch).not.toBeChecked();
-    await userEvent.click(aliceServerSwitch);
+    const aliceServerBox = within(rowFor("alice@example.com")).getByLabelText(/manage servers for alice@example.com/i);
+    expect(aliceServerBox).not.toBeChecked();
+    await userEvent.click(aliceServerBox);
     expect(grantFn).toHaveBeenCalledWith({ userId: "user-1", permission: "server:manage" });
   });
 

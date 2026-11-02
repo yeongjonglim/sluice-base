@@ -119,10 +119,12 @@ export function ByDatabaseTab() {
         <Text size="xs" fw={600} c="dimmed" tt="uppercase">Databases</Text>
         {(servers.data?.servers ?? []).map((s) => (
           <Stack key={s.id} gap={2}>
-            <Text size="xs" c="dimmed" fw={500} pl={4}>
-              {s.name}
-              {s.isDisabled && <Badge size="xs" color="gray" ml={4}>disabled</Badge>}
-            </Text>
+            <Group gap={6} pl={4} wrap="nowrap">
+              <Text size="xs" c="dimmed" fw={500}>
+                {s.name}
+              </Text>
+              {s.isDisabled && <Badge size="xs" color="gray" variant="light">disabled</Badge>}
+            </Group>
             {s.databases.map((d) => (
               <Button
                 key={d.id}

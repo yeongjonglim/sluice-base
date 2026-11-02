@@ -8,15 +8,19 @@ import {
   Popover,
   Splitter,
   Stack,
+  Tabs,
   Text,
 } from "@mantine/core";
 import { useOs } from "@mantine/hooks";
 import {
   IconChartBar,
   IconChevronDown,
+  IconCode,
+  IconDatabase,
   IconPlayerPlay,
   IconPlayerTrackNext,
   IconQuestionMark,
+  IconTable,
 } from "@tabler/icons-react";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -25,6 +29,7 @@ import { Prec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { SqlEditor } from "@/components/SqlEditor";
+import { useCompactLayout } from "@/utils/useCompactLayout";
 import { useSessionState } from "@/utils/useSessionState";
 import { meQueryOptions, useSchema } from "@/api/hooks";
 import { DatabaseSelect } from "@/components/DatabaseSelect";
@@ -56,6 +61,8 @@ const noIndentKeymap = Prec.highest(
   ]),
 );
 
+type MobileTab = "schema" | "editor" | "results";
+
 export const Route = createFileRoute("/_authed/query/")({
   beforeLoad: ({ context }) => {
     const me = context.queryClient.getQueryData(meQueryOptions.queryKey);
@@ -68,6 +75,9 @@ export const Route = createFileRoute("/_authed/query/")({
 
 export function QueryPage() {
   const isMac = useOs({ getValueInEffect: false }) === "macos";
+  // Read the viewport synchronously so a phone never paints the three-pane
+  // desktop layout for a frame.
+  const isMobile = useCompactLayout();
   const [selectedDatabaseId, setSelectedDatabaseId] = useSessionState<string | null>(
     "sluice:query:db",
     null,
@@ -83,6 +93,8 @@ export function QueryPage() {
   const [activeRun, setActiveRun] = useState<"single" | "all">("single");
   // Which view the bottom pane shows: last action wins.
   const [resultView, setResultView] = useState<"results" | "plan">("results");
+  // On narrow screens the three panes become tabs; the editor is the home tab.
+  const [mobileTab, setMobileTab] = useState<MobileTab>("editor");
 
   const handleTableClick = useCallback(
     (schemaName: string, tableName: string, columns: Array<{ name: string; isSensitive: boolean; isRestricted: boolean }>) => {
@@ -92,8 +104,11 @@ export function QueryPage() {
       setEditorContent((prev) =>
         prev.trimEnd() === "" ? snippet : `${prev.trimEnd()}\n\n${snippet}`,
       );
+      // On a phone the tree and the editor are separate tabs; show where the
+      // snippet landed instead of leaving the user on the schema list.
+      if (isMobile) setMobileTab("editor");
     },
-    [setEditorContent],
+    [setEditorContent, isMobile],
   );
 
   // Drives the Run / Run all button label + disabled state. Recomputed per
@@ -111,10 +126,13 @@ export function QueryPage() {
       if (targets.length > 0) {
         setActiveRun(runAll ? "all" : "single");
         setResultView("results");
+        // A run's whole point is its result; on mobile reveal it instead of
+        // leaving the editor covering it.
+        if (isMobile) setMobileTab("results");
         run(selectedDatabaseId, targets);
       }
     },
-    [selectedDatabaseId, run],
+    [selectedDatabaseId, run, isMobile],
   );
 
   // Mirrors `handleRun`'s statement scoping, but Explain never runs "all" —
@@ -126,9 +144,10 @@ export function QueryPage() {
       const dispatch = buildExplainDispatch(selectedDatabaseId, view, analyze);
       if (!dispatch) return;
       setResultView("plan");
+      if (isMobile) setMobileTab("results");
       explain.run(dispatch.databaseId, dispatch.targets, dispatch.analyze);
     },
-    [selectedDatabaseId, explain],
+    [selectedDatabaseId, explain, isMobile],
   );
 
   const handleHighlight = useCallback((entry: { fromPos: number; toPos: number }) => {
@@ -166,6 +185,248 @@ export function QueryPage() {
     [handleRun],
   );
 
+  const runDisabled = !selectedDatabaseId || statements.length === 0;
+
+  const schemaBrowser = (
+    <>
+      {/* Database picker stays fixed at the panel width; it never scrolls with long names. */}
+      <Box p="xs" style={{ flexShrink: 0 }}>
+        <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
+      </Box>
+      {/* Schema tree scrolls on its own — long table/column names extend horizontally here.
+          scrollbarGutter keeps the (hover-revealed) scrollbar from overlapping the sticky
+          right-edge controls; the gutter is always reserved so nothing hides under it. */}
+      <Box data-schema-scroll style={{ flex: 1, minHeight: 0, overflow: "auto", scrollbarGutter: "stable" }}>
+        <Box miw="max-content" px="xs" pb="xs">
+          <SchemaSidebar schema={schema} onTableClick={handleTableClick} />
+        </Box>
+      </Box>
+    </>
+  );
+
+  const resultsPane =
+    resultView === "plan" ? (
+      <PlanTabs runs={explain.runs} onHighlight={handleHighlight} />
+    ) : (
+      <ResultTabs runs={runs} onHighlight={handleHighlight} />
+    );
+
+  const explainOptions = (
+    <Menu.Dropdown>
+      <Menu.Item onClick={() => handleExplain(true, editorRef.current?.view)}>
+        Explain with timings (runs the query)
+      </Menu.Item>
+    </Menu.Dropdown>
+  );
+
+  const shortcutHelp = (
+    <Popover position="bottom-start" withArrow shadow="md">
+      <Popover.Target>
+        <ActionIcon variant="subtle" size="sm" color="gray" aria-label="Keyboard shortcuts">
+          <IconQuestionMark size={14} />
+        </ActionIcon>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack gap={4}>
+          <Text size="sm" fw={600} mb={2}>Keyboard shortcuts</Text>
+          <Group gap="xs" justify="space-between"><Text size="xs">Run query</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Enter</Kbd></Group>
+          <Group gap="xs" justify="space-between"><Text size="xs">Run all statements</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Shift+Enter</Kbd></Group>
+          <Group gap="xs" justify="space-between"><Text size="xs">Toggle comment</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+/</Kbd></Group>
+          <Group gap="xs" justify="space-between"><Text size="xs">Move line up/down</Text><Kbd size="xs">Alt+↑/↓</Kbd></Group>
+          <Group gap="xs" justify="space-between"><Text size="xs">Copy line up/down</Text><Kbd size="xs">Shift+Alt+↑/↓</Kbd></Group>
+          <Group gap="xs" justify="space-between"><Text size="xs">Select line</Text><Kbd size="xs">{isMac ? "Ctrl" : "Alt"}+L</Kbd></Group>
+          <Group gap="xs" justify="space-between"><Text size="xs">Indent / Outdent</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+] / [</Kbd></Group>
+          <Group gap="xs" justify="space-between"><Text size="xs">Delete line</Text><Kbd size="xs">Shift+{isMac ? "⌘" : "Ctrl"}+K</Kbd></Group>
+        </Stack>
+      </Popover.Dropdown>
+    </Popover>
+  );
+
+  const desktopToolbar = (
+    <Group mt="xs" gap="xs" style={{ flexShrink: 0 }}>
+      <Button
+        leftSection={<IconPlayerPlay size={14} />}
+        rightSection={<Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Enter</Kbd>}
+        size="sm"
+        onClick={() => handleRun(false, editorRef.current?.view)}
+        loading={isRunning && activeRun === "single"}
+        disabled={runDisabled || isRunning}
+      >
+        Run
+      </Button>
+      <Button
+        variant="default"
+        leftSection={<IconPlayerTrackNext size={14} />}
+        rightSection={<Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Shift+Enter</Kbd>}
+        size="sm"
+        onClick={() => handleRun(true, editorRef.current?.view)}
+        loading={isRunning && activeRun === "all"}
+        disabled={runDisabled || isRunning}
+      >
+        Run all{statements.length > 1 ? ` (${statements.length})` : ""}
+      </Button>
+      <Button.Group>
+        <Button
+          variant="default"
+          leftSection={<IconChartBar size={14} />}
+          size="sm"
+          onClick={() => handleExplain(false, editorRef.current?.view)}
+          loading={explain.isRunning}
+          disabled={runDisabled || explain.isRunning}
+        >
+          Explain
+        </Button>
+        <Menu position="bottom-end" withArrow shadow="md">
+          <Menu.Target>
+            <Button
+              variant="default"
+              size="sm"
+              px={6}
+              disabled={runDisabled || explain.isRunning}
+              aria-label="Explain options"
+            >
+              <IconChevronDown size={14} />
+            </Button>
+          </Menu.Target>
+          {explainOptions}
+        </Menu>
+      </Button.Group>
+      {shortcutHelp}
+      {!selectedDatabaseId && (
+        <Text size="xs" c="dimmed">
+          Select a database to run queries
+        </Text>
+      )}
+    </Group>
+  );
+
+  // Touch layout: no splitter, no keyboard hints. One thumb-sized primary action
+  // and a menu for the rest.
+  const mobileToolbar = (
+    <>
+      <Group mt="xs" gap="xs" wrap="nowrap" style={{ flexShrink: 0 }}>
+        <Button
+          size="md"
+          style={{ flex: 1 }}
+          leftSection={<IconPlayerPlay size={16} />}
+          onClick={() => handleRun(false, editorRef.current?.view)}
+          loading={isRunning && activeRun === "single"}
+          disabled={runDisabled || isRunning}
+        >
+          Run
+        </Button>
+        <Menu position="bottom-end" withArrow shadow="md">
+          <Menu.Target>
+            <Button
+              size="md"
+              variant="default"
+              px="md"
+              aria-label="More query actions"
+              disabled={isRunning}
+            >
+              <IconChevronDown size={18} />
+            </Button>
+          </Menu.Target>
+          <Menu.Dropdown w={260}>
+            <Menu.Item
+              leftSection={<IconPlayerTrackNext size={14} />}
+              onClick={() => handleRun(true, editorRef.current?.view)}
+              disabled={runDisabled || isRunning}
+            >
+              Run all{statements.length > 1 ? ` (${statements.length})` : ""}
+            </Menu.Item>
+            <Menu.Divider />
+            <Menu.Item
+              leftSection={<IconChartBar size={14} />}
+              onClick={() => handleExplain(false, editorRef.current?.view)}
+              disabled={runDisabled || explain.isRunning}
+            >
+              Explain
+            </Menu.Item>
+            <Menu.Item
+              onClick={() => handleExplain(true, editorRef.current?.view)}
+              disabled={runDisabled || explain.isRunning}
+            >
+              Explain with timings (executes)
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
+      </Group>
+      {!selectedDatabaseId && (
+        <Text size="xs" c="dimmed" mt={6}>
+          Select a database to run queries
+        </Text>
+      )}
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Box
+        style={{
+          height: "calc(100dvh - 44px)",
+          margin: "calc(-1 * var(--mantine-spacing-sm))",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
+        <Tabs
+          value={mobileTab}
+          onChange={(value) => {
+            if (value) setMobileTab(value as MobileTab);
+          }}
+          style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}
+        >
+          <Tabs.List grow style={{ flexShrink: 0 }}>
+            <Tabs.Tab value="schema" leftSection={<IconDatabase size={14} />}>
+              Schema
+            </Tabs.Tab>
+            <Tabs.Tab value="editor" leftSection={<IconCode size={14} />}>
+              Editor
+            </Tabs.Tab>
+            <Tabs.Tab value="results" leftSection={<IconTable size={14} />}>
+              Results
+            </Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel
+            value="schema"
+            style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}
+          >
+            {schemaBrowser}
+          </Tabs.Panel>
+
+          <Tabs.Panel
+            value="editor"
+            style={{
+              flex: 1,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: "column",
+              padding: "var(--mantine-spacing-xs)",
+            }}
+          >
+            <SqlEditor
+              ref={editorRef}
+              value={editorContent}
+              onChange={setEditorContent}
+              databaseId={selectedDatabaseId}
+              extensions={editorExtensions}
+              minLines={20}
+              height="100%"
+              style={{ flex: 1, minHeight: 0 }}
+            />
+            {mobileToolbar}
+          </Tabs.Panel>
+
+          <Tabs.Panel value="results" style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+            {resultsPane}
+          </Tabs.Panel>
+        </Tabs>
+      </Box>
+    );
+  }
+
   return (
     <Splitter
       orientation="horizontal"
@@ -182,18 +443,7 @@ export function QueryPage() {
         min={12}
         style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}
       >
-        {/* Database picker stays fixed at the panel width; it never scrolls with long names. */}
-        <Box p="xs" style={{ flexShrink: 0 }}>
-          <DatabaseSelect value={selectedDatabaseId} onChange={setSelectedDatabaseId} />
-        </Box>
-        {/* Schema tree scrolls on its own — long table/column names extend horizontally here.
-            scrollbarGutter keeps the (hover-revealed) scrollbar from overlapping the sticky
-            right-edge controls; the gutter is always reserved so nothing hides under it. */}
-        <Box data-schema-scroll style={{ flex: 1, minHeight: 0, overflow: "auto", scrollbarGutter: "stable" }}>
-          <Box miw="max-content" px="xs" pb="xs">
-            <SchemaSidebar schema={schema} onTableClick={handleTableClick} />
-          </Box>
-        </Box>
+        {schemaBrowser}
       </Splitter.Pane>
 
       <Splitter.Pane defaultSize={80} min={30} style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
@@ -229,98 +479,15 @@ export function QueryPage() {
                 height="100%"
                 style={{ flex: 1, minHeight: 0 }}
               />
-
-              <Group mt="xs" gap="xs" style={{ flexShrink: 0 }}>
-                <Button
-                  leftSection={<IconPlayerPlay size={14} />}
-                  rightSection={<Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Enter</Kbd>}
-                  size="sm"
-                  onClick={() => handleRun(false, editorRef.current?.view)}
-                  loading={isRunning && activeRun === "single"}
-                  disabled={!selectedDatabaseId || statements.length === 0 || isRunning}
-                >
-                  Run
-                </Button>
-                <Button
-                  variant="default"
-                  leftSection={<IconPlayerTrackNext size={14} />}
-                  rightSection={<Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Shift+Enter</Kbd>}
-                  size="sm"
-                  onClick={() => handleRun(true, editorRef.current?.view)}
-                  loading={isRunning && activeRun === "all"}
-                  disabled={!selectedDatabaseId || statements.length === 0 || isRunning}
-                >
-                  Run all{statements.length > 1 ? ` (${statements.length})` : ""}
-                </Button>
-                <Button.Group>
-                  <Button
-                    variant="default"
-                    leftSection={<IconChartBar size={14} />}
-                    size="sm"
-                    onClick={() => handleExplain(false, editorRef.current?.view)}
-                    loading={explain.isRunning}
-                    disabled={!selectedDatabaseId || statements.length === 0 || explain.isRunning}
-                  >
-                    Explain
-                  </Button>
-                  <Menu position="bottom-end" withArrow shadow="md">
-                    <Menu.Target>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        px={6}
-                        disabled={!selectedDatabaseId || statements.length === 0 || explain.isRunning}
-                        aria-label="Explain options"
-                      >
-                        <IconChevronDown size={14} />
-                      </Button>
-                    </Menu.Target>
-                    <Menu.Dropdown>
-                      <Menu.Item onClick={() => handleExplain(true, editorRef.current?.view)}>
-                        Explain with timings (runs the query)
-                      </Menu.Item>
-                    </Menu.Dropdown>
-                  </Menu>
-                </Button.Group>
-                <Popover position="bottom-start" withArrow shadow="md">
-                  <Popover.Target>
-                    <ActionIcon variant="subtle" size="sm" color="gray" aria-label="Keyboard shortcuts">
-                      <IconQuestionMark size={14} />
-                    </ActionIcon>
-                  </Popover.Target>
-                  <Popover.Dropdown>
-                    <Stack gap={4}>
-                      <Text size="sm" fw={600} mb={2}>Keyboard shortcuts</Text>
-                      <Group gap="xs" justify="space-between"><Text size="xs">Run query</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Enter</Kbd></Group>
-                      <Group gap="xs" justify="space-between"><Text size="xs">Run all statements</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+Shift+Enter</Kbd></Group>
-                      <Group gap="xs" justify="space-between"><Text size="xs">Toggle comment</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+/</Kbd></Group>
-                      <Group gap="xs" justify="space-between"><Text size="xs">Move line up/down</Text><Kbd size="xs">Alt+↑/↓</Kbd></Group>
-                      <Group gap="xs" justify="space-between"><Text size="xs">Copy line up/down</Text><Kbd size="xs">Shift+Alt+↑/↓</Kbd></Group>
-                      <Group gap="xs" justify="space-between"><Text size="xs">Select line</Text><Kbd size="xs">{isMac ? "Ctrl" : "Alt"}+L</Kbd></Group>
-                      <Group gap="xs" justify="space-between"><Text size="xs">Indent / Outdent</Text><Kbd size="xs">{isMac ? "⌘" : "Ctrl"}+] / [</Kbd></Group>
-                      <Group gap="xs" justify="space-between"><Text size="xs">Delete line</Text><Kbd size="xs">Shift+{isMac ? "⌘" : "Ctrl"}+K</Kbd></Group>
-                    </Stack>
-                  </Popover.Dropdown>
-                </Popover>
-                {!selectedDatabaseId && (
-                  <Text size="xs" c="dimmed">
-                    Select a database to run queries
-                  </Text>
-                )}
-              </Group>
+              {desktopToolbar}
             </Box>
           </Splitter.Pane>
 
           <Splitter.Pane defaultSize={65} min={15} style={{ overflow: "hidden" }}>
-            {resultView === "plan" ? (
-              <PlanTabs runs={explain.runs} onHighlight={handleHighlight} />
-            ) : (
-              <ResultTabs runs={runs} onHighlight={handleHighlight} />
-            )}
+            {resultsPane}
           </Splitter.Pane>
         </Splitter>
       </Splitter.Pane>
     </Splitter>
   );
 }
-
