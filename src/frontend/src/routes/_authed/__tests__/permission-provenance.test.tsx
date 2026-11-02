@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import React from "react";
-import { PermissionsAdminPage } from "@/routes/_authed/permission.tsx";
+import { redirect } from "@tanstack/react-router";
+import { PermissionsAdminPage, Route } from "@/routes/_authed/permission.tsx";
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (opts: unknown) => opts,
@@ -160,6 +161,64 @@ describe("PermissionsAdminPage provenance", () => {
     await userEvent.click(within(rowFor("carol@example.com")).getByLabelText(/account actions for carol/i));
     await userEvent.click(await screen.findByText("Revoke AI tool connections"));
     expect(mockRevokeMcp).toHaveBeenCalledWith("user-3");
+  });
+
+  it("confirms before you revoke your own admin permission", async () => {
+    const revokeFn = vi.fn();
+    mockUseRevokePermission.mockReturnValue({ mutate: revokeFn, isPending: false, variables: undefined });
+    render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
+
+    await userEvent.click(within(rowFor("alice@example.com")).getByLabelText(/manage permissions for alice@example.com/i));
+    const confirm = vi.mocked(modals.openConfirmModal).mock.calls[0][0];
+    confirm.onCancel?.();
+    await Promise.resolve();
+    expect(revokeFn).not.toHaveBeenCalled();
+
+    await userEvent.click(within(rowFor("alice@example.com")).getByLabelText(/manage permissions for alice@example.com/i));
+    vi.mocked(modals.openConfirmModal).mock.calls[1][0].onConfirm?.();
+    await vi.waitFor(() =>
+      expect(revokeFn).toHaveBeenCalledWith({ userId: "user-1", permission: "permission:manage" }));
+  });
+
+  it("revokes someone else's permission without asking", async () => {
+    const revokeFn = vi.fn();
+    mockUseRevokePermission.mockReturnValue({ mutate: revokeFn, isPending: false, variables: undefined });
+    mockUseMe.mockReturnValue({ data: { id: "someone-else" } });
+    render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
+
+    await userEvent.click(within(rowFor("alice@example.com")).getByLabelText(/manage permissions for alice@example.com/i));
+    expect(modals.openConfirmModal).not.toHaveBeenCalled();
+    expect(revokeFn).toHaveBeenCalledWith({ userId: "user-1", permission: "permission:manage" });
+  });
+
+  it("marks only the cell being saved as pending", () => {
+    mockUseGrantPermission.mockReturnValue({
+      mutate: vi.fn(), isPending: true, variables: { userId: "user-1", permission: "server:manage" },
+    });
+    mockUseRevokePermission.mockReturnValue({
+      mutate: vi.fn(), isPending: true, variables: { userId: "user-2", permission: "server:manage" },
+    });
+    render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
+    expect(screen.getByText("alice@example.com")).toBeInTheDocument();
+  });
+
+  it("explains an empty user table", () => {
+    mockUseUsers.mockReturnValue({ isLoading: false, data: { users: [] } });
+    render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
+    expect(screen.getByText(/no users yet/i)).toBeInTheDocument();
+  });
+
+  it("only lets permission managers open the page", () => {
+    vi.mocked(redirect).mockReturnValue({ to: "/" } as never);
+    const beforeLoad = (Route as unknown as {
+      beforeLoad: (args: { context: { queryClient: { getQueryData: () => unknown } } }) => void;
+    }).beforeLoad;
+    const withPermissions = (permissions: Array<string>) => ({
+      context: { queryClient: { getQueryData: () => ({ permissions }) } },
+    });
+
+    expect(() => beforeLoad(withPermissions(["query:execute"]))).toThrow();
+    expect(() => beforeLoad(withPermissions(["permission:manage"]))).not.toThrow();
   });
 
   it("filters users by the search box", async () => {
