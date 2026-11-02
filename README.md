@@ -200,6 +200,7 @@ Codex runs the same OAuth flow on first use.
 | `list_update_requests` | Lists update requests on databases the user can see, optionally filtered by database or status |
 | `get_update_request` | Returns one update request's detail and event history |
 | `cancel_update_request` | Withdraws a Pending or Approved request the user submitted themselves, with a note |
+| `preview_update_request` | Runs a request's SQL with the write credential in a transaction that is always rolled back and returns its before/after result sets; allowed for the submitter or anyone who can approve or execute on the database. Not read-only: rollback doesn't undo sequence increments, `NOTIFY` or calls to other systems |
 
 Agents can never approve, reject, or execute an update request — those steps stay with a human in the app.
 

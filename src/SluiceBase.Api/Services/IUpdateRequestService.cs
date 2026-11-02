@@ -2,9 +2,13 @@ using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
+using SluiceBase.Api.Queries;
+using SluiceBase.Api.Servers;
 using SluiceBase.Core.Common;
 using SluiceBase.Core.Permissions;
+using SluiceBase.Core.Queries;
 using SluiceBase.Core.Servers;
+using SluiceBase.Core.Targets;
 using SluiceBase.Core.Updates;
 using SluiceBase.Core.Users;
 
@@ -30,10 +34,18 @@ internal sealed record CancelUpdateResult(
     UpdateEndpoints.UpdateRequestDetailResponse? Detail,
     string? Error);
 
-// Shared submit/list/get/cancel logic for update requests, called by both the REST endpoints
-// (UpdateEndpoints) and the MCP tools (UpdateTools) so the two surfaces cannot drift.
-// The remaining mutation transitions (approve/reject/execute/preview) are NOT here — they
-// remain REST/UI-only and are never exposed over MCP.
+internal enum PreviewUpdateOutcome { Ok, NotFound, Forbidden, Conflict, Blocked }
+
+internal sealed record PreviewUpdateResult(
+    PreviewUpdateOutcome Outcome,
+    UpdateEndpoints.UpdatePreviewResponse? Preview,
+    string? Error,
+    SensitiveColumnDecision? Blocked);
+
+// Shared submit/list/get/cancel/preview logic for update requests, called by both the REST
+// endpoints (UpdateEndpoints) and the MCP tools (UpdateTools) so the two surfaces cannot drift.
+// The remaining mutation transitions (approve/reject/execute) are NOT here — they remain
+// REST/UI-only and are never exposed over MCP.
 internal interface IUpdateRequestService
 {
     Task<SubmitUpdateResult> SubmitAsync(
@@ -50,12 +62,20 @@ internal interface IUpdateRequestService
     // of the update:submit permission that REST already requires.
     Task<CancelUpdateResult> CancelAsync(
         User user, UpdateRequestId id, string note, bool requireSubmitter, CancellationToken ct);
+
+    // Runs the request's SQL with the write credential in a transaction that is always rolled back.
+    // Allowed for the submitter or anyone who can approve or execute on the database.
+    Task<PreviewUpdateResult> PreviewAsync(User user, UpdateRequestId id, CancellationToken ct);
 }
 
 internal sealed class UpdateRequestService(
     AppDbContext db,
     IAccessResolver resolver,
-    TimeProvider timeProvider) : IUpdateRequestService
+    TimeProvider timeProvider,
+    IServerConnectionFactory connectionFactory,
+    ITargetEngineRegistry engineRegistry,
+    SensitiveColumnGuard sensitiveGuard,
+    IConfiguration configuration) : IUpdateRequestService
 {
     public async Task<SubmitUpdateResult> SubmitAsync(
         User user, DatabaseId databaseId, string sqlText, string reason,
@@ -188,5 +208,100 @@ internal sealed class UpdateRequestService(
 
         var cancelled = await UpdateEndpoints.LoadDetail(db, id, ct);
         return new CancelUpdateResult(CancelUpdateOutcome.Ok, UpdateEndpoints.ToDetail(cancelled!), null);
+    }
+
+    public async Task<PreviewUpdateResult> PreviewAsync(User user, UpdateRequestId id, CancellationToken ct)
+    {
+        var request = await db.UpdateRequests.SingleOrDefaultAsync(r => r.Id == id, ct);
+        if (request is null)
+        {
+            return new PreviewUpdateResult(PreviewUpdateOutcome.NotFound, null, null, null);
+        }
+
+        if (request.Status is not (UpdateRequestStatus.Pending or UpdateRequestStatus.Approved))
+        {
+            return new PreviewUpdateResult(PreviewUpdateOutcome.Conflict, null, $"Cannot preview a request in '{request.Status}' state.", null);
+        }
+
+        if (request.DatabaseId is null)
+        {
+            return new PreviewUpdateResult(PreviewUpdateOutcome.Conflict, null, "Server was deleted. Cannot preview.", null);
+        }
+
+        var database = await db.Databases.AsNoTracking()
+            .Include(d => d.Server)
+            .SingleOrDefaultAsync(s => s.Id == request.DatabaseId, ct);
+        if (database is null || !database.CanWrite)
+        {
+            return new PreviewUpdateResult(PreviewUpdateOutcome.Conflict, null, "Server not found or has no write credentials configured.", null);
+        }
+
+        if (database.IsDisabled)
+        {
+            return new PreviewUpdateResult(PreviewUpdateOutcome.Conflict, null, "Server is disabled.", null);
+        }
+
+        // Submitter of this request, or anyone who can approve/execute on the db.
+        var isSubmitter = request.SubmitterId == user.Id;
+        var canApprove = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId.Value, Permissions.UpdateApprove, ct);
+        var canExecute = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId.Value, Permissions.UpdateExecute, ct);
+        if (!isSubmitter && !canApprove && !canExecute)
+        {
+            return new PreviewUpdateResult(PreviewUpdateOutcome.Forbidden, null, null, null);
+        }
+
+        // Sensitive-column gate — same policy as the read path. A hit blocks the run
+        // entirely; the SQL never executes and no event is recorded.
+        var decision = await sensitiveGuard.EvaluateAsync(user.Id, request.DatabaseId.Value, request.SqlText, ct);
+        if (decision.BlockedHits.Count > 0 || decision.PolicyBlockReason is not null)
+        {
+            return new PreviewUpdateResult(PreviewUpdateOutcome.Blocked, null, null, decision);
+        }
+
+        var timeoutSeconds = configuration.GetValue("Query:TimeoutSeconds", 30);
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+
+        var startedAt = timeProvider.GetUtcNow();
+        IReadOnlyList<QueryData> resultSets = [];
+        var affectedRows = 0;
+        bool success;
+        string? error = null;
+
+        try
+        {
+            var connectionString = await connectionFactory
+                .GetConnectionStringAsync(database.Id, CredentialKind.Write, ct);
+            var engine = engineRegistry.Resolve(database.Server!.Kind);
+            var result = await engine.ExecuteUpdateAsync(connectionString, request.SqlText, commit: false, linkedCts.Token);
+            resultSets = result.ResultSets;
+            affectedRows = result.AffectedRows;
+            success = true;
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
+        {
+            success = false;
+            error = $"Preview timed out after {timeoutSeconds}s.";
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            success = false;
+            error = ex.Message;
+        }
+
+        var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
+
+        db.UpdateRequestEvents.Add(UpdateRequestEvent.Preview(
+            request.Id,
+            new Actioned(user.Id, timeProvider.GetUtcNow()),
+            success,
+            durationMs,
+            affectedRows,
+            resultSets.Count,
+            error));
+        await db.SaveChangesAsync(ct);
+
+        return new PreviewUpdateResult(
+            PreviewUpdateOutcome.Ok, new UpdateEndpoints.UpdatePreviewResponse(resultSets, affectedRows, durationMs, error), null, null);
     }
 }

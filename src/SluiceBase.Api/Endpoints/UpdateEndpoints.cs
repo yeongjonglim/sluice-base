@@ -2,7 +2,6 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
-using SluiceBase.Api.Queries;
 using SluiceBase.Api.Servers;
 using SluiceBase.Api.Services;
 using SluiceBase.Core.Common;
@@ -331,122 +330,36 @@ internal static class UpdateEndpoints
 
     private static async Task<Results<Ok<UpdatePreviewResponse>, NotFound, Conflict<string>, ProblemHttpResult, UnauthorizedHttpResult, ForbidHttpResult>> Preview(
         UpdateRequestId id,
-        AppDbContext db,
         ICurrentUserAccessor currentUser,
-        IAccessResolver resolver,
-        IServerConnectionFactory connectionFactory,
-        ITargetEngineRegistry engineRegistry,
-        SensitiveColumnGuard sensitiveGuard,
-        TimeProvider timeProvider,
-        IConfiguration configuration,
+        IUpdateRequestService updateService,
         CancellationToken ct)
     {
-        var request = await LoadForMutation(db, id, ct);
-        if (request is null)
-        {
-            return TypedResults.NotFound();
-        }
-
-        if (request.Status is not (UpdateRequestStatus.Pending or UpdateRequestStatus.Approved))
-        {
-            return TypedResults.Conflict($"Cannot preview a request in '{request.Status}' state.");
-        }
-
-        if (request.DatabaseId is null)
-        {
-            return TypedResults.Conflict("Server was deleted. Cannot preview.");
-        }
-
-        var database = await db.Databases.AsNoTracking()
-            .Include(d => d.Server)
-            .SingleOrDefaultAsync(s => s.Id == request.DatabaseId, ct);
-        if (database is null || !database.CanWrite)
-        {
-            return TypedResults.Conflict("Server not found or has no write credentials configured.");
-        }
-
-        if (database.IsDisabled)
-        {
-            return TypedResults.Conflict("Server is disabled.");
-        }
-
         var user = await currentUser.GetAsync(ct);
         if (user is null)
         {
             return TypedResults.Unauthorized();
         }
 
-        // Submitter of this request, or anyone who can approve/execute on the db.
-        var isSubmitter = request.SubmitterId == user.Id;
-        var canApprove = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId.Value, Permissions.UpdateApprove, ct);
-        var canExecute = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId.Value, Permissions.UpdateExecute, ct);
-        if (!isSubmitter && !canApprove && !canExecute)
+        var result = await updateService.PreviewAsync(user, id, ct);
+        return result.Outcome switch
         {
-            return TypedResults.Forbid();
-        }
-
-        // Sensitive-column gate — same policy as the read path. A hit blocks the run
-        // entirely; the SQL never executes and no event is recorded.
-        var decision = await sensitiveGuard.EvaluateAsync(user.Id, request.DatabaseId.Value, request.SqlText, ct);
-        if (decision.BlockedHits.Count > 0 || decision.PolicyBlockReason is not null)
-        {
-            return TypedResults.Problem(
+            PreviewUpdateOutcome.Ok => TypedResults.Ok(result.Preview!),
+            PreviewUpdateOutcome.NotFound => TypedResults.NotFound(),
+            PreviewUpdateOutcome.Forbidden => TypedResults.Forbid(),
+            PreviewUpdateOutcome.Conflict => TypedResults.Conflict(result.Error!),
+            PreviewUpdateOutcome.Blocked => TypedResults.Problem(
                 statusCode: StatusCodes.Status403Forbidden,
                 title: "Sensitive columns",
                 type: "sensitive_columns",
                 extensions: new Dictionary<string, object?>
                 {
-                    ["columns"] = decision.BlockedHits
+                    ["columns"] = result.Blocked!.BlockedHits
                         .Select(c => new { schema = c.Schema, table = c.Table, column = c.Column })
                         .ToArray(),
-                    ["reason"] = decision.PolicyBlockReason,
-                });
-        }
-
-        var timeoutSeconds = configuration.GetValue("Query:TimeoutSeconds", 30);
-        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
-        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
-
-        var startedAt = timeProvider.GetUtcNow();
-        IReadOnlyList<QueryData> resultSets = [];
-        var affectedRows = 0;
-        bool success;
-        string? error = null;
-
-        try
-        {
-            var connectionString = await connectionFactory
-                .GetConnectionStringAsync(database.Id, CredentialKind.Write, ct);
-            var engine = engineRegistry.Resolve(database.Server!.Kind);
-            var result = await engine.ExecuteUpdateAsync(connectionString, request.SqlText, commit: false, linkedCts.Token);
-            resultSets = result.ResultSets;
-            affectedRows = result.AffectedRows;
-            success = true;
-        }
-        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested)
-        {
-            success = false;
-            error = $"Preview timed out after {timeoutSeconds}s.";
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            success = false;
-            error = ex.Message;
-        }
-
-        var durationMs = (int)(timeProvider.GetUtcNow() - startedAt).TotalMilliseconds;
-
-        db.UpdateRequestEvents.Add(UpdateRequestEvent.Preview(
-            request.Id,
-            new Actioned(user.Id, timeProvider.GetUtcNow()),
-            success,
-            durationMs,
-            affectedRows,
-            resultSets.Count,
-            error));
-        await db.SaveChangesAsync(ct);
-
-        return TypedResults.Ok(new UpdatePreviewResponse(resultSets, affectedRows, durationMs, error));
+                    ["reason"] = result.Blocked.PolicyBlockReason,
+                }),
+            _ => throw new InvalidOperationException("Unexpected preview outcome."),
+        };
     }
 
     // ── helpers ───────────────────────────────────────────────────────────────
