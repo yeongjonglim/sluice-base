@@ -23,6 +23,7 @@ import {
   IconSend,
   IconX,
 } from "@tabler/icons-react";
+import { useMediaQuery } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import React, { useState } from "react";
@@ -108,6 +109,9 @@ function UpdateDetailPage() {
   const cancel = useCancelUpdate();
   const execute = useExecuteUpdate();
   const preview = usePreviewUpdate();
+  // Below the navbar breakpoint the two-axis splitter leaves the timeline too
+  // narrow to read, so the page becomes one scrolling column of full-width blocks.
+  const isMobile = useMediaQuery("(max-width: 47.99em)", false, { getInitialValueInEffect: false });
 
   const [reviewAction, setReviewAction] = useState<ReviewAction | null>(null);
   const [reviewNote, setReviewNote] = useState("");
@@ -316,10 +320,44 @@ function UpdateDetailPage() {
     </Timeline>
   );
 
+  const sqlBlock = (
+    <SqlEditor value={r.sqlText} editable={false} height="100%" style={{ flex: 1, minHeight: 0 }} />
+  );
+
+  const previewBlock = (
+    <PreviewPane
+      isPending={preview.isPending}
+      isError={preview.isError}
+      error={preview.error}
+      result={previewResult}
+      lastPreview={
+        lastPreview
+          ? {
+              success: lastPreview.success,
+              at: lastPreview.at,
+              affectedRows:
+                lastPreview.affectedRows == null ? null : Number(lastPreview.affectedRows),
+              error: lastPreview.error,
+            }
+          : null
+      }
+      onRunPreview={runPreview}
+    />
+  );
+
+  const timelineBlock = (
+    <>
+      <Text tt="uppercase" fw={700} fz="xs" c="dimmed" mb="md" style={{ letterSpacing: "0.05em" }}>
+        Timeline
+      </Text>
+      {timeline}
+    </>
+  );
+
   return (
     <Box
       style={{
-        height: "calc(100vh - 44px)",
+        height: isMobile ? "calc(100dvh - 44px)" : "calc(100vh - 44px)",
         margin: "calc(-1 * var(--mantine-spacing-sm))",
         display: "flex",
         flexDirection: "column",
@@ -414,80 +452,69 @@ function UpdateDetailPage() {
         </Group>
       </Group>
 
-      {/* Body: SQL over preview on the left, timeline on the right — all resizable */}
-      <Box style={{ flex: 1, minHeight: 0 }}>
-        <Splitter
-          orientation="horizontal"
-          h="100%"
-          withHandle={false}
-          handleColor="var(--mantine-color-default-border)"
-          lineSize={4}
-        >
-          <Splitter.Pane
-            defaultSize={66}
-            min={35}
-            style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}
+      {isMobile ? (
+        /* One scrolling column: SQL, then the dry-run pane, then the audit trail. */
+        <Box style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+          <Box
+            p="xs"
+            style={{ height: 260, borderBottom: BORDER, display: "flex", flexDirection: "column" }}
           >
-            <Splitter
-              orientation="vertical"
-              h="100%"
-              withHandle={false}
-              handleColor="var(--mantine-color-default-border)"
-              lineSize={4}
-              style={{ flex: 1 }}
+            {sqlBlock}
+          </Box>
+          <Box style={{ height: 300, borderBottom: BORDER }}>{previewBlock}</Box>
+          <Box p="md">{timelineBlock}</Box>
+        </Box>
+      ) : (
+        /* Body: SQL over preview on the left, timeline on the right — all resizable */
+        <Box style={{ flex: 1, minHeight: 0 }}>
+          <Splitter
+            orientation="horizontal"
+            h="100%"
+            withHandle={false}
+            handleColor="var(--mantine-color-default-border)"
+            lineSize={4}
+          >
+            <Splitter.Pane
+              defaultSize={66}
+              min={35}
+              style={{ display: "flex", flexDirection: "column", minWidth: 0, overflow: "hidden" }}
             >
-              <Splitter.Pane
-                defaultSize={52}
-                min={15}
-                style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}
+              <Splitter
+                orientation="vertical"
+                h="100%"
+                withHandle={false}
+                handleColor="var(--mantine-color-default-border)"
+                lineSize={4}
+                style={{ flex: 1 }}
               >
-                <Box p="xs" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-                  <SqlEditor
-                    value={r.sqlText}
-                    editable={false}
-                    height="100%"
-                    style={{ flex: 1, minHeight: 0 }}
-                  />
-                </Box>
-              </Splitter.Pane>
+                <Splitter.Pane
+                  defaultSize={52}
+                  min={15}
+                  style={{ display: "flex", flexDirection: "column", overflow: "hidden" }}
+                >
+                  <Box p="xs" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+                    {sqlBlock}
+                  </Box>
+                </Splitter.Pane>
 
-              <Splitter.Pane defaultSize={48} min={15} style={{ overflow: "hidden" }}>
-                <PreviewPane
-                  isPending={preview.isPending}
-                  isError={preview.isError}
-                  error={preview.error}
-                  result={previewResult}
-                  lastPreview={
-                    lastPreview
-                      ? {
-                          success: lastPreview.success,
-                          at: lastPreview.at,
-                          affectedRows:
-                            lastPreview.affectedRows == null ? null : Number(lastPreview.affectedRows),
-                          error: lastPreview.error,
-                        }
-                      : null
-                  }
-                  onRunPreview={runPreview}
-                />
-              </Splitter.Pane>
-            </Splitter>
-          </Splitter.Pane>
+                <Splitter.Pane defaultSize={48} min={15} style={{ overflow: "hidden" }}>
+                  {previewBlock}
+                </Splitter.Pane>
+              </Splitter>
+            </Splitter.Pane>
 
-          <Splitter.Pane
-            defaultSize={34}
-            min={22}
-            style={{ display: "flex", flexDirection: "column", overflow: "hidden", borderLeft: BORDER }}
-          >
-            <Box style={{ flex: 1, minHeight: 0, overflow: "auto", scrollbarGutter: "stable" }} p="md">
-              <Text tt="uppercase" fw={700} fz="xs" c="dimmed" mb="md" style={{ letterSpacing: "0.05em" }}>
-                Timeline
-              </Text>
-              {timeline}
-            </Box>
-          </Splitter.Pane>
-        </Splitter>
-      </Box>
+            <Splitter.Pane
+              defaultSize={34}
+              min={22}
+              style={{ display: "flex", flexDirection: "column", overflow: "hidden", borderLeft: BORDER }}
+            >
+              <Box style={{ flex: 1, minHeight: 0, overflow: "auto", scrollbarGutter: "stable" }} p="md">
+                {timelineBlock}
+              </Box>
+            </Splitter.Pane>
+          </Splitter>
+        </Box>
+      )}
 
       {/* One review dialog for approve / reject / cancel */}
       <Modal opened={reviewAction !== null} onClose={closeReview} title={reviewAction ? REVIEW_COPY[reviewAction].title : ""}>

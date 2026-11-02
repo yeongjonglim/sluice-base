@@ -1,10 +1,11 @@
-import { Badge, Button, Group, Select, Stack, Table, Text, TextInput, Title } from "@mantine/core";
+import { Badge, Box, Button, Card, Group, Select, Stack, Table, Text, TextInput, Title } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
-import { IconPlus } from "@tabler/icons-react";
+import { IconChevronRight, IconPlus } from "@tabler/icons-react";
 import { Link, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { UpdateRequestFilters } from "@/api/hooks";
 import { meQueryOptions, useCatalogServer, useUpdateRequests } from "@/api/hooks";
+import { timeAgo } from "@/utils/timeAgo";
 
 type UpdateListSearch = {
   from?: string;
@@ -170,40 +171,79 @@ function UpdateListPage() {
       )}
 
       {requests.data && displayedRequests.length > 0 && (
-        <Table striped withTableBorder highlightOnHover style={{ cursor: "pointer" }}>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Status</Table.Th>
-              <Table.Th>Server</Table.Th>
-              <Table.Th>Submitted by</Table.Th>
-              <Table.Th>Reason</Table.Th>
-              <Table.Th>Submitted</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
+        <>
+          {/* Phones get the same rows as cards: a table of five columns cannot show a
+              status badge and a submission date at 390px without clipping both. */}
+          <Stack gap="sm" hiddenFrom="sm">
             {displayedRequests.map((r) => (
-              <Table.Tr
+              <Link
                 key={r.id}
-                onClick={() => void navigate({ to: "/update/$id", params: { id: r.id } })}
+                to="/update/$id"
+                params={{ id: r.id }}
+                style={{ display: "block", color: "inherit", textDecoration: "none" }}
               >
-                <Table.Td>{statusBadge(r.status, r.execSuccess)}</Table.Td>
-                <Table.Td>{r.databaseDisplayName ?? "—"}</Table.Td>
-                <Table.Td>{r.submitterName ?? "—"}</Table.Td>
-                <Table.Td
-                  style={{
-                    maxWidth: 300,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {r.reason}
-                </Table.Td>
-                <Table.Td>{new Date(r.submittedAt).toLocaleString()}</Table.Td>
-              </Table.Tr>
+                <Card withBorder padding="sm">
+                  <Group justify="space-between" wrap="nowrap" gap="sm">
+                    {statusBadge(r.status, r.execSuccess)}
+                    <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                      {timeAgo(r.submittedAt)}
+                    </Text>
+                  </Group>
+                  <Text size="sm" fw={500} mt={8} lineClamp={2}>
+                    {r.reason}
+                  </Text>
+                  <Group justify="space-between" wrap="nowrap" gap="sm" mt={4}>
+                    <Text size="xs" c="dimmed" truncate>
+                      {r.databaseDisplayName ?? "—"} · {r.submitterName ?? "Unknown submitter"}
+                    </Text>
+                    <IconChevronRight
+                      size={16}
+                      aria-hidden
+                      style={{ color: "var(--mantine-color-dimmed)", flexShrink: 0 }}
+                    />
+                  </Group>
+                </Card>
+              </Link>
             ))}
-          </Table.Tbody>
-        </Table>
+          </Stack>
+
+          <Box visibleFrom="sm">
+            <Table striped withTableBorder highlightOnHover style={{ cursor: "pointer" }}>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Status</Table.Th>
+                  <Table.Th>Server</Table.Th>
+                  <Table.Th>Submitted by</Table.Th>
+                  <Table.Th>Reason</Table.Th>
+                  <Table.Th>Submitted</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {displayedRequests.map((r) => (
+                  <Table.Tr
+                    key={r.id}
+                    onClick={() => void navigate({ to: "/update/$id", params: { id: r.id } })}
+                  >
+                    <Table.Td>{statusBadge(r.status, r.execSuccess)}</Table.Td>
+                    <Table.Td>{r.databaseDisplayName ?? "—"}</Table.Td>
+                    <Table.Td>{r.submitterName ?? "—"}</Table.Td>
+                    <Table.Td
+                      style={{
+                        maxWidth: 300,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {r.reason}
+                    </Table.Td>
+                    <Table.Td>{new Date(r.submittedAt).toLocaleString()}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Box>
+        </>
       )}
     </Stack>
   );
