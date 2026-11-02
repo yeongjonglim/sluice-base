@@ -17,12 +17,15 @@ public sealed class McpToken
     public DateTimeOffset? LastUsedAt { get; private set; }
     public bool Revoked { get; private set; }
 
+    // The sign-in behind this token went to a loopback callback, so its client is never resolved.
+    public bool IsLoopbackGrant { get; private set; }
+
     public static McpToken Issue(string tokenHash, McpTokenType type, UserId userId,
-        string clientId, DateTimeOffset createdAt, DateTimeOffset expiresAt) => new()
+        string clientId, bool isLoopbackGrant, DateTimeOffset createdAt, DateTimeOffset expiresAt) => new()
     {
         Id = McpTokenId.FromNewVersion7Guid(),
         TokenHash = tokenHash, Type = type, UserId = userId, ClientId = clientId,
-        CreatedAt = createdAt, ExpiresAt = expiresAt,
+        IsLoopbackGrant = isLoopbackGrant, CreatedAt = createdAt, ExpiresAt = expiresAt,
     };
 
     public void Touch(DateTimeOffset at) => LastUsedAt = at;

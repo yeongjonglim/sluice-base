@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Mcp;
-using SluiceBase.Core.Mcp;
 using SluiceBase.Core.Users;
 using Testcontainers.PostgreSql;
 
@@ -72,10 +71,6 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         const string redirectUri = "https://example.com/callback";
         const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
         var codeChallenge = TokenHasher.ComputePkceS256Challenge(codeVerifier);
-
-        // Register a placeholder client so ClientId can be matched
-        db.McpOAuthClients.Add(McpOAuthClient.Register("Test Client", [redirectUri], DateTimeOffset.UtcNow));
-        await db.SaveChangesAsync(ct);
 
         var code = await svc.IssueAuthCodeAsync(ClientId, userId, redirectUri, codeChallenge, ct);
         var tokens = await svc.RedeemAuthCodeAsync(ClientId, code, redirectUri, codeVerifier, ct);
@@ -235,9 +230,86 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         Assert.Null(validated);
     }
 
+    [Fact]
+    public async Task FindLiveAuthCode_FoundOnlyWhileUnconsumedForSameClient()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var svc = CreateService(db);
+
+        var userId = await SeedUserAsync(db, ct);
+        const string redirectUri = "https://example.com/callback";
+        const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        var code = await svc.IssueAuthCodeAsync(
+            ClientId, userId, redirectUri, TokenHasher.ComputePkceS256Challenge(codeVerifier), ct);
+
+        Assert.Equal(new LiveGrant(IsLoopback: false), await svc.FindLiveAuthCodeAsync(ClientId, code, ct));
+        Assert.Null(await svc.FindLiveAuthCodeAsync("other-client", code, ct));
+        Assert.Null(await svc.FindLiveRefreshTokenAsync(ClientId, code, ct));
+        Assert.Null(await svc.FindLiveAuthCodeAsync(ClientId, "bogus", ct));
+
+        var expired = CreateService(db, new FrozenTimeProvider(DateTimeOffset.UtcNow.AddHours(1)));
+        Assert.Null(await expired.FindLiveAuthCodeAsync(ClientId, code, ct));
+
+        Assert.NotNull(await svc.RedeemAuthCodeAsync(ClientId, code, redirectUri, codeVerifier, ct));
+        Assert.Null(await svc.FindLiveAuthCodeAsync(ClientId, code, ct));
+    }
+
+    [Fact]
+    public async Task FindLiveRefreshToken_FoundOnlyWhileUnrevokedAndDoesNotTrack()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var svc = CreateService(db);
+
+        var userId = await SeedUserAsync(db, ct);
+        const string redirectUri = "https://example.com/callback";
+        const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        var code = await svc.IssueAuthCodeAsync(
+            ClientId, userId, redirectUri, TokenHasher.ComputePkceS256Challenge(codeVerifier), ct);
+        var tokens = await svc.RedeemAuthCodeAsync(ClientId, code, redirectUri, codeVerifier, ct);
+        Assert.NotNull(tokens);
+        db.ChangeTracker.Clear();
+
+        Assert.Equal(new LiveGrant(IsLoopback: false), await svc.FindLiveRefreshTokenAsync(ClientId, tokens.RefreshToken, ct));
+        Assert.Null(await svc.FindLiveRefreshTokenAsync("other-client", tokens.RefreshToken, ct));
+        Assert.Null(await svc.FindLiveRefreshTokenAsync(ClientId, tokens.AccessToken, ct));
+        Assert.Empty(db.ChangeTracker.Entries());
+
+        Assert.NotNull(await svc.RefreshAsync(ClientId, tokens.RefreshToken, ct));
+        Assert.Null(await svc.FindLiveRefreshTokenAsync(ClientId, tokens.RefreshToken, ct));
+    }
+
     /// <summary>Minimal <see cref="TimeProvider"/> that always returns the same instant.</summary>
     private sealed class FrozenTimeProvider(DateTimeOffset frozenAt) : TimeProvider
     {
         public override DateTimeOffset GetUtcNow() => frozenAt;
+    }
+
+    [Fact]
+    public async Task LoopbackGrant_FlagFollowsCodeIntoRotatedRefreshTokens()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var svc = CreateService(db);
+
+        var userId = await SeedUserAsync(db, ct);
+        const string redirectUri = "http://127.0.0.1:51234/callback";
+        const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        var code = await svc.IssueAuthCodeAsync(
+            ClientId, userId, redirectUri, TokenHasher.ComputePkceS256Challenge(codeVerifier), ct);
+
+        Assert.Equal(new LiveGrant(IsLoopback: true), await svc.FindLiveAuthCodeAsync(ClientId, code, ct));
+
+        var tokens = await svc.RedeemAuthCodeAsync(ClientId, code, redirectUri, codeVerifier, ct);
+        Assert.NotNull(tokens);
+        Assert.Equal(new LiveGrant(IsLoopback: true), await svc.FindLiveRefreshTokenAsync(ClientId, tokens.RefreshToken, ct));
+
+        var rotated = await svc.RefreshAsync(ClientId, tokens.RefreshToken, ct);
+        Assert.NotNull(rotated);
+        Assert.Equal(new LiveGrant(IsLoopback: true), await svc.FindLiveRefreshTokenAsync(ClientId, rotated.RefreshToken, ct));
     }
 }

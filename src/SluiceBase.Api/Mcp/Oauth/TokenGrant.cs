@@ -33,18 +33,26 @@ internal abstract record TokenGrant(string ClientId)
         return true;
     }
 
+    public abstract Task<LiveGrant?> FindLiveAsync(IMcpTokenService tokens, CancellationToken ct);
+
     public abstract Task<IssuedTokens?> RedeemAsync(IMcpTokenService tokens, CancellationToken ct);
 }
 
 internal sealed record AuthorizationCodeGrant(string ClientId, string Code, string RedirectUri, string CodeVerifier)
     : TokenGrant(ClientId)
 {
+    public override Task<LiveGrant?> FindLiveAsync(IMcpTokenService tokens, CancellationToken ct) =>
+        tokens.FindLiveAuthCodeAsync(ClientId, Code, ct);
+
     public override Task<IssuedTokens?> RedeemAsync(IMcpTokenService tokens, CancellationToken ct) =>
         tokens.RedeemAuthCodeAsync(ClientId, Code, RedirectUri, CodeVerifier, ct);
 }
 
 internal sealed record RefreshTokenGrant(string ClientId, string RefreshToken) : TokenGrant(ClientId)
 {
+    public override Task<LiveGrant?> FindLiveAsync(IMcpTokenService tokens, CancellationToken ct) =>
+        tokens.FindLiveRefreshTokenAsync(ClientId, RefreshToken, ct);
+
     public override Task<IssuedTokens?> RedeemAsync(IMcpTokenService tokens, CancellationToken ct) =>
         tokens.RefreshAsync(ClientId, RefreshToken, ct);
 }

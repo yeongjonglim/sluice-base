@@ -24,7 +24,6 @@ internal static class EndpointMapper
         if (app.Configuration.GetValue($"{McpOptions.SectionName}:Enabled", true))
         {
             OAuthMetadataEndpoints.Map(app);
-            OAuthRegistrationEndpoints.Map(app);
             OAuthAuthorizeEndpoints.Map(app);
             OAuthTokenEndpoints.Map(app);
         }

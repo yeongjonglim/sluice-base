@@ -24,7 +24,6 @@ namespace SluiceBase.Api.Data.Converters;
 [EfCoreConverter<QueryLogId>]
 [EfCoreConverter<UpdateRequestId>]
 [EfCoreConverter<UpdateRequestEventId>]
-[EfCoreConverter<McpOAuthClientId>]
 [EfCoreConverter<McpAuthCodeId>]
 [EfCoreConverter<McpTokenId>]
 internal partial class VogenEfCoreConverters;

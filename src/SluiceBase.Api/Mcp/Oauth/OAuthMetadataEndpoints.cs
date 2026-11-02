@@ -20,11 +20,12 @@ internal static class OAuthMetadataEndpoints
                 ["issuer"] = baseUrl,
                 ["authorization_endpoint"] = $"{baseUrl}/mcp/oauth/authorize",
                 ["token_endpoint"] = $"{baseUrl}/mcp/oauth/token",
-                ["registration_endpoint"] = $"{baseUrl}/mcp/oauth/register",
                 ["response_types_supported"] = ResponseTypes,
                 ["grant_types_supported"] = GrantTypes,
                 ["code_challenge_methods_supported"] = CodeChallengeMethods,
                 ["token_endpoint_auth_methods_supported"] = TokenEndpointAuthMethods,
+                ["authorization_response_iss_parameter_supported"] = true,
+                ["client_id_metadata_document_supported"] = true,
             });
         }).AllowAnonymous();
     }
