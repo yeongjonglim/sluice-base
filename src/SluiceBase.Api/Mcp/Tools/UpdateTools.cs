@@ -8,15 +8,17 @@ using SluiceBase.Core.Updates;
 
 namespace SluiceBase.Api.Mcp.Tools;
 
-// Write-side MCP tools. An agent may SUBMIT an update request and read its status,
-// but can never approve, reject, cancel, or execute — those transitions stay REST/UI-only
-// and require a human operator. Kept separate from the read-only DatabaseTools.
+// Write-side MCP tools. An agent may SUBMIT an update request, read its status, and CANCEL
+// a request its own user submitted (cancelling only ever prevents a write). It can never
+// approve, reject, or execute — those transitions stay REST/UI-only and require a human
+// operator. Kept separate from the read-only DatabaseTools.
 [McpServerToolType]
 internal sealed class UpdateTools
 {
     [McpServerTool(Name = "submit_update_request")]
-    [Description("Submit a write/update SQL statement for human review. You can ONLY submit — you cannot " +
-        "approve, reject, cancel, or execute the request; a human operator does that in the app. " +
+    [Description("Submit a write/update SQL statement for human review. You can submit, and later cancel a " +
+        "request you submitted (cancel_update_request), but you cannot approve, reject, or execute it; " +
+        "a human operator does that in the app. " +
         "The statement is executed inside a system-managed transaction (rolled back during preview, " +
         "committed on execution), so do NOT include BEGIN/COMMIT/ROLLBACK or any transaction-control " +
         "statements in your SQL. Before approving, a reviewer can PREVIEW this SQL — it runs in the " +
@@ -66,7 +68,8 @@ internal sealed class UpdateTools
             id = detail.Id,
             status = detail.Status.ToString(),
             path,
-            message = "Submitted for human review — you cannot approve or execute it. To give the user a " +
+            message = "Submitted for human review — you cannot approve or execute it, but you can withdraw it " +
+                      "with cancel_update_request while it is still Pending or Approved. To give the user a " +
                       "clickable link, prefix this path with this MCP server's base URL (the origin you " +
                       $"connect to, without the /mcp suffix): {path}",
         };
@@ -115,6 +118,41 @@ internal sealed class UpdateTools
         {
             GetUpdateOutcome.Ok => result.Detail!,
             _ => throw new InvalidOperationException("Update request not found."),
+        };
+    }
+
+    [McpServerTool(Name = "cancel_update_request")]
+    [Description("Cancel (withdraw) an update request you submitted so it can never be executed. Only " +
+        "requests in the Pending or Approved state can be cancelled, and only by the user who submitted " +
+        "them. Cancelling is final — to make the change later, submit a new request. Use this when a " +
+        "request is no longer needed or was submitted with a mistake; it does not undo an already " +
+        "executed change.")]
+    public static async Task<object> CancelUpdateRequest(
+        [Description("The update request id (GUID) from submit_update_request or list_update_requests.")] string id,
+        [Description("Why the request is being cancelled — recorded on the request and shown to reviewers.")] string note,
+        IUpdateRequestService updates, ICurrentUserAccessor currentUser, CancellationToken ct)
+    {
+        var user = await currentUser.GetAsync(ct) ?? throw new InvalidOperationException("No authenticated user.");
+        if (!Guid.TryParse(id, out var g)) { throw new ArgumentException("id must be a GUID."); }
+        if (string.IsNullOrWhiteSpace(note)) { throw new ArgumentException("note is required."); }
+
+        var result = await updates.CancelAsync(user, UpdateRequestId.From(g), note.Trim(), requireSubmitter: true, ct);
+        return result.Outcome switch
+        {
+            CancelUpdateOutcome.Ok => new
+            {
+                id = result.Detail!.Id,
+                status = result.Detail.Status.ToString(),
+                message = "Cancelled — this request can no longer be approved or executed.",
+            },
+            // A Forbidden without a message means no access to the database at all; mask it as
+            // not-found, matching get_update_request, so agents can't probe for request ids.
+            CancelUpdateOutcome.NotFound => throw new InvalidOperationException("Update request not found."),
+            CancelUpdateOutcome.Forbidden => throw new InvalidOperationException(
+                result.Error ?? "Update request not found."),
+            CancelUpdateOutcome.Conflict => throw new InvalidOperationException(
+                $"Cannot cancel this update request: {result.Error}"),
+            _ => throw new InvalidOperationException("Update cancel error."),
         };
     }
 }

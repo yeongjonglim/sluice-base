@@ -404,11 +404,11 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         Assert.Contains("without them", text, StringComparison.OrdinalIgnoreCase);
     }
 
-    // ── Test 5: update tools present, mutation tools absent ──────────────────────
+    // ── Test 5: update tools present, approval/execution tools absent ────────────
 
     /// <summary>
-    /// The agent may submit and read update requests but must never be able to approve,
-    /// reject, cancel, or execute them — those transitions stay REST/UI-only. Enforced here at
+    /// The agent may submit, read, and cancel update requests but must never be able to
+    /// approve, reject, or execute them — those transitions stay REST/UI-only. Enforced here at
     /// the tool-discovery surface.
     /// </summary>
     [Fact]
@@ -431,10 +431,10 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         Assert.Contains("submit_update_request", toolNames);
         Assert.Contains("list_update_requests", toolNames);
         Assert.Contains("get_update_request", toolNames);
+        Assert.Contains("cancel_update_request", toolNames);
 
         Assert.DoesNotContain(toolNames, n => n.Contains("approve", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(toolNames, n => n.Contains("reject", StringComparison.OrdinalIgnoreCase));
-        Assert.DoesNotContain(toolNames, n => n.Contains("cancel", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(toolNames, n => n.Contains("execute", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -493,6 +493,123 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         var getText = ContentText(getResult);
         Assert.Contains(idMatch.Value, getText);
         Assert.Contains(reason, getText);
+    }
+
+    // ── Test 7: cancel_update_request withdraws the caller's own request ──────────
+
+    /// <summary>
+    /// cancel_update_request moves a request the caller submitted to Cancelled and records the
+    /// note; a second cancel is refused because the request is no longer Pending or Approved.
+    /// </summary>
+    [Fact]
+    public async Task CancelUpdateRequest_CancelsOwnRequest_AndRefusesSecondCancel()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (adminSession, adminXsrf, databaseId) = await AdminSessionWithDatabaseAsync(LoginHelper, factory.InitialisedApp, ct);
+        using var admin = adminSession;
+
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await bobSession.Client.GetAsync("/api/me", ct);
+        var users = await admin.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var bob = users!.Users.Single(u => u.Email == "bob@example.com");
+
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(admin, bob.Id, Permissions.UpdateSubmit, databaseId, adminXsrf, ct);
+
+        var accessToken = await MintAccessTokenAsync("bob", "dev", ct);
+        await using var transport = CreateMcpTransport(accessToken);
+        await using var mcpClient = await McpClient.CreateAsync(transport, cancellationToken: ct);
+
+        var submitResult = await mcpClient.CallToolAsync(
+            "submit_update_request",
+            new Dictionary<string, object?>
+            {
+                ["databaseId"] = databaseId,
+                ["sql"] = "UPDATE people SET active = true WHERE id = 1",
+                ["reason"] = "mcp-cancel-test",
+            },
+            cancellationToken: ct);
+        var id = ExtractGuid(ContentText(submitResult));
+
+        var cancelNote = $"mcp-cancel-{Guid.NewGuid():N}";
+        var cancelResult = await mcpClient.CallToolAsync(
+            "cancel_update_request",
+            new Dictionary<string, object?> { ["id"] = id, ["note"] = cancelNote },
+            cancellationToken: ct);
+        Assert.Contains("Cancelled", ContentText(cancelResult));
+
+        var getResult = await mcpClient.CallToolAsync(
+            "get_update_request",
+            new Dictionary<string, object?> { ["id"] = id },
+            cancellationToken: ct);
+        var getText = ContentText(getResult);
+        Assert.Contains("Cancelled", getText);
+        Assert.Contains(cancelNote, getText);
+
+        var secondCancel = await mcpClient.CallToolAsync(
+            "cancel_update_request",
+            new Dictionary<string, object?> { ["id"] = id, ["note"] = "again" },
+            cancellationToken: ct);
+        Assert.True(secondCancel.IsError, "Expected a second cancel to be refused");
+    }
+
+    // ── Test 8: cancel_update_request refuses other users' requests ──────────────
+
+    /// <summary>
+    /// Over MCP an agent may only withdraw requests its own user submitted — even with
+    /// update:submit on the database, it cannot cancel a teammate's request. The request
+    /// stays Pending.
+    /// </summary>
+    [Fact]
+    public async Task CancelUpdateRequest_RefusesRequestSubmittedByAnotherUser()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (adminSession, adminXsrf, databaseId) = await AdminSessionWithDatabaseAsync(LoginHelper, factory.InitialisedApp, ct);
+        using var admin = adminSession;
+
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await bobSession.Client.GetAsync("/api/me", ct);
+        var users = await admin.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var alice = users!.Users.Single(u => u.Email == "alice@example.com");
+        var bob = users.Users.Single(u => u.Email == "bob@example.com");
+
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(admin, alice.Id, Permissions.UpdateSubmit, databaseId, adminXsrf, ct);
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(admin, bob.Id, Permissions.UpdateSubmit, databaseId, adminXsrf, ct);
+
+        using var submitReq = new HttpRequestMessage(HttpMethod.Post, "/api/update");
+        submitReq.Headers.Add("X-XSRF-TOKEN", adminXsrf);
+        submitReq.Content = JsonContent.Create(new
+        {
+            databaseId,
+            sqlText = "UPDATE people SET active = true WHERE id = 1",
+            reason = "alice's change",
+        });
+        var submitResp = await admin.Client.SendAsync(submitReq, ct);
+        submitResp.EnsureSuccessStatusCode();
+        var id = ExtractGuid(await submitResp.Content.ReadAsStringAsync(ct));
+
+        var accessToken = await MintAccessTokenAsync("bob", "dev", ct);
+        await using var transport = CreateMcpTransport(accessToken);
+        await using var mcpClient = await McpClient.CreateAsync(transport, cancellationToken: ct);
+
+        var cancelResult = await mcpClient.CallToolAsync(
+            "cancel_update_request",
+            new Dictionary<string, object?> { ["id"] = id, ["note"] = "not mine" },
+            cancellationToken: ct);
+        Assert.True(cancelResult.IsError, "Expected cancelling another user's request to be refused");
+
+        var getResult = await mcpClient.CallToolAsync(
+            "get_update_request",
+            new Dictionary<string, object?> { ["id"] = id },
+            cancellationToken: ct);
+        Assert.Contains("Pending", ContentText(getResult));
+    }
+
+    private static string ExtractGuid(string text)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            text, "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+        Assert.True(match.Success, "Expected an update request id (GUID) in the response");
+        return match.Value;
     }
 
     // ── Private record types ─────────────────────────────────────────────────────
