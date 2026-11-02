@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Web;
 using Aspire.Hosting;
 using Aspire.Hosting.Testing;
@@ -440,11 +441,16 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         Assert.DoesNotContain(toolNames, n => n.Contains("execute", StringComparison.OrdinalIgnoreCase));
 
         // Clients use these hints to decide what needs the user's approval.
-        foreach (var tool in tools)
+        foreach (var tool in tools.Where(t => t.Name != "preview_update_request"))
         {
             Assert.True(tool.ProtocolTool.Annotations?.ReadOnlyHint, tool.Name);
             Assert.False(tool.ProtocolTool.Annotations?.OpenWorldHint, tool.Name);
         }
+
+        // Preview runs write SQL before rolling it back, so it must not claim to be read-only.
+        var preview = Assert.Single(tools, t => t.Name == "preview_update_request");
+        Assert.False(preview.ProtocolTool.Annotations?.ReadOnlyHint);
+        Assert.False(preview.ProtocolTool.Annotations?.DestructiveHint);
     }
 
     // ── Test 6: submit_update_request creates a Pending request readable via get ──
@@ -501,6 +507,69 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         var getText = ContentText(getResult);
         Assert.Contains(idMatch.Value, getText);
         Assert.Contains(reason, getText);
+    }
+
+    // ── Test 6b: preview_update_request runs the submitter's SQL and rolls it back ──
+
+    /// <summary>
+    /// The submitter can preview their own request over MCP. The SQL's before/after result sets come
+    /// back, and a second preview shows the same "before" row, proving the first run was rolled back.
+    /// </summary>
+    [Fact]
+    public async Task PreviewUpdateRequest_ReturnsBeforeAfterRows_AndRollsBack()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (adminSession, adminXsrf, databaseId) = await AdminSessionWithDatabaseAsync(LoginHelper, factory.InitialisedApp, ct);
+        using var admin = adminSession;
+
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        await bobSession.Client.GetAsync("/api/me", ct);
+        var users = await admin.Client.GetFromJsonAsync<ListUserBody>("/api/admin/user", ct);
+        var bob = users!.Users.Single(u => u.Email == "bob@example.com");
+
+        await DatabaseRoleTestHelper.AssignByDatabaseAsync(admin, bob.Id, Permissions.UpdateSubmit, databaseId, adminXsrf, ct);
+
+        var accessToken = await MintAccessTokenAsync("bob", "dev", ct);
+        await using var transport = CreateMcpTransport(accessToken);
+        await using var mcpClient = await McpClient.CreateAsync(transport, cancellationToken: ct);
+
+        var submitResult = await mcpClient.CallToolAsync(
+            "submit_update_request",
+            new Dictionary<string, object?>
+            {
+                ["databaseId"] = databaseId,
+                ["sql"] = "SELECT id, email FROM public.users WHERE id = 1; " +
+                          "UPDATE public.users SET email = 'mcp-preview@test.com' WHERE id = 1 RETURNING id, email",
+                ["reason"] = $"mcp-preview-{Guid.NewGuid():N}",
+            },
+            cancellationToken: ct);
+        var id = System.Text.RegularExpressions.Regex.Match(
+            ContentText(submitResult), "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}").Value;
+
+        async Task<JsonElement> PreviewAsync()
+        {
+            var result = await mcpClient.CallToolAsync(
+                "preview_update_request", new Dictionary<string, object?> { ["id"] = id }, cancellationToken: ct);
+            Assert.NotEqual(true, result.IsError);
+            return JsonDocument.Parse(ContentText(result)).RootElement;
+        }
+
+        // The MCP SDK omits null properties, so a successful preview has no "error" at all.
+        static JsonElement? Property(JsonElement element, string name) =>
+            element.EnumerateObject()
+                .Where(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                .Select(p => (JsonElement?)p.Value)
+                .FirstOrDefault();
+
+        var first = await PreviewAsync();
+        Assert.True(Property(first, "error") is null or { ValueKind: JsonValueKind.Null }, first.GetRawText());
+        Assert.Equal(1, Property(first, "affectedRows")!.Value.GetInt32());
+        Assert.Equal(2, Property(first, "resultSets")!.Value.GetArrayLength());
+
+        var second = await PreviewAsync();
+        Assert.Equal(
+            Property(first, "resultSets")!.Value[0].GetRawText(),
+            Property(second, "resultSets")!.Value[0].GetRawText());
     }
 
     // ── Test 7: cancel_update_request withdraws the caller's own request ──────────

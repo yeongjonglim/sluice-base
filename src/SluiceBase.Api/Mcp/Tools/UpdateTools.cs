@@ -9,10 +9,11 @@ using SluiceBase.Core.Updates;
 
 namespace SluiceBase.Api.Mcp.Tools;
 
-// Write-side MCP tools. An agent may SUBMIT an update request, read its status, and CANCEL
-// a request its own user submitted (cancelling only ever prevents a write). It can never
-// approve, reject, or execute — those transitions stay REST/UI-only and require a human
-// operator. Kept separate from the read-only DatabaseTools.
+// Write-side MCP tools. An agent may SUBMIT an update request, read its status, CANCEL a request
+// its own user submitted (cancelling only ever prevents a write), and PREVIEW a request, which runs
+// its SQL in a transaction that is always rolled back. It can never approve, reject, or execute —
+// those transitions stay REST/UI-only and require a human operator. Kept separate from the
+// read-only DatabaseTools.
 [McpServerToolType]
 internal sealed class UpdateTools
 {
@@ -22,11 +23,13 @@ internal sealed class UpdateTools
         "a human operator does that in the app. " +
         "The statement is executed inside a system-managed transaction (rolled back during preview, " +
         "committed on execution), so do NOT include BEGIN/COMMIT/ROLLBACK or any transaction-control " +
-        "statements in your SQL. Before approving, a reviewer can PREVIEW this SQL — it runs in the " +
-        "rolled-back transaction and returns any result sets it produces — so write the SQL so its " +
-        "preview reveals the before/after data change (see the 'sql' argument for how to structure it). " +
-        "On success this returns a 'url' to the request's page — give that clickable link to the " +
-        "user so they can review and approve it.")]
+        "statements in your SQL. The request can be PREVIEWED — run in the rolled-back transaction, " +
+        "returning any result sets it produces — by reviewers and, through preview_update_request, by " +
+        "you. Write the SQL so its preview reveals the before/after data change (see the 'sql' argument " +
+        "for how to structure it), then preview it once and show the user the result inline as a " +
+        "before/after comparison. On success this returns a 'url' to the request's page — give that " +
+        "clickable link to the user so they can review and approve it. Preview results are not saved on " +
+        "that page, so don't send the user there to see them.")]
     public static async Task<object> SubmitUpdateRequest(
         [Description("The database id (GUID) from list_databases.")] string databaseId,
         [Description("The write/update SQL to run once a human approves and executes it. Do not wrap it in a " +
@@ -67,8 +70,10 @@ internal sealed class UpdateTools
             status = detail.Status.ToString(),
             url,
             message = "Submitted for human review — you cannot approve or execute it, but you can withdraw it " +
-                      "with cancel_update_request while it is still Pending or Approved. Give the user this " +
-                      $"link to review it: {url}",
+                      "with cancel_update_request while it is still Pending or Approved. Call " +
+                      "preview_update_request with this id once and show the user its rows inline as a " +
+                      "before/after comparison; preview results are not saved on the request's page. " +
+                      $"Give the user this link to review and approve it: {url}",
         };
     }
 
@@ -150,6 +155,43 @@ internal sealed class UpdateTools
             CancelUpdateOutcome.Conflict => throw new InvalidOperationException(
                 $"Cannot cancel this update request: {result.Error}"),
             _ => throw new InvalidOperationException("Update cancel error."),
+        };
+    }
+
+    [McpServerTool(Name = "preview_update_request", Title = "Preview update request (runs write SQL, rolled back)",
+        ReadOnly = false, Destructive = false, OpenWorld = false)]
+    [Description("Preview an update request: RUN its write SQL against the database with the write credential " +
+        "inside a transaction that is always rolled back, and return the result sets it produces (for example " +
+        "the before/after SELECTs and RETURNING rows) and the affected row count. This performs real writes " +
+        "until the rollback: the data changes are undone, but sequence increments, NOTIFY, and calls out to " +
+        "other systems are not, and it holds row locks while it runs. Allowed only if you submitted the " +
+        "request or can approve or execute updates on its database, and only while it is Pending or Approved. " +
+        "Each run is recorded on the request's timeline, but its results are NOT saved: the request's page " +
+        "cannot show them, so present them to the user here, inline, as a before/after comparison of the " +
+        "changed rows (for example a small table with the key and each changed column before and after). " +
+        "Run it once per request; don't re-run it to show the same result again or send the user to the " +
+        "link to preview it themselves.")]
+    public static async Task<object> PreviewUpdateRequest(
+        [Description("The update request id (GUID) from submit_update_request or list_update_requests.")] string id,
+        IUpdateRequestService updates, ICurrentUserAccessor currentUser, CancellationToken ct)
+    {
+        var user = await currentUser.GetAsync(ct) ?? throw new InvalidOperationException("No authenticated user.");
+        if (!Guid.TryParse(id, out var g)) { throw new ArgumentException("id must be a GUID."); }
+
+        var result = await updates.PreviewAsync(user, UpdateRequestId.From(g), ct);
+        return result.Outcome switch
+        {
+            PreviewUpdateOutcome.Ok => result.Preview!,
+            // Masked like get_update_request, so agents can't probe for request ids they can't see.
+            PreviewUpdateOutcome.NotFound or PreviewUpdateOutcome.Forbidden => throw new InvalidOperationException(
+                "Update request not found, or you can only preview requests you submitted or can approve or execute."),
+            PreviewUpdateOutcome.Conflict => throw new InvalidOperationException(
+                $"Cannot preview this update request: {result.Error}"),
+            // Same structured guidance as run_query, so a cooperative agent drops the named columns.
+            PreviewUpdateOutcome.Blocked => SensitiveColumnBlockPayload.From(
+                [.. result.Blocked!.BlockedHits.Select(h => new BlockedColumn(h.Schema, h.Table, h.Column))],
+                result.Blocked.PolicyBlockReason),
+            _ => throw new InvalidOperationException("Update preview error."),
         };
     }
 }

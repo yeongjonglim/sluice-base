@@ -12,8 +12,8 @@ public class McpToolAnnotationTests
         .Where(m => m.GetCustomAttribute<McpServerToolAttribute>() is not null)
         .ToArray();
 
-    // Every tool is read-only from the client's point of view: submitting or cancelling only files or
-    // withdraws a request, and a human still decides what touches a database.
+    // Read-only from the client's point of view: submitting or cancelling only files or withdraws a
+    // request, and a human still decides what touches a database.
     public static TheoryData<string> Expected => new()
     {
         "list_databases",
@@ -38,10 +38,24 @@ public class McpToolAnnotationTests
         Assert.Equal(false, annotations.OpenWorldHint);
     }
 
+    // Preview runs the request's write SQL before rolling it back, so clients must treat it as a write.
+    [Fact]
+    public void PreviewTool_IsMarkedAsWritingButNotDestructive()
+    {
+        var method = ToolMethods.Single(m => m.GetCustomAttribute<McpServerToolAttribute>()!.Name == "preview_update_request");
+        var annotations = McpServerTool.Create(method).ProtocolTool.Annotations;
+
+        Assert.NotNull(annotations);
+        Assert.False(string.IsNullOrWhiteSpace(annotations.Title));
+        Assert.Equal(false, annotations.ReadOnlyHint);
+        Assert.Equal(false, annotations.DestructiveHint);
+        Assert.Equal(false, annotations.OpenWorldHint);
+    }
+
     [Fact]
     public void EveryTool_IsCovered()
     {
         var names = ToolMethods.Select(m => m.GetCustomAttribute<McpServerToolAttribute>()!.Name).Order();
-        Assert.Equal(Expected.Select(row => row.Data).Order(), names);
+        Assert.Equal(Expected.Select(row => row.Data).Append("preview_update_request").Order(), names);
     }
 }
