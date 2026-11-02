@@ -27,7 +27,7 @@ internal sealed class SchemaService(
 {
     public async Task<SchemaResult> GetAnnotatedSchemaAsync(User user, DatabaseId databaseId, CancellationToken ct)
     {
-        var database = await db.Databases.AsNoTracking()
+        var database = await db.Databases.AsNoTracking().Live()
             .Include(d => d.Server)
             .SingleOrDefaultAsync(d => d.Id == databaseId, ct);
         if (database is null)

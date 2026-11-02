@@ -250,7 +250,7 @@ internal static class UpdateEndpoints
             return TypedResults.Conflict("Server was deleted. Cannot execute.");
         }
 
-        var database = await db.Databases.AsNoTracking()
+        var database = await db.Databases.AsNoTracking().Live()
             .Include(d => d.Server)
             .SingleOrDefaultAsync(s => s.Id == request.DatabaseId, ct);
         if (database is null || !database.CanWrite)

@@ -101,7 +101,7 @@ internal sealed class SensitiveColumnGuard(
         string connectionString;
         try
         {
-            var database = await db.Databases.AsNoTracking()
+            var database = await db.Databases.AsNoTracking().Live()
                 .Include(d => d.Server)
                 .SingleAsync(d => d.Id == databaseId, token);
             engine = engineRegistry.Resolve(database.Server!.Kind);

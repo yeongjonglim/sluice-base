@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
+using SluiceBase.Api.Servers;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Servers;
 using SluiceBase.Core.Users;
@@ -72,7 +73,7 @@ internal static class SensitiveColumnEndpoints
         TimeProvider clock,
         CancellationToken ct)
     {
-        var dbExists = await db.Databases.AnyAsync(d => d.Id == databaseId, ct);
+        var dbExists = await db.Databases.Live().AnyAsync(d => d.Id == databaseId, ct);
         if (!dbExists)
         {
             return TypedResults.NotFound();

@@ -81,7 +81,7 @@ internal sealed class UpdateRequestService(
         User user, DatabaseId databaseId, string sqlText, string reason,
         UpdateRequestId? sourceRequestId, CancellationToken ct)
     {
-        var database = await db.Databases.AsNoTracking()
+        var database = await db.Databases.AsNoTracking().Live()
             .Include(d => d.Server)
             .SingleOrDefaultAsync(d => d.Id == databaseId, ct);
         if (database is null)
@@ -234,7 +234,7 @@ internal sealed class UpdateRequestService(
             return new PreviewUpdateResult(PreviewUpdateOutcome.Conflict, null, "Server was deleted. Cannot preview.", null);
         }
 
-        var database = await db.Databases.AsNoTracking()
+        var database = await db.Databases.AsNoTracking().Live()
             .Include(d => d.Server)
             .SingleOrDefaultAsync(s => s.Id == request.DatabaseId, ct);
         if (database is null || !database.CanWrite)
