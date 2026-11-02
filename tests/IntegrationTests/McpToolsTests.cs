@@ -554,18 +554,22 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
             return JsonDocument.Parse(ContentText(result)).RootElement;
         }
 
-        static JsonElement Property(JsonElement element, string name) =>
-            element.EnumerateObject().First(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase)).Value;
+        // The MCP SDK omits null properties, so a successful preview has no "error" at all.
+        static JsonElement? Property(JsonElement element, string name) =>
+            element.EnumerateObject()
+                .Where(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                .Select(p => (JsonElement?)p.Value)
+                .FirstOrDefault();
 
         var first = await PreviewAsync();
-        Assert.Equal(JsonValueKind.Null, Property(first, "error").ValueKind);
-        Assert.Equal(1, Property(first, "affectedRows").GetInt32());
-        Assert.Equal(2, Property(first, "resultSets").GetArrayLength());
+        Assert.True(Property(first, "error") is null or { ValueKind: JsonValueKind.Null }, first.GetRawText());
+        Assert.Equal(1, Property(first, "affectedRows")!.Value.GetInt32());
+        Assert.Equal(2, Property(first, "resultSets")!.Value.GetArrayLength());
 
         var second = await PreviewAsync();
         Assert.Equal(
-            Property(first, "resultSets")[0].GetRawText(),
-            Property(second, "resultSets")[0].GetRawText());
+            Property(first, "resultSets")!.Value[0].GetRawText(),
+            Property(second, "resultSets")!.Value[0].GetRawText());
     }
 
     // ── Test 7: cancel_update_request withdraws the caller's own request ──────────
