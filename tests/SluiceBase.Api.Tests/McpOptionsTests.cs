@@ -34,40 +34,4 @@ public class McpOptionsTests
 
         Assert.Equal("sluicebase", options.GetValidatedServerName());
     }
-
-    [Theory]
-    [InlineData("https://sluice.example.com/", "https://sluice.example.com")]
-    [InlineData("https://Sluice.Example.com", "https://sluice.example.com")]
-    [InlineData("http://localhost:5443", "http://localhost:5443")]
-    [InlineData("https://sluice.example.com:443", "https://sluice.example.com")]
-    public void GetValidatedPublicBaseUrl_Canonicalises(string input, string expected)
-    {
-        var options = new McpOptions { PublicBaseUrl = input };
-
-        Assert.Equal(expected, options.GetValidatedPublicBaseUrl());
-    }
-
-    [Theory]
-    [InlineData("https://x.example/sluice")]
-    [InlineData("https://x.example?a=1")]
-    [InlineData("https://x.example#f")]
-    [InlineData("ftp://x.example")]
-    [InlineData("x.example")]
-    [InlineData("https://user@x.example")]
-    public void GetValidatedPublicBaseUrl_RejectsNonOrigins(string input)
-    {
-        var options = new McpOptions { PublicBaseUrl = input };
-
-        Assert.Null(options.GetValidatedPublicBaseUrl());
-    }
-
-    [Theory]
-    [InlineData(null)]
-    [InlineData("")]
-    public void GetValidatedPublicBaseUrl_NullOrEmpty_ReturnsNull(string? input)
-    {
-        var options = new McpOptions { PublicBaseUrl = input };
-
-        Assert.Null(options.GetValidatedPublicBaseUrl());
-    }
 }

@@ -476,7 +476,7 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
 
         var submitText = ContentText(submitResult);
         Assert.Contains("Pending", submitText);
-        // The AppHost sets Mcp__PublicBaseUrl, so the link uses it rather than the API's internal host.
+        // The AppHost sets PublicBaseUrl, so the link uses it rather than the API's internal host.
         Assert.Contains("https://localhost:5443/update/", submitText);
 
         var idMatch = System.Text.RegularExpressions.Regex.Match(
