@@ -56,12 +56,12 @@ builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<ISchemaService, SchemaService>();
 builder.Services.AddScoped<IQueryService, QueryService>();
 builder.Services.AddScoped<IUpdateRequestService, UpdateRequestService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IBaseUrlResolver, BaseUrlResolver>();
 builder.Services.AddScoped<SensitiveColumnGuard>();
 
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
 builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddSingleton<IMcpIssuer, McpIssuer>();
 
 var cimdAllowLoopback = builder.Configuration.GetValue<bool>(
     $"{McpOptions.SectionName}:{nameof(McpOptions.Cimd)}:{nameof(McpCimdOptions.AllowLoopbackForTesting)}");
@@ -116,11 +116,14 @@ if (builder.Configuration.GetValue("Migrations:AutoApply", true)
     await db.Database.MigrateAsync();
 }
 
+BaseUrlResolver.Validate(
+    builder.Configuration[BaseUrlResolver.ConfigKey],
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<BaseUrlResolver>());
+
 if (mcpEnabled)
 {
     var mcpLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<McpOptions>();
     var mcpOptions = app.Services.GetRequiredService<IOptions<McpOptions>>().Value;
-    mcpOptions.GetValidatedPublicBaseUrl(mcpLogger);
 
     // Logs any misconfigured Mcp:Clients entry at boot instead of on the first sign-in.
     mcpOptions.GetValidatedClients(mcpLogger);

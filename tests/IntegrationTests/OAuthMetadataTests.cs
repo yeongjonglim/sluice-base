@@ -67,7 +67,7 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
     public async Task Issuer_IsConfiguredPublicBaseUrl_InBothMetadataDocuments()
     {
         var ct = TestContext.Current.CancellationToken;
-        // Hit the API directly: the issuer must still be the AppHost's Mcp__PublicBaseUrl, not the API's own host.
+        // Hit the API directly: the issuer must still be the AppHost's PublicBaseUrl, not the API's own host.
         using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
 
         var resource = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-protected-resource", ct);

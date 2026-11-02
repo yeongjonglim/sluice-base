@@ -1,3 +1,5 @@
+using SluiceBase.Api.Services;
+
 namespace SluiceBase.Api.Mcp.Oauth;
 
 internal static class OAuthMetadataEndpoints
@@ -10,9 +12,9 @@ internal static class OAuthMetadataEndpoints
 
     public static void Map(IEndpointRouteBuilder app)
     {
-        app.MapGet("/.well-known/oauth-protected-resource", (IMcpIssuer issuer) =>
+        app.MapGet("/.well-known/oauth-protected-resource", (IBaseUrlResolver baseUrlResolver) =>
         {
-            var baseUrl = issuer.BaseUrl();
+            var baseUrl = baseUrlResolver.Resolve();
             return Results.Ok(new Dictionary<string, object?>
             {
                 ["resource"] = baseUrl,
@@ -21,9 +23,9 @@ internal static class OAuthMetadataEndpoints
             });
         }).AllowAnonymous();
 
-        app.MapGet("/.well-known/oauth-authorization-server", (IMcpIssuer issuer) =>
+        app.MapGet("/.well-known/oauth-authorization-server", (IBaseUrlResolver baseUrlResolver) =>
         {
-            var baseUrl = issuer.BaseUrl();
+            var baseUrl = baseUrlResolver.Resolve();
             return Results.Ok(new Dictionary<string, object?>
             {
                 ["issuer"] = baseUrl,

@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Mcp.Clients;
+using SluiceBase.Api.Services;
 using SluiceBase.Core.Branding;
 
 namespace SluiceBase.Api.Mcp.Oauth;
@@ -18,7 +19,7 @@ internal static class OAuthAuthorizeEndpoints
             IMcpClientResolver resolver,
             IAntiforgery antiforgery,
             IMcpTokenService tokens,
-            IMcpIssuer issuer,
+            IBaseUrlResolver baseUrlResolver,
             IOptions<BrandingOptions> branding,
             CancellationToken ct) =>
         {
@@ -52,7 +53,7 @@ internal static class OAuthAuthorizeEndpoints
             }
 
             var code = await tokens.IssueAuthCodeAsync(request.ClientId, userId, request.RedirectUri, request.CodeChallenge, ct);
-            return RedirectToClient(issuer, request, ("code", code), ("state", request.State));
+            return RedirectToClient(baseUrlResolver, request, ("code", code), ("state", request.State));
         }).AllowAnonymous();
 
         app.MapPost("/mcp/oauth/authorize", async (
@@ -60,7 +61,7 @@ internal static class OAuthAuthorizeEndpoints
             IMcpClientResolver resolver,
             IAntiforgery antiforgery,
             IMcpTokenService tokens,
-            IMcpIssuer issuer,
+            IBaseUrlResolver baseUrlResolver,
             CancellationToken ct) =>
         {
             var form = await ctx.Request.ReadFormAsync(ct);
@@ -89,11 +90,11 @@ internal static class OAuthAuthorizeEndpoints
 
             if (form["decision"] != "allow")
             {
-                return RedirectToClient(issuer, request, ("error", "access_denied"), ("state", request.State));
+                return RedirectToClient(baseUrlResolver, request, ("error", "access_denied"), ("state", request.State));
             }
 
             var code = await tokens.IssueAuthCodeAsync(request.ClientId, userId, request.RedirectUri, request.CodeChallenge, ct);
-            return RedirectToClient(issuer, request, ("code", code), ("state", request.State));
+            return RedirectToClient(baseUrlResolver, request, ("code", code), ("state", request.State));
         }).AllowAnonymous();
     }
 
@@ -128,11 +129,11 @@ internal static class OAuthAuthorizeEndpoints
             [OpenIdConnectDefaults.AuthenticationScheme]);
 
     private static IResult RedirectToClient(
-        IMcpIssuer issuer, AuthorizeRequest request, params (string Key, string Value)[] parameters)
+        IBaseUrlResolver baseUrlResolver, AuthorizeRequest request, params (string Key, string Value)[] parameters)
     {
         var sep = request.RedirectUri.Contains('?') ? '&' : '?';
         var query = string.Join('&', parameters
-            .Append((Key: "iss", Value: issuer.BaseUrl()))
+            .Append((Key: "iss", Value: baseUrlResolver.Resolve()))
             .Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value)}"));
         return Results.Redirect($"{request.RedirectUri}{sep}{query}");
     }
