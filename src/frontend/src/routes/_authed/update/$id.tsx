@@ -23,11 +23,11 @@ import {
   IconSend,
   IconX,
 } from "@tabler/icons-react";
-import { useMediaQuery } from "@mantine/hooks";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import React, { useState } from "react";
 import type { UpdatePreviewResponse } from "@/api/hooks";
+import { useCompactLayout } from "@/utils/useCompactLayout";
 import { SqlEditor } from "@/components/SqlEditor";
 import { PreviewPane } from "@/components/update/PreviewPane";
 import {
@@ -111,7 +111,7 @@ function UpdateDetailPage() {
   const preview = usePreviewUpdate();
   // Below the navbar breakpoint the two-axis splitter leaves the timeline too
   // narrow to read, so the page becomes one scrolling column of full-width blocks.
-  const isMobile = useMediaQuery("(max-width: 47.99em)", false, { getInitialValueInEffect: false });
+  const isMobile = useCompactLayout();
 
   const [reviewAction, setReviewAction] = useState<ReviewAction | null>(null);
   const [reviewNote, setReviewNote] = useState("");
@@ -454,7 +454,7 @@ function UpdateDetailPage() {
 
       {isMobile ? (
         /* One scrolling column: SQL, then the dry-run pane, then the audit trail. */
-        <Box style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
+        <Box data-detail-scroll style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
           <Box
             p="xs"
             style={{ height: 260, borderBottom: BORDER, display: "flex", flexDirection: "column" }}

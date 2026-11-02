@@ -11,7 +11,7 @@ import {
   Tabs,
   Text,
 } from "@mantine/core";
-import { useMediaQuery, useOs } from "@mantine/hooks";
+import { useOs } from "@mantine/hooks";
 import {
   IconChartBar,
   IconChevronDown,
@@ -29,6 +29,7 @@ import { Prec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import type { ReactCodeMirrorRef } from "@uiw/react-codemirror";
 import { SqlEditor } from "@/components/SqlEditor";
+import { useCompactLayout } from "@/utils/useCompactLayout";
 import { useSessionState } from "@/utils/useSessionState";
 import { meQueryOptions, useSchema } from "@/api/hooks";
 import { DatabaseSelect } from "@/components/DatabaseSelect";
@@ -62,8 +63,6 @@ const noIndentKeymap = Prec.highest(
 
 type MobileTab = "schema" | "editor" | "results";
 
-const MOBILE_QUERY = "(max-width: 47.99em)";
-
 export const Route = createFileRoute("/_authed/query/")({
   beforeLoad: ({ context }) => {
     const me = context.queryClient.getQueryData(meQueryOptions.queryKey);
@@ -78,7 +77,7 @@ export function QueryPage() {
   const isMac = useOs({ getValueInEffect: false }) === "macos";
   // Read the viewport synchronously so a phone never paints the three-pane
   // desktop layout for a frame.
-  const isMobile = useMediaQuery(MOBILE_QUERY, false, { getInitialValueInEffect: false });
+  const isMobile = useCompactLayout();
   const [selectedDatabaseId, setSelectedDatabaseId] = useSessionState<string | null>(
     "sluice:query:db",
     null,
@@ -328,7 +327,7 @@ export function QueryPage() {
               <IconChevronDown size={18} />
             </Button>
           </Menu.Target>
-          <Menu.Dropdown>
+          <Menu.Dropdown w={260}>
             <Menu.Item
               leftSection={<IconPlayerTrackNext size={14} />}
               onClick={() => handleRun(true, editorRef.current?.view)}
@@ -348,7 +347,7 @@ export function QueryPage() {
               onClick={() => handleExplain(true, editorRef.current?.view)}
               disabled={runDisabled || explain.isRunning}
             >
-              Explain with timings (runs the query)
+              Explain with timings (executes)
             </Menu.Item>
           </Menu.Dropdown>
         </Menu>
