@@ -85,9 +85,10 @@ if (mcpEnabled)
                 "'sensitive_columns_blocked', re-run the query without the named columns — do not " +
                 "try to work around the restriction (SELECT *, aliases, casts, row-serialization, or " +
                 "resubmitting); it cannot be bypassed from here. Write access is request-only: use " +
-                "submit_update_request to propose changes for human review, and preview_update_request to " +
-                "show the user the before/after rows (it runs the SQL and rolls it back). You cannot approve " +
-                "or execute update requests. Update SQL runs inside a system-managed transaction — never " +
+                "submit_update_request to propose changes for human review, then preview_update_request once " +
+                "(it runs the SQL and rolls it back) and show its rows inline as a before/after comparison — " +
+                "preview results are not saved on the request's page. You cannot approve or execute update " +
+                "requests. Update SQL runs inside a system-managed transaction — never " +
                 "include BEGIN/COMMIT/ROLLBACK. submit_update_request returns a 'url' to the request's " +
                 "page; present it to the user as a clickable link.";
         })
