@@ -16,6 +16,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import { modals } from "@mantine/modals";
 import {
   IconChevronDown,
   IconChevronUp,
@@ -169,11 +170,9 @@ function ServerRow({ server, onEdit }: { server: ServerItem; onEdit: () => void 
           </Text>
         </Table.Td>
         <Table.Td>
-          {server.isDisabled && (
-            <Badge color="gray" variant="light">
-              Disabled
-            </Badge>
-          )}
+          <Badge variant="light" color={server.isDisabled ? "gray" : "teal"}>
+            {server.isDisabled ? "Disabled" : "Active"}
+          </Badge>
         </Table.Td>
         <Table.Td>
           <ActionIcon
@@ -193,7 +192,21 @@ function ServerRow({ server, onEdit }: { server: ServerItem; onEdit: () => void 
               variant="subtle"
               color="red"
               loading={deleteServer.isPending}
-              onClick={() => deleteServer.mutate(server.id)}
+              onClick={() =>
+                modals.openConfirmModal({
+                  title: "Delete server?",
+                  children: (
+                    <Text size="sm">
+                      Deleting <b>{server.name}</b> also removes its databases and credentials.
+                      Queries and update requests that reference them stop working. This cannot be
+                      undone.
+                    </Text>
+                  ),
+                  labels: { confirm: "Delete server", cancel: "Cancel" },
+                  confirmProps: { color: "red" },
+                  onConfirm: () => deleteServer.mutate(server.id),
+                })
+              }
               title="Delete"
             >
               <IconTrash size={16} />

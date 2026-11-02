@@ -216,6 +216,7 @@ function UpdateListPage() {
                   <Table.Th>Submitted by</Table.Th>
                   <Table.Th>Reason</Table.Th>
                   <Table.Th>Submitted</Table.Th>
+                  <Table.Th style={{ width: 40 }} aria-label="Open" />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
@@ -238,6 +239,22 @@ function UpdateListPage() {
                       {r.reason}
                     </Table.Td>
                     <Table.Td>{new Date(r.submittedAt).toLocaleString()}</Table.Td>
+                    <Table.Td>
+                      {/* The row opens on click for pointer users; this link is the
+                          keyboard and screen-reader path to the same request. */}
+                      <Link
+                        to="/update/$id"
+                        params={{ id: r.id }}
+                        aria-label={`Open request: ${r.reason}`}
+                        style={{
+                          display: "inline-flex",
+                          color: "var(--mantine-color-dimmed)",
+                          borderRadius: "var(--mantine-radius-sm)",
+                        }}
+                      >
+                        <IconChevronRight size={16} />
+                      </Link>
+                    </Table.Td>
                   </Table.Tr>
                 ))}
               </Table.Tbody>

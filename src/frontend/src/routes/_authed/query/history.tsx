@@ -1,6 +1,7 @@
 import {
   ActionIcon,
   Alert,
+  Box,
   Group,
   MultiSelect,
   Paper,
@@ -18,7 +19,6 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import type { QueryHistoryFilters, QueryHistoryItem } from "@/api/hooks";
 import { meQueryOptions, useCatalogServer, useQueryHistory } from "@/api/hooks";
-import { SqlEditor } from "@/components/SqlEditor";
 import { useHasPermission } from "@/auth/permission";
 
 type HistorySearch = {
@@ -309,13 +309,26 @@ function HistoryEntry({ item, canAudit }: { item: QueryHistoryItem; canAudit: bo
           </Text>
         </Alert>
       )}
-      <SqlEditor
-        value={item.queryText}
-        readOnly
-        editable={false}
-        height="auto"
-        maxHeight="240px"
-      />
+      {/* A read-only listing does not need a full editor instance per row; the text
+          is what an auditor scans, and a hundred CodeMirrors cost far more than they show. */}
+      <Box
+        style={{
+          maxHeight: 240,
+          overflow: "auto",
+          background: "var(--mantine-color-default-hover)",
+          borderRadius: "var(--mantine-radius-sm)",
+          padding: "var(--mantine-spacing-xs)",
+        }}
+      >
+        <Text
+          component="pre"
+          size="xs"
+          ff="monospace"
+          style={{ margin: 0, whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+        >
+          {item.queryText}
+        </Text>
+      </Box>
     </Paper>
   );
 }
