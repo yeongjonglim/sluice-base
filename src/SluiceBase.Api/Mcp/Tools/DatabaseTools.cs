@@ -10,7 +10,7 @@ namespace SluiceBase.Api.Mcp.Tools;
 [McpServerToolType]
 internal sealed class DatabaseTools
 {
-    [McpServerTool(Name = "list_databases")]
+    [McpServerTool(Name = "list_databases", Title = "List databases", ReadOnly = true, OpenWorld = false)]
     [Description("List databases the authenticated user can query, grouped by server.")]
     public static async Task<object> ListDatabases(
         ICatalogService catalog, ICurrentUserAccessor currentUser, CancellationToken ct)
@@ -21,7 +21,7 @@ internal sealed class DatabaseTools
         return result;
     }
 
-    [McpServerTool(Name = "get_schema")]
+    [McpServerTool(Name = "get_schema", Title = "Get database schema", ReadOnly = true, OpenWorld = false)]
     [Description("Return the table/column schema for a database the user can query. Sensitive columns are flagged.")]
     public static async Task<object> GetSchema(
         [Description("The database id (GUID) from list_databases.")] string databaseId,
@@ -39,7 +39,7 @@ internal sealed class DatabaseTools
         };
     }
 
-    [McpServerTool(Name = "run_query")]
+    [McpServerTool(Name = "run_query", Title = "Run read-only query", ReadOnly = true, OpenWorld = false)]
     [Description("Execute a read-only SQL query against a database the user can query. Returns columns and rows. " +
         "Sensitive columns are enforced server-side: if a query is blocked, the result names the offending columns — " +
         "re-run without them instead of trying to work around the restriction, which cannot be bypassed from here.")]

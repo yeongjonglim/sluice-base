@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using ModelContextProtocol.Authentication;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
@@ -62,6 +63,19 @@ builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
 var mcpEnabled = builder.Configuration.GetValue($"{McpOptions.SectionName}:Enabled", true);
 if (mcpEnabled)
 {
+    // Serves /.well-known/oauth-protected-resource and its path-specific forms (RFC 9728) and writes
+    // the 401's resource_metadata pointer, both from the request's origin. Tokens are validated by
+    // the McpBearer scheme, which forwards its challenge here.
+    builder.Services.AddAuthentication().AddMcp(options =>
+    {
+        options.ResourceMetadata = new ProtectedResourceMetadata { BearerMethodsSupported = ["header"] };
+        options.Events.OnResourceMetadataRequest = context =>
+        {
+            context.ResourceMetadata!.AuthorizationServers = [context.HttpContext.Request.BaseUrl()];
+            return Task.CompletedTask;
+        };
+    });
+
     builder.Services.AddMcpServer(options =>
         {
             // House rule surfaced to every client session up front. Best-effort deterrence:
@@ -73,9 +87,8 @@ if (mcpEnabled)
                 "resubmitting); it cannot be bypassed from here. Write access is request-only: use " +
                 "submit_update_request to propose changes for human review. You cannot approve or " +
                 "execute update requests. Update SQL runs inside a system-managed transaction — never " +
-                "include BEGIN/COMMIT/ROLLBACK. Tool results return server-relative paths (e.g. " +
-                "/update/{id}); prefix them with this MCP server's base URL — the origin you connect " +
-                "to, without the /mcp suffix — to present clickable links to the user.";
+                "include BEGIN/COMMIT/ROLLBACK. submit_update_request returns a 'url' to the request's " +
+                "page; present it to the user as a clickable link.";
         })
         .WithHttpTransport()
         .WithTools<DatabaseTools>()

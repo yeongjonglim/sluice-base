@@ -74,7 +74,19 @@ docker run -p 8080:8080 \
 
 The app is available at `http://localhost:8080`.
 
-> **HTTPS:** deploy behind a reverse proxy (nginx, Caddy, Traefik) that terminates TLS. The container listens on HTTP only.
+### Behind a reverse proxy
+
+The container listens on HTTP only, so deploy it behind a reverse proxy (nginx, Caddy, Traefik, a Kubernetes ingress) that terminates TLS. SluiceBase builds its absolute URLs (the OIDC redirect URI, the MCP OAuth issuer and discovery documents, links MCP tools return) from the request, so the proxy has to pass the public address through:
+
+1. **`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`** on the container. ASP.NET Core then honours `X-Forwarded-Proto` and `X-Forwarded-For` from any proxy address. Without it every request looks like plain `http`, so the OIDC redirect URI becomes `http://…/signin-oidc` and sign-in fails. Since any sender is trusted, only the proxy should be able to reach port 8080.
+2. **The proxy forwards the original `Host` header and sets `X-Forwarded-Proto`.** `X-Forwarded-Host` is not honoured, so the public hostname must arrive in `Host`. ingress-nginx does both by default. Plain nginx needs:
+   ```nginx
+   proxy_set_header Host $host;
+   proxy_set_header X-Forwarded-Proto $scheme;
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   ```
+
+Users reaching SluiceBase at more than one hostname (for example an internal and an external one) each get URLs for the hostname they used.
 
 ## Environment variables
 
@@ -84,6 +96,7 @@ The app is available at `http://localhost:8080`.
 | `Oidc__Authority` | ✓ | — | OIDC authority URL (e.g. `https://keycloak/realms/myrealm`) |
 | `Oidc__ClientId` | ✓ | — | OIDC client ID |
 | `Oidc__ClientSecret` | ✓ | — | OIDC client secret |
+| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | ✓ behind a proxy | `false` | Trust `X-Forwarded-Proto`/`X-Forwarded-For` from the TLS-terminating proxy — see [Behind a reverse proxy](#behind-a-reverse-proxy) |
 | `Migrations__AutoApply` | | `true` | Apply pending DB migrations on startup |
 | `Permissions__Bootstrap__Admins__0` | | — | Email of the first admin (granted full permissions on first login) |
 | `Branding__AppName` | | `SluiceBase` | Application name shown in the UI |

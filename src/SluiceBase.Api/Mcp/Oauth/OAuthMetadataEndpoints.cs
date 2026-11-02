@@ -1,8 +1,9 @@
+using SluiceBase.Api.Extensions;
+
 namespace SluiceBase.Api.Mcp.Oauth;
 
 internal static class OAuthMetadataEndpoints
 {
-    private static readonly string[] BearerMethods = ["header"];
     private static readonly string[] ResponseTypes = ["code"];
     private static readonly string[] GrantTypes = ["authorization_code", "refresh_token"];
     private static readonly string[] CodeChallengeMethods = ["S256"];
@@ -10,20 +11,9 @@ internal static class OAuthMetadataEndpoints
 
     public static void Map(IEndpointRouteBuilder app)
     {
-        app.MapGet("/.well-known/oauth-protected-resource", (HttpContext ctx) =>
-        {
-            var baseUrl = BaseUrl(ctx);
-            return Results.Ok(new Dictionary<string, object?>
-            {
-                ["resource"] = baseUrl,
-                ["authorization_servers"] = new[] { baseUrl },
-                ["bearer_methods_supported"] = BearerMethods,
-            });
-        }).AllowAnonymous();
-
         app.MapGet("/.well-known/oauth-authorization-server", (HttpContext ctx) =>
         {
-            var baseUrl = BaseUrl(ctx);
+            var baseUrl = ctx.Request.BaseUrl();
             return Results.Ok(new Dictionary<string, object?>
             {
                 ["issuer"] = baseUrl,
@@ -37,6 +27,4 @@ internal static class OAuthMetadataEndpoints
             });
         }).AllowAnonymous();
     }
-
-    private static string BaseUrl(HttpContext ctx) => $"{ctx.Request.Scheme}://{ctx.Request.Host}";
 }

@@ -66,4 +66,19 @@ public sealed class BrandingHtmlTests(SluiceBaseStackFactory factory)
 
         Assert.DoesNotContain("window.__BRANDING__", content);
     }
+
+    [Theory]
+    [InlineData("/.well-known/unknown")]
+    [InlineData("/api/does-not-exist")]
+    [InlineData("/mcp/does-not-exist")]
+    public async Task UnmatchedServerOnlyPath_Returns404InsteadOfHtml(string path)
+    {
+        using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
+
+        var response = await client.GetAsync(path, TestContext.Current.CancellationToken);
+        var content = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.DoesNotContain("window.__BRANDING__", content);
+    }
 }

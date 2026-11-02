@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
+using ModelContextProtocol.AspNetCore.Authentication;
 using SluiceBase.Api.Mcp;
 using SluiceBase.Core.Permissions;
 
@@ -114,7 +115,10 @@ internal static class AuthSetup
                 };
             })
             .AddScheme<AuthenticationSchemeOptions, McpBearerAuthenticationHandler>(
-                McpBearerAuthenticationHandler.SchemeName, _ => { });
+                McpBearerAuthenticationHandler.SchemeName,
+                // The MCP SDK's scheme (registered with the MCP server in Program.cs) writes the 401's
+                // WWW-Authenticate resource_metadata pointer; this scheme only validates tokens.
+                options => options.ForwardChallenge = McpAuthenticationDefaults.AuthenticationScheme);
 
         services.AddAuthorization(options =>
         {

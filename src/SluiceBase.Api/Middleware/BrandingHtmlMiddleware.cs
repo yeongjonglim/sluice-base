@@ -15,6 +15,10 @@ internal sealed partial class BrandingHtmlMiddleware(
     IHttpClientFactory httpClientFactory,
     ILogger<BrandingHtmlMiddleware> logger)
 {
+    // These prefixes never name a page, so an unmatched path under them is a real 404. A client
+    // probing an unserved discovery document must see "not found", not the SPA with a 200.
+    private static readonly PathString[] ServerOnlyPrefixes = ["/.well-known", "/api", "/mcp"];
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
@@ -31,7 +35,8 @@ internal sealed partial class BrandingHtmlMiddleware(
         }
 
         // Only serve the SPA fallback for GET requests.
-        if (!HttpMethods.IsGet(context.Request.Method))
+        if (!HttpMethods.IsGet(context.Request.Method)
+            || ServerOnlyPrefixes.Any(prefix => context.Request.Path.StartsWithSegments(prefix)))
         {
             await next(context);
             return;
