@@ -10,14 +10,21 @@ namespace SluiceBase.Api.Endpoints;
 
 internal static class AuthEndpoints
 {
+    // A path on this site. "//host" and "/\host" are relative URIs too, but browsers treat them as another host,
+    // and they ignore tabs and newlines, so "/\t/host" is rejected as well.
+    internal static bool IsLocalPath(string? url) =>
+        !string.IsNullOrEmpty(url)
+        && url[0] == '/'
+        && (url.Length == 1 || (url[1] != '/' && url[1] != '\\'))
+        && !url.Any(c => c == '\\' || char.IsControl(c))
+        && Uri.IsWellFormedUriString(url, UriKind.Relative);
+
     public static void Map(IEndpointRouteBuilder app)
     {
         app.MapGet("/login",
                 ChallengeHttpResult (string? returnUrl) =>
                 {
-                    var redirectUri = !string.IsNullOrEmpty(returnUrl) && Uri.IsWellFormedUriString(returnUrl, UriKind.Relative)
-                        ? returnUrl
-                        : "/";
+                    var redirectUri = IsLocalPath(returnUrl) ? returnUrl! : "/";
                     return TypedResults.Challenge(
                         new AuthenticationProperties { RedirectUri = redirectUri },
                         authenticationSchemes: [OpenIdConnectDefaults.AuthenticationScheme]);

@@ -45,4 +45,6 @@ COPY --from=api-build /publish .
 COPY --from=frontend-build /app/src/frontend/dist ./wwwroot
 
 EXPOSE 8080
+# The base image's unprivileged "app" user; nothing at runtime needs root.
+USER $APP_UID
 ENTRYPOINT ["dotnet", "SluiceBase.Api.dll"]

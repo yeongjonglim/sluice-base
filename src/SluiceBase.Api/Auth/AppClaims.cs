@@ -24,7 +24,8 @@ internal static class AppClaims
         ["given_name", "family_name"]
     ];
 
-    public const string InternalUserIdClaim = "sb:uid";
+    public const string Prefix = "sb:";
+    public const string InternalUserIdClaim = Prefix + "uid";
 
     extension(ClaimsPrincipal principal)
     {
@@ -48,6 +49,13 @@ internal static class AppClaims
         {
             return Email.Select(principal.FindFirstValue).FirstOrDefault(found => !string.IsNullOrEmpty(found));
         }
+
+        // Only the IdP's own verified email claim, never the username-style fallbacks GetEmail accepts, since a
+        // user may be able to choose those (or an unverified email) to look like someone else.
+        public string? GetVerifiedEmail() =>
+            string.Equals(principal.FindFirstValue("email_verified"), "true", StringComparison.OrdinalIgnoreCase)
+                ? principal.FindFirstValue("email")
+                : null;
 
         public string? GetName()
         {

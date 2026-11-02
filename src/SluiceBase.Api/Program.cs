@@ -144,6 +144,12 @@ app.UseForwardedHeaders(new ForwardedHeadersOptions
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost,
 });
 
+app.UseMiddleware<SecurityHeadersMiddleware>();
+if (!builder.Environment.IsDevelopment())
+{
+    app.UseHsts();
+}
+
 if (!builder.Environment.IsDevelopment())
 {
     app.UseStaticFiles();

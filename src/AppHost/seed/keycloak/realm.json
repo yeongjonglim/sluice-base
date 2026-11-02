@@ -32,6 +32,7 @@
       "username": "alice",
       "enabled": true,
       "email": "alice@example.com",
+      "emailVerified": true,
       "firstName": "Alice",
       "lastName": "Dev",
       "credentials": [
@@ -42,6 +43,7 @@
       "username": "bob",
       "enabled": true,
       "email": "bob@example.com",
+      "emailVerified": true,
       "firstName": "Bob",
       "lastName": "Dev",
       "credentials": [

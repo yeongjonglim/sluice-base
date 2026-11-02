@@ -29,4 +29,17 @@ public class AuthEndpointTests(SluiceBaseStackFactory factory)
             factory.InitialisedApp.GetEndpoint("keycloak", "http") + "realms/sluicebase/protocol/openid-connect/auth",
             response.Headers.Location!.ToString());
     }
+
+    [Fact]
+    public async Task Responses_CarrySecurityHeaders()
+    {
+        using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
+
+        var response = await client.GetAsync("/api/me", TestContext.Current.CancellationToken);
+
+        Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
+        Assert.Contains("frame-ancestors 'none'", response.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+    }
 }
+
