@@ -1,4 +1,5 @@
 using SluiceBase.Api.Mcp.Clients;
+using SluiceBase.Core.Mcp;
 
 namespace SluiceBase.Api.Mcp.Oauth;
 
@@ -13,19 +14,19 @@ internal static class OAuthTokenEndpoints
             CancellationToken ct) =>
         {
             var form = await ctx.Request.ReadFormAsync(ct);
-            var grant = form["grant_type"].ToString();
-            var clientId = form["client_id"].ToString();
-
-            var secret = grant switch
+            if (!GrantType.TryFrom(form["grant_type"].ToString(), out var grant))
             {
-                "authorization_code" => form["code"].ToString(),
-                "refresh_token" => form["refresh_token"].ToString(),
-                _ => null,
-            };
+                return InvalidGrant();
+            }
+
+            var clientId = form["client_id"].ToString();
+            var secret = grant == GrantType.AuthorizationCode
+                ? form["code"].ToString()
+                : form["refresh_token"].ToString();
 
             // Checked before resolving so an anonymous caller without a live code or refresh token
             // can never make us fetch a CIMD document.
-            if (secret is null || !await tokens.HasLiveGrantAsync(grant, clientId, secret, ct))
+            if (!await tokens.HasLiveGrantAsync(grant, clientId, secret, ct))
             {
                 return InvalidGrant();
             }
@@ -38,7 +39,7 @@ internal static class OAuthTokenEndpoints
                     return Results.Json(new { error = "temporarily_unavailable" }, statusCode: 503);
             }
 
-            var issued = grant == "authorization_code"
+            var issued = grant == GrantType.AuthorizationCode
                 ? await tokens.RedeemAuthCodeAsync(
                     clientId, secret, form["redirect_uri"].ToString(), form["code_verifier"].ToString(), ct)
                 : await tokens.RefreshAsync(clientId, secret, ct);

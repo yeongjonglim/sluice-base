@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Mcp;
+using SluiceBase.Core.Mcp;
 using SluiceBase.Core.Users;
 using Testcontainers.PostgreSql;
 
@@ -244,16 +245,16 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         var code = await svc.IssueAuthCodeAsync(
             ClientId, userId, redirectUri, TokenHasher.ComputePkceS256Challenge(codeVerifier), ct);
 
-        Assert.True(await svc.HasLiveGrantAsync("authorization_code", ClientId, code, ct));
-        Assert.False(await svc.HasLiveGrantAsync("authorization_code", "other-client", code, ct));
-        Assert.False(await svc.HasLiveGrantAsync("refresh_token", ClientId, code, ct));
-        Assert.False(await svc.HasLiveGrantAsync("authorization_code", ClientId, "bogus", ct));
+        Assert.True(await svc.HasLiveGrantAsync(GrantType.AuthorizationCode, ClientId, code, ct));
+        Assert.False(await svc.HasLiveGrantAsync(GrantType.AuthorizationCode, "other-client", code, ct));
+        Assert.False(await svc.HasLiveGrantAsync(GrantType.RefreshToken, ClientId, code, ct));
+        Assert.False(await svc.HasLiveGrantAsync(GrantType.AuthorizationCode, ClientId, "bogus", ct));
 
         var expired = CreateService(db, new FrozenTimeProvider(DateTimeOffset.UtcNow.AddHours(1)));
-        Assert.False(await expired.HasLiveGrantAsync("authorization_code", ClientId, code, ct));
+        Assert.False(await expired.HasLiveGrantAsync(GrantType.AuthorizationCode, ClientId, code, ct));
 
         Assert.NotNull(await svc.RedeemAuthCodeAsync(ClientId, code, redirectUri, codeVerifier, ct));
-        Assert.False(await svc.HasLiveGrantAsync("authorization_code", ClientId, code, ct));
+        Assert.False(await svc.HasLiveGrantAsync(GrantType.AuthorizationCode, ClientId, code, ct));
     }
 
     [Fact]
@@ -273,13 +274,13 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         Assert.NotNull(tokens);
         db.ChangeTracker.Clear();
 
-        Assert.True(await svc.HasLiveGrantAsync("refresh_token", ClientId, tokens.RefreshToken, ct));
-        Assert.False(await svc.HasLiveGrantAsync("refresh_token", "other-client", tokens.RefreshToken, ct));
-        Assert.False(await svc.HasLiveGrantAsync("refresh_token", ClientId, tokens.AccessToken, ct));
+        Assert.True(await svc.HasLiveGrantAsync(GrantType.RefreshToken, ClientId, tokens.RefreshToken, ct));
+        Assert.False(await svc.HasLiveGrantAsync(GrantType.RefreshToken, "other-client", tokens.RefreshToken, ct));
+        Assert.False(await svc.HasLiveGrantAsync(GrantType.RefreshToken, ClientId, tokens.AccessToken, ct));
         Assert.Empty(db.ChangeTracker.Entries());
 
         Assert.NotNull(await svc.RefreshAsync(ClientId, tokens.RefreshToken, ct));
-        Assert.False(await svc.HasLiveGrantAsync("refresh_token", ClientId, tokens.RefreshToken, ct));
+        Assert.False(await svc.HasLiveGrantAsync(GrantType.RefreshToken, ClientId, tokens.RefreshToken, ct));
     }
 
     /// <summary>Minimal <see cref="TimeProvider"/> that always returns the same instant.</summary>
