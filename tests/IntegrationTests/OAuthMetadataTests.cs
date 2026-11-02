@@ -59,6 +59,21 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
         Assert.Equal(["S256"], methods);
     }
 
+    [Fact]
+    public async Task Issuer_IsConfiguredPublicBaseUrl_InBothMetadataDocuments()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // Hit the API directly: the issuer must still be the AppHost's Mcp__PublicBaseUrl, not the API's own host.
+        using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
+
+        var resource = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-protected-resource", ct);
+        var server = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-authorization-server", ct);
+
+        Assert.Equal("https://localhost:5443", server.GetProperty("issuer").GetString());
+        Assert.Equal("https://localhost:5443", resource.GetProperty("resource").GetString());
+        Assert.Equal("https://localhost:5443", resource.GetProperty("authorization_servers").EnumerateArray().First().GetString());
+    }
+
     // ── Dynamic Client Registration ───────────────────────────────────────────
 
     [Fact]
