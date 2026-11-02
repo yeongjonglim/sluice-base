@@ -4,10 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import React from "react";
 import {
   useAuthedHealth,
+  useDisableUser,
+  useEnableUser,
   useGrantPermission,
   useMe,
   usePermissionCatalog,
   useRevokePermission,
+  useRevokeUserMcpGrants,
   useUsers,
 } from "@/api/hooks";
 
@@ -27,7 +30,8 @@ vi.mock("@mantine/notifications", () => ({
   notifications: { show: vi.fn() },
 }));
 
-const { apiRequest } = await import("@/api/client");
+const { apiRequest, ApiError } = await import("@/api/client");
+const { notifications } = await import("@mantine/notifications");
 
 function wrapper({ children }: { children: React.ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -101,3 +105,31 @@ describe("useRevokePermission", () => {
     );
   });
 });
+
+describe.each([
+  ["useDisableUser", useDisableUser, "/api/admin/user/user-2/disable", "POST", "User disabled"],
+  ["useEnableUser", useEnableUser, "/api/admin/user/user-2/enable", "POST", "User enabled"],
+  ["useRevokeUserMcpGrants", useRevokeUserMcpGrants, "/api/admin/user/user-2/mcp-grant", "DELETE", "MCP access revoked"],
+] as const)("%s", (_name, useHook, path, method, successTitle) => {
+  it(`sends ${method} ${path} and reports success`, async () => {
+    vi.mocked(apiRequest).mockResolvedValue(undefined);
+    const { result } = renderHook(() => useHook(), { wrapper });
+    result.current.mutate("user-2");
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(apiRequest).toHaveBeenCalledWith(path, { method });
+    expect(notifications.show).toHaveBeenCalledWith(expect.objectContaining({ title: successTitle }));
+  });
+
+  it("shows the API's validation message on failure", async () => {
+    vi.mocked(apiRequest).mockRejectedValue(
+      new ApiError(400, { errors: { userId: ["You cannot disable your own account."] } }),
+    );
+    const { result } = renderHook(() => useHook(), { wrapper });
+    result.current.mutate("user-2");
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "You cannot disable your own account.", color: "red" }),
+    );
+  });
+});
+

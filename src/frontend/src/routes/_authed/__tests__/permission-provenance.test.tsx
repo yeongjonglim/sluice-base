@@ -61,6 +61,10 @@ const USERS = {
       ],
     },
     {
+      id: "user-3", email: "carol@example.com", name: "Carol", lastLoginAt: null, disabledAt: null,
+      permissions: [],
+    },
+    {
       id: "user-2", email: "bob@example.com", name: "Bob", lastLoginAt: null, disabledAt: "2026-06-02T10:00:00Z",
       permissions: [
         // server:manage is inherited only via a group
@@ -138,6 +142,24 @@ describe("PermissionsAdminPage provenance", () => {
     expect(await screen.findByText("Revoke AI tool connections")).toBeInTheDocument();
     expect(screen.queryByText("Disable account")).not.toBeInTheDocument();
     expect(modals.openConfirmModal).not.toHaveBeenCalled();
+  });
+
+  it("asks before disabling another user, then disables them", async () => {
+    render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
+    await userEvent.click(within(rowFor("carol@example.com")).getByLabelText(/account actions for carol/i));
+    await userEvent.click(await screen.findByText("Disable account"));
+
+    expect(mockDisable).not.toHaveBeenCalled();
+    const confirm = vi.mocked(modals.openConfirmModal).mock.calls[0][0];
+    confirm.onConfirm?.();
+    expect(mockDisable).toHaveBeenCalledWith("user-3");
+  });
+
+  it("revokes a user's AI tool connections", async () => {
+    render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
+    await userEvent.click(within(rowFor("carol@example.com")).getByLabelText(/account actions for carol/i));
+    await userEvent.click(await screen.findByText("Revoke AI tool connections"));
+    expect(mockRevokeMcp).toHaveBeenCalledWith("user-3");
   });
 
   it("filters users by the search box", async () => {
