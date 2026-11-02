@@ -436,6 +436,24 @@ public class UpdateEndpointTests
         Assert.Equal(HttpStatusCode.BadRequest, (await session.Client.SendAsync(submitReq, ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task Submit_WithTransactionControl_Returns400()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AliceWithBlueServerAsync([Permissions.UpdateSubmit], ct);
+        using var _ = session;
+
+        using var submitReq = MutationRequest(HttpMethod.Post,
+            "/api/update",
+            xsrf,
+            new UpdateEndpoints.SubmitUpdateRequest(
+                databaseId, "UPDATE public.users SET email = email WHERE id = 1; COMMIT; BEGIN;", "test"));
+        var response = await session.Client.SendAsync(submitReq, ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("transaction", await response.Content.ReadAsStringAsync(ct));
+    }
+
     // ── filter tests ─────────────────────────────────────────────────────────
 
     [Fact]
