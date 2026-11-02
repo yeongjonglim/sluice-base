@@ -205,6 +205,62 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
         Assert.Equal(0, result.AffectedRows);
     }
 
+    private async Task<string> BlueWriterConnectionStringAsync(CancellationToken ct)
+    {
+        var connectionString = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+        return new NpgsqlConnectionStringBuilder(connectionString)
+        {
+            Username = "writer_blue",
+            Password = "writer_blue",
+        }.ConnectionString;
+    }
+
+    private static async Task<string?> UserEmailAsync(string connectionString, CancellationToken ct)
+    {
+        await using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand("SELECT email FROM public.users WHERE id = 1", conn);
+        return (string?)await cmd.ExecuteScalarAsync(ct);
+    }
+
+    // Each payload would commit its write despite the rollback if it reached Postgres as one batch.
+    [Theory]
+    [InlineData("UPDATE public.users SET email = 'guard@test.com' WHERE id = 1; COMMIT; BEGIN;")]
+    [InlineData("COMMIT AND CHAIN; UPDATE public.users SET email = 'guard@test.com' WHERE id = 1; COMMIT AND CHAIN;")]
+    [InlineData("COMMIT; UPDATE public.users SET email = 'guard@test.com' WHERE id = 1")]
+    public async Task TargetEngine_Postgres_ExecuteUpdate_RejectsTransactionControl_AndLeavesDataUnchanged(string sql)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await BlueWriterConnectionStringAsync(ct);
+        var before = await UserEmailAsync(connectionString, ct);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(async () =>
+            await _targetEngine.ExecuteUpdateAsync(connectionString, sql, commit: false, ct));
+
+        Assert.Contains("transaction", ex.Message);
+        Assert.Equal(before, await UserEmailAsync(connectionString, ct));
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_ExecuteUpdate_Preview_RunsEachStatementAndRollsBack()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await BlueWriterConnectionStringAsync(ct);
+        var before = await UserEmailAsync(connectionString, ct);
+
+        var result = await _targetEngine.ExecuteUpdateAsync(
+            connectionString,
+            "SELECT id, email FROM public.users WHERE id = 1; " +
+            "UPDATE public.users SET email = 'preview-only@test.com' WHERE id = 1 RETURNING id, email",
+            commit: false,
+            ct);
+
+        Assert.Equal(2, result.ResultSets.Count);
+        Assert.Equal(1, result.AffectedRows);
+        Assert.Equal(before, await UserEmailAsync(connectionString, ct));
+    }
+
     [Fact]
     public async Task TargetEngine_Postgres_ExecuteUpdate_ThrowsOnInvalidSql()
     {
