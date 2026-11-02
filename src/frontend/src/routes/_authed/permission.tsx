@@ -1,5 +1,4 @@
-import { Badge, Card, Group, Stack, Switch, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
-import { IconUsers } from "@tabler/icons-react";
+import { Badge, Box, Card, Group, Stack, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
@@ -12,15 +11,16 @@ import {
   useRevokePermission,
   useUsers,
 } from "@/api/hooks";
+import { EffectiveCell } from "@/components/EffectiveCell";
 
-const PERMISSION_LABELS: Record<string, { short: string; full: string }> = {
-  "permission:manage": { short: "Permission", full: "Manage permissions" },
-  "server:manage": { short: "Server", full: "Manage servers" },
-  "query:execute": { short: "Query", full: "Run read queries" },
-  "query:audit": { short: "Audit", full: "Audit read queries" },
-  "update:submit": { short: "Submit", full: "Submit update requests" },
-  "update:approve": { short: "Approve", full: "Approve update requests" },
-  "update:execute": { short: "Execute", full: "Execute approved updates" },
+const PERMISSION_LABELS: Record<string, { short: string; scope: string; full: string }> = {
+  "query:execute": { short: "Query", scope: "read", full: "Run read queries" },
+  "query:audit": { short: "Audit", scope: "read log", full: "Audit read queries" },
+  "update:submit": { short: "Submit", scope: "updates", full: "Submit update requests" },
+  "update:approve": { short: "Approve", scope: "updates", full: "Approve update requests" },
+  "update:execute": { short: "Execute", scope: "updates", full: "Execute approved updates" },
+  "server:manage": { short: "Servers", scope: "admin", full: "Manage servers" },
+  "permission:manage": { short: "Permissions", scope: "admin", full: "Manage permissions" },
 };
 
 type UserSummary = paths["/api/admin/user"]["get"]["responses"][200]["content"]["application/json"]["users"][0];
@@ -34,6 +34,38 @@ export const Route = createFileRoute("/_authed/permission")({
   },
   component: PermissionsAdminPage,
 });
+
+// The same control the Access matrix uses, so one fact always has one rendering.
+// Inert: it is a key, not a second set of toggles.
+function ProvenanceLegend() {
+  const noop = () => {};
+  return (
+    <Box inert style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center" }}>
+      <Group gap={8}>
+        <EffectiveCell fromDirect fromGroups={[]} onToggle={noop} ariaLabel="Direct grant" />
+        <Text size="xs" c="dimmed">Direct grant</Text>
+      </Group>
+      <Group gap={8}>
+        <EffectiveCell
+          fromDirect={false}
+          fromGroups={[{ groupId: "legend", name: "group" }]}
+          onToggle={noop}
+          ariaLabel="Inherited grant"
+        />
+        <Text size="xs" c="dimmed">Inherited via group</Text>
+      </Group>
+      <Group gap={8}>
+        <EffectiveCell
+          fromDirect
+          fromGroups={[{ groupId: "legend", name: "group" }]}
+          onToggle={noop}
+          ariaLabel="Direct and inherited"
+        />
+        <Text size="xs" c="dimmed">Both</Text>
+      </Group>
+    </Box>
+  );
+}
 
 export function PermissionsAdminPage() {
   const me = useMe();
@@ -51,9 +83,16 @@ export function PermissionsAdminPage() {
       (u.name ?? "").toLowerCase().includes(search.toLowerCase()),
   );
 
-  const isMutating = (userId: string) =>
-    (grant.isPending && grant.variables.userId === userId) ||
-    (revoke.isPending && revoke.variables.userId === userId);
+  // Per-cell pending: only the grant being saved spins, so the rest of the row
+  // stays readable and usable.
+  function pendingPermission(userId: string): string | undefined {
+    // `variables` is typed as always present; it is undefined until the first call.
+    const granted: { userId: string; permission: string } | undefined = grant.variables;
+    const revoked: { userId: string; permission: string } | undefined = revoke.variables;
+    if (grant.isPending && granted && granted.userId === userId) return granted.permission;
+    if (revoke.isPending && revoked && revoked.userId === userId) return revoked.permission;
+    return undefined;
+  }
 
   function confirmSelfRevoke(): Promise<boolean> {
     return new Promise((resolve) => {
@@ -103,20 +142,35 @@ export function PermissionsAdminPage() {
   return (
     <Stack gap="md">
       <Title order={2}>Permission management</Title>
-      <TextInput
-        placeholder="Filter by email or name…"
-        value={search}
-        onChange={(e) => setSearch(e.currentTarget.value)}
-        style={{ maxWidth: 320 }}
-      />
-      <Table.ScrollContainer minWidth={600}>
+      <Stack gap="sm">
+        <TextInput
+          placeholder="Filter by email or name…"
+          value={search}
+          onChange={(e) => setSearch(e.currentTarget.value)}
+          style={{ maxWidth: 320 }}
+        />
+        {permissions.length > 0 && <ProvenanceLegend />}
+      </Stack>
+      <Text size="xs" c="dimmed" hiddenFrom="md">
+        Scroll sideways for the permission columns.
+      </Text>
+      <Table.ScrollContainer minWidth={860}>
         <Table stickyHeader striped highlightOnHover>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>User</Table.Th>
-              <Table.Th>Last login</Table.Th>
+              <Table.Th style={{ whiteSpace: "nowrap" }}>Last login</Table.Th>
               {permissions.map((p) => (
-                <Table.Th key={p}>{PERMISSION_LABELS[p].short}</Table.Th>
+                <Table.Th key={p} style={{ textAlign: "center" }}>
+                  <Tooltip label={PERMISSION_LABELS[p].full} withArrow>
+                    <Stack gap={0} align="center">
+                      <Text size="xs" fw={600}>{PERMISSION_LABELS[p].short}</Text>
+                      <Text size="xs" c="dimmed" style={{ fontSize: 10, lineHeight: 1.2 }}>
+                        {PERMISSION_LABELS[p].scope}
+                      </Text>
+                    </Stack>
+                  </Tooltip>
+                </Table.Th>
               ))}
             </Table.Tr>
           </Table.Thead>
@@ -143,7 +197,7 @@ export function PermissionsAdminPage() {
                   </Stack>
                 </Table.Td>
                 <Table.Td>
-                  <Text size="xs" c="dimmed">
+                  <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
                     {user.lastLoginAt
                       ? new Intl.DateTimeFormat("en", {
                           dateStyle: "medium",
@@ -153,39 +207,32 @@ export function PermissionsAdminPage() {
                   </Text>
                 </Table.Td>
                 {permissions.map((permission) => {
-                  // Find the effective permission entry for this permission
                   const ep = user.permissions.find((p) => p.permission === permission);
-                  const isDirect = ep?.fromDirect ?? false;
-                  const inheritedGroups = ep?.fromGroups ?? [];
-                  const isInherited = inheritedGroups.length > 0;
+                  const fromDirect = ep?.fromDirect ?? false;
+                  const fromGroups = (ep?.fromGroups ?? []).map((g) => ({
+                    groupId: String(g.groupId),
+                    name: g.name,
+                  }));
 
                   return (
-                    <Table.Td key={permission}>
-                      <Stack gap={2}>
-                        <Switch
-                          checked={isDirect}
-                          // Disable toggle if permission is only inherited (not directly granted)
-                          disabled={isMutating(user.id) || (!isDirect && isInherited)}
-                          aria-label={PERMISSION_LABELS[permission].full}
-                          onChange={(e) => void handleToggle(user, permission, e.currentTarget.checked)}
+                    <Table.Td key={permission} style={{ textAlign: "center" }}>
+                      <Stack gap={4} align="center">
+                        <EffectiveCell
+                          fromDirect={fromDirect}
+                          fromGroups={fromGroups}
+                          onToggle={(next) => void handleToggle(user, permission, next)}
+                          ariaLabel={`${PERMISSION_LABELS[permission].full} for ${user.email ?? user.id}`}
+                          pending={pendingPermission(user.id) === permission}
                         />
-                        {/* Show inherited-via indicator when permission comes via group(s) */}
-                        {isInherited && (
-                          <Tooltip
-                            label={`Inherited via ${inheritedGroups.map((g) => g.name).join(", ")}`}
-                            withArrow
+                        {fromGroups.length > 0 && (
+                          <Text
+                            size="xs"
+                            c="cyan"
+                            style={{ fontSize: 10, lineHeight: 1.2 }}
+                            title={`Inherited via ${fromGroups.map((g) => g.name).join(", ")}`}
                           >
-                            <Group
-                              gap={4}
-                              style={{ cursor: "default", color: "var(--mantine-color-cyan-7)" }}
-                              aria-label={`${PERMISSION_LABELS[permission].full} inherited via ${inheritedGroups.map((g) => g.name).join(", ")}`}
-                            >
-                              <IconUsers size={12} />
-                              <Text size="xs" c="cyan" style={{ lineHeight: 1 }}>
-                                {inheritedGroups.map((g) => g.name).join(", ")}
-                              </Text>
-                            </Group>
-                          </Tooltip>
+                            {fromGroups.map((g) => g.name).join(", ")}
+                          </Text>
                         )}
                       </Stack>
                     </Table.Td>

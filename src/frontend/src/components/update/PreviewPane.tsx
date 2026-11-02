@@ -5,17 +5,26 @@ import { ApiError } from "@/api/client";
 import { isBlocked } from "@/api/useQueryRuns";
 import { PreviewResults } from "@/components/update/PreviewResults";
 
+export interface RecordedPreview {
+  success: boolean | null;
+  at: string;
+  affectedRows: number | null;
+  error: string | null;
+}
+
 interface PreviewPaneProps {
   isPending: boolean;
   isError: boolean;
   error: unknown;
   result: UpdatePreviewResponse | null;
+  /** Last preview recorded in the request's event log, shown when this session has none. */
+  lastPreview?: RecordedPreview | null;
 }
 
 // The preview pane is a sandbox: it runs the query in a transaction and throws
 // the transaction away. The header states that plainly so the returned rows are
 // never mistaken for a committed change.
-export function PreviewPane({ isPending, isError, error, result }: PreviewPaneProps) {
+export function PreviewPane({ isPending, isError, error, result, lastPreview }: PreviewPaneProps) {
   return (
     <Box style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <Group
@@ -34,13 +43,19 @@ export function PreviewPane({ isPending, isError, error, result }: PreviewPanePr
       </Group>
 
       <Box style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-        <PreviewBody isPending={isPending} isError={isError} error={error} result={result} />
+        <PreviewBody
+          isPending={isPending}
+          isError={isError}
+          error={error}
+          result={result}
+          lastPreview={lastPreview}
+        />
       </Box>
     </Box>
   );
 }
 
-function PreviewBody({ isPending, isError, error, result }: PreviewPaneProps) {
+function PreviewBody({ isPending, isError, error, result, lastPreview }: PreviewPaneProps) {
   if (isPending) {
     return (
       <Group gap="xs" p="md" c="dimmed">
@@ -80,6 +95,28 @@ function PreviewBody({ isPending, isError, error, result }: PreviewPaneProps) {
 
   if (result) {
     return <PreviewResults result={result} />;
+  }
+
+  // This session has not previewed, but the request has a recorded outcome. Show
+  // it instead of inviting a run that already happened.
+  if (lastPreview) {
+    return (
+      <Alert
+        color={lastPreview.success ? "teal" : "red"}
+        variant="light"
+        title={lastPreview.success ? "Last dry run passed" : "Last dry run failed"}
+        m="sm"
+      >
+        <Text size="sm">
+          {lastPreview.success
+            ? `${lastPreview.affectedRows ?? 0} rows would change · ${new Date(lastPreview.at).toLocaleString()}`
+            : (lastPreview.error ?? "The preview did not complete.")}
+        </Text>
+        <Text size="xs" c="dimmed" mt={6}>
+          Run Preview to re-check against current data.
+        </Text>
+      </Alert>
+    );
   }
 
   // Empty state — explain the dry-run semantics before the user even clicks.
