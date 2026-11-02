@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.Server;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Endpoints;
@@ -22,9 +23,8 @@ internal sealed class UpdateTools
         "statements in your SQL. Before approving, a reviewer can PREVIEW this SQL — it runs in the " +
         "rolled-back transaction and returns any result sets it produces — so write the SQL so its " +
         "preview reveals the before/after data change (see the 'sql' argument for how to structure it). " +
-        "On success this returns a server-relative 'path' to the request — " +
-        "prefix it with this MCP server's base URL (the origin you connect to, without the /mcp " +
-        "suffix) and give that clickable link to the user so they can review and approve it.")]
+        "On success this returns a 'url' to the request's page — give that clickable link to the " +
+        "user so they can review and approve it.")]
     public static async Task<object> SubmitUpdateRequest(
         [Description("The database id (GUID) from list_databases.")] string databaseId,
         [Description("The write/update SQL to run once a human approves and executes it. Do not wrap it in a " +
@@ -36,15 +36,18 @@ internal sealed class UpdateTools
             "the key and changed columns, and leave out sensitive columns (preview blocks them just like reads do).")] string sql,
         [Description("Why this change is needed — shown to the human reviewer. If your SQL includes a " +
             "before/after comparison, briefly note what the reviewer should look for in its preview result sets.")] string reason,
-        IUpdateRequestService updates, ICurrentUserAccessor currentUser, CancellationToken ct)
+        IUpdateRequestService updates, ICurrentUserAccessor currentUser, IHttpContextAccessor http,
+        IOptions<McpOptions> mcpOptions, CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct) ?? throw new InvalidOperationException("No authenticated user.");
         if (!Guid.TryParse(databaseId, out var g)) { throw new ArgumentException("databaseId must be a GUID."); }
+        var baseUrl = McpIssuer.BaseUrl(
+            http.HttpContext ?? throw new InvalidOperationException("No HTTP context."), mcpOptions.Value);
 
         var result = await updates.SubmitAsync(user, DatabaseId.From(g), sql, reason, null, ct);
         return result.Outcome switch
         {
-            SubmitOutcome.Ok => BuildSubmitResponse(result.Detail!),
+            SubmitOutcome.Ok => BuildSubmitResponse(result.Detail!, baseUrl),
             SubmitOutcome.NotFound => throw new InvalidOperationException("Database not found."),
             SubmitOutcome.Forbidden => throw new InvalidOperationException(
                 "You do not have permission to submit update requests for this database."),
@@ -53,22 +56,17 @@ internal sealed class UpdateTools
         };
     }
 
-    // Builds the success payload with a SERVER-RELATIVE path to the request's detail page. We
-    // deliberately do not build an absolute URL server-side: the server's own scheme/host is
-    // unreliable behind proxies (forwarded headers) and X-Forwarded-Host is client-spoofable. The
-    // MCP client already knows the base URL it connected to, so it resolves the path — and the
-    // worst case is a harmless relative path rather than a wrong or spoofed absolute link.
-    private static object BuildSubmitResponse(UpdateEndpoints.UpdateRequestDetailResponse detail)
+    // Same origin the OAuth metadata advertises, so the link matches the server the client signed in to.
+    private static object BuildSubmitResponse(UpdateEndpoints.UpdateRequestDetailResponse detail, string baseUrl)
     {
-        var path = $"/update/{detail.Id.Value}";
+        var url = $"{baseUrl}/update/{detail.Id.Value}";
         return new
         {
             id = detail.Id,
             status = detail.Status.ToString(),
-            path,
-            message = "Submitted for human review — you cannot approve or execute it. To give the user a " +
-                      "clickable link, prefix this path with this MCP server's base URL (the origin you " +
-                      $"connect to, without the /mcp suffix): {path}",
+            url,
+            message = "Submitted for human review — you cannot approve or execute it. Give the user this " +
+                      $"link to review it: {url}",
         };
     }
 

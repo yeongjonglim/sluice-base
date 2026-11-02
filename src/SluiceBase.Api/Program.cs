@@ -88,9 +88,8 @@ if (mcpEnabled)
                 "resubmitting); it cannot be bypassed from here. Write access is request-only: use " +
                 "submit_update_request to propose changes for human review. You cannot approve or " +
                 "execute update requests. Update SQL runs inside a system-managed transaction — never " +
-                "include BEGIN/COMMIT/ROLLBACK. Tool results return server-relative paths (e.g. " +
-                "/update/{id}); prefix them with this MCP server's base URL — the origin you connect " +
-                "to, without the /mcp suffix — to present clickable links to the user.";
+                "include BEGIN/COMMIT/ROLLBACK. submit_update_request returns a 'url' to the request's " +
+                "page; present it to the user as a clickable link.";
         })
         .WithHttpTransport()
         .WithTools<DatabaseTools>()
