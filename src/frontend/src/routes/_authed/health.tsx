@@ -1,9 +1,13 @@
 import { Alert, Code, Group, Loader, Stack, Text, Title } from "@mantine/core";
 import { IconAlertCircle } from "@tabler/icons-react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useAuthedHealth } from "@/api/hooks.ts";
 
 export const Route = createFileRoute("/_authed/health")({
+  beforeLoad: () => {
+    // Developer diagnostic; the API's /health endpoints remain available.
+    if (!import.meta.env.DEV) throw redirect({ to: "/" });
+  },
   component: HealthPage,
 });
 
