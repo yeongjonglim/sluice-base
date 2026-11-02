@@ -74,7 +74,18 @@ docker run -p 8080:8080 \
 
 The app is available at `http://localhost:8080`.
 
-> **HTTPS:** deploy behind a reverse proxy (nginx, Caddy, Traefik) that terminates TLS. The container listens on HTTP only.
+### Behind a reverse proxy
+
+The container listens on HTTP only, so deploy it behind a reverse proxy (nginx, Caddy, Traefik, a Kubernetes ingress) that terminates TLS. Three things make the app see its public `https://` address:
+
+1. **`ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`** on the container. ASP.NET Core then honours `X-Forwarded-Proto` and `X-Forwarded-For` from any proxy address. Without it every request looks like plain `http`, so the OIDC redirect URI becomes `http://…/signin-oidc` and sign-in fails. Since any sender is trusted, only the proxy should be able to reach port 8080.
+2. **The proxy forwards the original `Host` header and sets `X-Forwarded-Proto`.** `X-Forwarded-Host` is not honoured, so the public hostname must arrive in `Host`. ingress-nginx does both by default. Plain nginx needs:
+   ```nginx
+   proxy_set_header Host $host;
+   proxy_set_header X-Forwarded-Proto $scheme;
+   proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+   ```
+3. **`Mcp__PublicBaseUrl=https://your-domain`** pins the MCP OAuth issuer so it doesn't depend on request headers at all (see [Public URL](#sign-in-and-consent)).
 
 ## Environment variables
 
@@ -84,6 +95,7 @@ The app is available at `http://localhost:8080`.
 | `Oidc__Authority` | ✓ | — | OIDC authority URL (e.g. `https://keycloak/realms/myrealm`) |
 | `Oidc__ClientId` | ✓ | — | OIDC client ID |
 | `Oidc__ClientSecret` | ✓ | — | OIDC client secret |
+| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | ✓ behind a proxy | `false` | Trust `X-Forwarded-Proto`/`X-Forwarded-For` from the TLS-terminating proxy — see [Behind a reverse proxy](#behind-a-reverse-proxy) |
 | `Migrations__AutoApply` | | `true` | Apply pending DB migrations on startup |
 | `Permissions__Bootstrap__Admins__0` | | — | Email of the first admin (granted full permissions on first login) |
 | `Branding__AppName` | | `SluiceBase` | Application name shown in the UI |
@@ -96,7 +108,7 @@ The app is available at `http://localhost:8080`.
 | `Mcp__AccessTokenMinutes` | | `60` | Lifetime of an MCP access token in minutes |
 | `Mcp__RefreshTokenDays` | | `30` | Lifetime of an MCP refresh token in days |
 | `Mcp__AuthCodeSeconds` | | `120` | Lifetime of an MCP OAuth authorization code in seconds |
-| `Mcp__PublicBaseUrl` | | _(derived from request)_ | Public origin of this server, e.g. `https://sluice.example.com` (scheme, host, optional port; no path). Strongly recommended behind a reverse proxy such as nginx; becomes the OAuth issuer and the `iss` value. If unset it is derived from the request (`X-Forwarded-*`) and a warning is logged at startup |
+| `Mcp__PublicBaseUrl` | | _(derived from request)_ | Public origin of this server, e.g. `https://sluice.example.com` (scheme, host, optional port; no path). Strongly recommended behind a reverse proxy; becomes the OAuth issuer and the `iss` value. If unset it is built from the request's scheme and `Host` header (correct only when the [proxy setup](#behind-a-reverse-proxy) is right) and a warning is logged at startup |
 | `Mcp__Clients__N__ClientId`, `__Name`, `__RedirectUris__M` | | _(empty)_ | Pre-registered public MCP clients (PKCE, no secret) for tools without CIMD support. Their redirect URIs are trusted as configured and skip the consent screen (see [Sign-in and consent](#sign-in-and-consent)) |
 
 ### Branding colours
