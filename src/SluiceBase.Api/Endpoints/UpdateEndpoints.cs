@@ -199,18 +199,10 @@ internal static class UpdateEndpoints
     private static async Task<Results<Ok<UpdateRequestDetailResponse>, NotFound, Conflict<string>, UnauthorizedHttpResult, ForbidHttpResult>> Cancel(
         UpdateRequestId id,
         CancelUpdateRequest req,
-        AppDbContext db,
-        TimeProvider timeProvider,
         ICurrentUserAccessor currentUser,
-        IAccessResolver resolver,
+        IUpdateRequestService updateService,
         CancellationToken ct)
     {
-        var request = await LoadForMutation(db, id, ct);
-        if (request is null)
-        {
-            return TypedResults.NotFound();
-        }
-
         var user = await currentUser.GetAsync(ct);
 
         if (user is null)
@@ -219,24 +211,15 @@ internal static class UpdateEndpoints
             return TypedResults.Unauthorized();
         }
 
-        var hasSubmitRole = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId!.Value, Permissions.UpdateSubmit, ct);
-        if (!hasSubmitRole)
+        var result = await updateService.CancelAsync(user, id, req.Note, requireSubmitter: false, ct);
+        return result.Outcome switch
         {
-            return TypedResults.Forbid();
-        }
-
-        try
-        {
-            request.Cancel(new Actioned(user.Id, timeProvider.GetUtcNow()), req.Note);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return TypedResults.Conflict(ex.Message);
-        }
-
-        await db.SaveChangesAsync(ct);
-
-        return TypedResults.Ok(ToDetail((await LoadDetail(db, id, ct)!)!));
+            CancelUpdateOutcome.Ok => TypedResults.Ok(result.Detail!),
+            CancelUpdateOutcome.NotFound => TypedResults.NotFound(),
+            CancelUpdateOutcome.Forbidden => TypedResults.Forbid(),
+            CancelUpdateOutcome.Conflict => TypedResults.Conflict(result.Error!),
+            _ => throw new InvalidOperationException("Unexpected cancel outcome."),
+        };
     }
 
     // ── execute ──────────────────────────────────────────────────────────────
