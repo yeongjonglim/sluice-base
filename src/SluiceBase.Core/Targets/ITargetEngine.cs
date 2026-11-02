@@ -39,6 +39,10 @@ public interface ITargetEngine
         string sql,
         CancellationToken ct);
 
+    // Null when the SQL can run as an update request, otherwise why not (for example it ends or
+    // restarts the transaction every update runs in). ExecuteUpdateAsync enforces the same rule.
+    string? ValidateUpdateSql(string sql);
+
     Task<UpdateExecutionResult> ExecuteUpdateAsync(
         string connectionString,
         string sql,
