@@ -12,8 +12,8 @@ public class McpToolAnnotationTests
         .Where(m => m.GetCustomAttribute<McpServerToolAttribute>() is not null)
         .ToArray();
 
-    // Every tool is read-only from the client's point of view: submitting only files a request, and a
-    // human still decides what touches a database.
+    // Every tool is read-only from the client's point of view: submitting or cancelling only files or
+    // withdraws a request, and a human still decides what touches a database.
     public static TheoryData<string> Expected => new()
     {
         "list_databases",
@@ -22,6 +22,7 @@ public class McpToolAnnotationTests
         "list_update_requests",
         "get_update_request",
         "submit_update_request",
+        "cancel_update_request",
     };
 
     [Theory]
