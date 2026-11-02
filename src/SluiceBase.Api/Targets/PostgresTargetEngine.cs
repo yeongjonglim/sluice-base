@@ -732,30 +732,58 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         return sb.ToString();
     }
 
+    public string? ValidateUpdateSql(string sql) => FindTransactionControl(SqlStatementSplitter.Split(sql));
+
     public async Task<UpdateExecutionResult> ExecuteUpdateAsync(
         string connectionString, string sql, bool commit, CancellationToken ct)
     {
+        // Checked here as well as at submit, so requests stored before the check existed are covered.
+        var statements = SqlStatementSplitter.Split(sql);
+        if (FindTransactionControl(statements) is { } problem)
+        {
+            throw new InvalidOperationException(problem);
+        }
+
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
 
+        // Assigning the transaction an id up front lets every statement be checked against it below.
+        var transactionId = await TransactionIdAsync(conn, tx, "SELECT txid_current()", ct);
+
         var resultSets = new List<QueryData>();
-        int affected;
-        await using (var cmd = new NpgsqlCommand(sql, conn, tx))
-        await using (var reader = await cmd.ExecuteReaderAsync(ct))
+        var affected = 0;
+
+        // One command per statement, so Postgres runs exactly the statements checked above. If one still
+        // ends the transaction (say the splitter and Postgres disagree on a boundary), the id check stops
+        // the rest from running outside it.
+        foreach (var statement in statements)
         {
-            do
+            await using (var cmd = new NpgsqlCommand(statement, conn, tx))
+            await using (var reader = await cmd.ExecuteReaderAsync(ct))
             {
-                // FieldCount == 0 means a statement with no result set (e.g. a plain
-                // UPDATE without RETURNING); skip it but keep advancing the batch.
-                if (reader.FieldCount > 0)
+                do
                 {
-                    resultSets.Add(await ReadResultSet(reader, ct));
+                    // FieldCount == 0 means a statement with no result set (e.g. a plain
+                    // UPDATE without RETURNING); skip it but keep advancing the batch.
+                    if (reader.FieldCount > 0)
+                    {
+                        resultSets.Add(await ReadResultSet(reader, ct));
+                    }
+                }
+                while (await reader.NextResultAsync(ct));
+
+                if (reader.RecordsAffected > 0)
+                {
+                    affected += reader.RecordsAffected;
                 }
             }
-            while (await reader.NextResultAsync(ct));
 
-            affected = reader.RecordsAffected;
+            if (await TransactionIdAsync(conn, tx, "SELECT txid_current_if_assigned()", ct) != transactionId)
+            {
+                throw new InvalidOperationException(
+                    "The update ended the transaction SluiceBase runs it in, so it was stopped.");
+            }
         }
 
         // Commit/rollback only AFTER the reader is disposed. Npgsql forbids issuing
@@ -770,6 +798,100 @@ internal sealed class PostgresTargetEngine : ITargetEngine
             await tx.RollbackAsync(ct);
         }
 
-        return new UpdateExecutionResult(resultSets, affected < 0 ? 0 : affected);
+        return new UpdateExecutionResult(resultSets, affected);
+    }
+
+    private static async Task<long?> TransactionIdAsync(
+        NpgsqlConnection conn, NpgsqlTransaction tx, string sql, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(sql, conn, tx);
+        return await cmd.ExecuteScalarAsync(ct) is long id ? id : null;
+    }
+
+    // Statements that end, restart or nest the transaction every update runs in. Inside a preview (always
+    // rolled back) or an execution, any of them would let part of the SQL commit on its own.
+    private static readonly HashSet<string> TransactionControlKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "BEGIN", "START", "COMMIT", "END", "ROLLBACK", "ABORT", "SAVEPOINT", "RELEASE",
+    };
+
+    private static string? FindTransactionControl(IReadOnlyList<string> statements)
+    {
+        foreach (var statement in statements)
+        {
+            var words = LeadingWords(statement, 2);
+            var first = words.Count > 0 ? words[0] : "";
+            var second = words.Count > 1 ? words[1] : "";
+            if (TransactionControlKeywords.Contains(first)
+                || (first.Equals("PREPARE", StringComparison.OrdinalIgnoreCase)
+                    && second.Equals("TRANSACTION", StringComparison.OrdinalIgnoreCase)))
+            {
+                return $"Remove the {first.ToUpperInvariant()} statement: SluiceBase runs the update in its own " +
+                       "transaction, so BEGIN, COMMIT, ROLLBACK, SAVEPOINT and other transaction control are not allowed.";
+            }
+        }
+
+        return null;
+    }
+
+    // The first words of a statement, skipping whitespace and comments (block comments nest in Postgres).
+    private static List<string> LeadingWords(string statement, int count)
+    {
+        var words = new List<string>(count);
+        var pos = 0;
+        var len = statement.Length;
+        while (words.Count < count && pos < len)
+        {
+            var c = statement[pos];
+            if (char.IsWhiteSpace(c))
+            {
+                pos++;
+            }
+            else if (c == '-' && pos + 1 < len && statement[pos + 1] == '-')
+            {
+                while (pos < len && statement[pos] != '\n')
+                {
+                    pos++;
+                }
+            }
+            else if (c == '/' && pos + 1 < len && statement[pos + 1] == '*')
+            {
+                pos += 2;
+                var depth = 1;
+                while (pos < len && depth > 0)
+                {
+                    if (statement[pos] == '/' && pos + 1 < len && statement[pos + 1] == '*')
+                    {
+                        depth++;
+                        pos += 2;
+                    }
+                    else if (statement[pos] == '*' && pos + 1 < len && statement[pos + 1] == '/')
+                    {
+                        depth--;
+                        pos += 2;
+                    }
+                    else
+                    {
+                        pos++;
+                    }
+                }
+            }
+            else if (char.IsLetter(c) || c == '_')
+            {
+                var start = pos;
+                while (pos < len && (char.IsLetterOrDigit(statement[pos]) || statement[pos] == '_'))
+                {
+                    pos++;
+                }
+
+                words.Add(statement[start..pos]);
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        return words;
     }
 }
