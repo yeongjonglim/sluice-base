@@ -2,12 +2,14 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.Authentication;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
 using SluiceBase.Api.Extensions;
 using SluiceBase.Api.Mcp;
+using SluiceBase.Api.Mcp.Clients;
 using SluiceBase.Api.Mcp.Tools;
 using SluiceBase.Api.Middleware;
 using SluiceBase.Api.Queries;
@@ -60,6 +62,14 @@ builder.Services.AddScoped<SensitiveColumnGuard>();
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
 builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
 
+var cimdAllowLoopback = builder.Configuration.GetValue<bool>(
+    $"{McpOptions.SectionName}:{nameof(McpOptions.Cimd)}:{nameof(McpCimdOptions.AllowLoopbackForTesting)}");
+if (cimdAllowLoopback && !builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        "Mcp:Cimd:AllowLoopbackForTesting is only permitted in the Development environment.");
+}
+
 var mcpEnabled = builder.Configuration.GetValue($"{McpOptions.SectionName}:Enabled", true);
 if (mcpEnabled)
 {
@@ -75,6 +85,11 @@ if (mcpEnabled)
             return Task.CompletedTask;
         };
     });
+
+    builder.Services.AddCimdHttpClient(cimdAllowLoopback);
+    builder.Services.AddSingleton<ICimdFetcher, CimdFetcher>();
+    builder.Services.AddSingleton<ICimdClientSource, CimdClientSource>();
+    builder.Services.AddSingleton<IMcpClientResolver, McpClientResolver>();
 
     builder.Services.AddMcpServer(options =>
         {
@@ -113,6 +128,15 @@ if (builder.Configuration.GetValue("Migrations:AutoApply", true)
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+}
+
+if (mcpEnabled)
+{
+    var mcpLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<McpOptions>();
+    var mcpOptions = app.Services.GetRequiredService<IOptions<McpOptions>>().Value;
+
+    // Logs any misconfigured Mcp:Clients entry at boot instead of on the first sign-in.
+    mcpOptions.GetValidatedClients(mcpLogger);
 }
 
 app.UseForwardedHeaders(new ForwardedHeadersOptions

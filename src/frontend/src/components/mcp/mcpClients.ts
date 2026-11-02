@@ -1,6 +1,5 @@
 import {
   IconBrandVscode,
-  IconRobot,
   IconSparkles,
   IconTerminal2,
 } from "@tabler/icons-react";
@@ -38,22 +37,6 @@ export const MCP_CLIENTS: Array<McpClient> = [
       `claude mcp add --transport http ${serverName} ${endpoint}`,
     authNote:
       "Then run /mcp in Claude Code and select the server → Authenticate. Your usual login opens in the browser — no extra credentials.",
-  },
-  {
-    id: "cursor",
-    label: "Cursor",
-    icon: IconRobot,
-    snippetLang: "json",
-    buildSnippet: ({ endpoint, serverName }) =>
-      `{\n  "mcpServers": {\n    "${serverName}": {\n      "url": "${endpoint}"\n    }\n  }\n}`,
-    buildDeeplink: ({ endpoint, serverName }) => {
-      const config = btoa(JSON.stringify({ url: endpoint }));
-      return `cursor://anysphere.cursor-deeplink/mcp/install?name=${encodeURIComponent(
-        serverName,
-      )}&config=${encodeURIComponent(config)}`;
-    },
-    deeplinkLabel: "Add to Cursor",
-    authNote: "Cursor runs the sign-in flow on first use — your usual login opens in the browser.",
   },
   {
     id: "vscode",

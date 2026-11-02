@@ -15,9 +15,12 @@ public sealed class SluiceBaseStackFactory : IAsyncLifetime
 {
     private DistributedApplication? App { get; set; }
     public DistributedApplication InitialisedApp => App!;
+    public CimdStubServer CimdStub { get; } = new();
 
     public async ValueTask InitializeAsync()
     {
+        await CimdStub.StartAsync();
+
         var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>(
         [
             "DcpPublisher:RandomizePorts=false" // To get fixed port for login redirect
@@ -45,5 +48,7 @@ public sealed class SluiceBaseStackFactory : IAsyncLifetime
         {
             await App.DisposeAsync();
         }
+
+        await CimdStub.DisposeAsync();
     }
 }

@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using SluiceBase.Api.Data;
+using SluiceBase.Api.Mcp.Oauth;
 using SluiceBase.Core.Mcp;
 using SluiceBase.Core.Users;
 
@@ -10,12 +11,16 @@ namespace SluiceBase.Api.Mcp;
 
 internal sealed record IssuedTokens(string AccessToken, string RefreshToken, int ExpiresInSeconds);
 
+internal sealed record LiveGrant(bool IsLoopback);
+
 internal interface IMcpTokenService
 {
     Task<string> IssueAuthCodeAsync(string clientId, UserId userId, string redirectUri, string codeChallenge, CancellationToken ct);
     Task<IssuedTokens?> RedeemAuthCodeAsync(string clientId, string code, string redirectUri, string codeVerifier, CancellationToken ct);
     Task<IssuedTokens?> RefreshAsync(string clientId, string refreshToken, CancellationToken ct);
     Task<UserId?> ValidateAccessTokenAsync(string accessToken, CancellationToken ct);
+    Task<LiveGrant?> FindLiveAuthCodeAsync(string clientId, string code, CancellationToken ct);
+    Task<LiveGrant?> FindLiveRefreshTokenAsync(string clientId, string refreshToken, CancellationToken ct);
 }
 
 internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOptions<McpOptions> options) : IMcpTokenService
@@ -83,7 +88,8 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
         // Single-use: mark consumed. The Consume() mutation and the new token rows are flushed
         // together by the single SaveChangesAsync inside IssueTokenPairAsync (one unit of work).
         authCode.Consume();
-        var tokens = await IssueTokenPairAsync(authCode.UserId, clientId, ct);
+        var tokens = await IssueTokenPairAsync(
+            authCode.UserId, clientId, McpRedirectUriPolicy.IsLoopback(authCode.RedirectUri), ct);
         return tokens;
     }
 
@@ -122,7 +128,7 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
 
         // Rotate: revoke old refresh token and issue a fresh pair
         token.Revoke();
-        var tokens = await IssueTokenPairAsync(token.UserId, clientId, ct);
+        var tokens = await IssueTokenPairAsync(token.UserId, clientId, token.IsLoopbackGrant, ct);
         return tokens;
     }
 
@@ -159,7 +165,30 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
         return token.UserId;
     }
 
-    private async Task<IssuedTokens> IssueTokenPairAsync(UserId userId, string clientId, CancellationToken ct)
+    public async Task<LiveGrant?> FindLiveAuthCodeAsync(string clientId, string code, CancellationToken ct)
+    {
+        var hash = TokenHasher.Hash(code);
+        var now = clock.GetUtcNow();
+        var redirectUri = await db.McpAuthCodes.AsNoTracking()
+            .Where(c => c.CodeHash == hash && c.ClientId == clientId && !c.Consumed && c.ExpiresAt > now)
+            .Select(c => c.RedirectUri)
+            .FirstOrDefaultAsync(ct);
+        return redirectUri is null ? null : new LiveGrant(McpRedirectUriPolicy.IsLoopback(redirectUri));
+    }
+
+    public async Task<LiveGrant?> FindLiveRefreshTokenAsync(string clientId, string refreshToken, CancellationToken ct)
+    {
+        var hash = TokenHasher.Hash(refreshToken);
+        var now = clock.GetUtcNow();
+        var isLoopback = await db.McpTokens.AsNoTracking()
+            .Where(t => t.TokenHash == hash && t.ClientId == clientId && t.Type == McpTokenType.Refresh
+                && !t.Revoked && t.ExpiresAt > now)
+            .Select(t => (bool?)t.IsLoopbackGrant)
+            .FirstOrDefaultAsync(ct);
+        return isLoopback is null ? null : new LiveGrant(isLoopback.Value);
+    }
+
+    private async Task<IssuedTokens> IssueTokenPairAsync(UserId userId, string clientId, bool isLoopbackGrant, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
 
@@ -171,6 +200,7 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
             McpTokenType.Access,
             userId,
             clientId,
+            isLoopbackGrant,
             now,
             now.AddMinutes(Options.AccessTokenMinutes));
 
@@ -179,6 +209,7 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
             McpTokenType.Refresh,
             userId,
             clientId,
+            isLoopbackGrant,
             now,
             now.AddDays(Options.RefreshTokenDays));
 

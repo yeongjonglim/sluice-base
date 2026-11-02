@@ -109,6 +109,7 @@ Users reaching SluiceBase at more than one hostname (for example an internal and
 | `Mcp__AccessTokenMinutes` | | `60` | Lifetime of an MCP access token in minutes |
 | `Mcp__RefreshTokenDays` | | `30` | Lifetime of an MCP refresh token in days |
 | `Mcp__AuthCodeSeconds` | | `120` | Lifetime of an MCP OAuth authorization code in seconds |
+| `Mcp__Clients__N__ClientId`, `__Name`, `__RedirectUris__M` | | _(empty)_ | Pre-registered public MCP clients (PKCE, no secret) for tools without CIMD support. Their redirect URIs are trusted as configured and skip the consent screen (see [Sign-in and consent](#sign-in-and-consent)) |
 
 ### Branding colours
 
@@ -206,6 +207,30 @@ Agents can never approve, reject, or execute an update request — those steps s
 
 Set `Mcp__Enabled=false` to disable the MCP server and its OAuth endpoints entirely.
 
+### Sign-in and consent
+
+There is no client self-registration. How SluiceBase treats a client depends on where it sends the sign-in result:
+
+- **Localhost callbacks (Claude Code, Codex, VS Code, MCP Inspector).** The redirect URI is `http://localhost`, `http://127.0.0.1` or `http://[::1]` on any port, so the random port a tool picks per sign-in is accepted. The code can only reach the user's own machine and PKCE ties it to the tool that asked, so any `client_id` is accepted as given: nothing is fetched and nothing needs configuring. This works on networks with no outbound access.
+- **CIMD (Client ID Metadata Documents)**, for web and app callbacks. The `client_id` is an `https://` URL pointing at the tool's own metadata document. SluiceBase fetches it at sign-in and on token refresh, validates it, and caches it per its `Cache-Control` (5 minutes to 24 hours). This needs direct outbound HTTPS from SluiceBase to the tool's domain (for example `claude.ai` or `chatgpt.com`); it can't go through a proxy, and an egress allowlist has to allow the whole domain since HTTPS hides the path. Private, loopback and link-local targets are refused. NAT64-only egress (IPv6 hosts reaching IPv4 through `64:ff9b::/96`) isn't supported either: those addresses are refused as non-public.
+- **Configured clients.** For tools without CIMD, or to serve a web or app callback without outbound access, an operator pre-registers a public client (PKCE, no secret) with `Mcp__Clients__N__ClientId`, `__Name` and `__RedirectUris__M`. Its redirect URIs are trusted as configured, and a configured `ClientId` also takes precedence over the localhost rule, so an operator can pin which callbacks it may use.
+
+**Consent.** After signing in, the user sees a consent screen, with the verified domain of the tool, only when a CIMD client's callback is not loopback (for example claude.ai or ChatGPT on the web). Loopback callbacks (Claude Code, Codex, VS Code, MCP Inspector) and configured clients go straight through. If a user didn't start the connection themselves, they choose **Deny**.
+
+**Issuer.** The OAuth issuer, the `iss` parameter returned on authorization responses and the discovery documents all use the address the client reached SluiceBase at, so the proxy must pass it through (see [Behind a reverse proxy](#behind-a-reverse-proxy)).
+
+| Tool | Support |
+|---|---|
+| Claude Code, Codex | Localhost callback: works with no outbound access or configuration |
+| VS Code, GitHub Copilot in VS Code | Localhost callback (VS Code 1.106+; Copilot inferred from VS Code) |
+| MCP Inspector | Localhost callback; the web Inspector needs a client ID, which entering any metadata URL under **Client Settings → Client ID Metadata Document** supplies (it isn't fetched) |
+| claude.ai, Claude Desktop, ChatGPT | CIMD with a web callback: SluiceBase must reach the vendor's domain, and the vendor's servers must reach SluiceBase, so these don't suit isolated networks |
+| Cursor | Not supported out of the box (no CIMD yet); add a configured client |
+
+**Cursor.** Add a configured client with redirect URI `cursor://anysphere.cursor-mcp/oauth/callback`, then have users set that client id in Cursor's `mcp.json`.
+
+**Upgrading.** Self-registration was removed, so existing MCP connections must sign in again once. Localhost tools such as Claude Code need nothing else.
+
 ## Development setup
 
 SluiceBase uses [.NET Aspire](https://learn.microsoft.com/en-us/dotnet/aspire/) to orchestrate all services locally, including Keycloak and PostgreSQL.
@@ -245,7 +270,9 @@ The MCP endpoint is served through the gateway at **`https://localhost:5443/mcp`
    NODE_TLS_REJECT_UNAUTHORIZED=0 npx @modelcontextprotocol/inspector
    ```
 
-   Set Transport to **Streamable HTTP**, URL to `https://localhost:5443/mcp`, and connect. (`NODE_TLS_REJECT_UNAUTHORIZED=0` is only needed to accept the local dev certificate.)
+   Set Transport to **Streamable HTTP** and URL to `https://localhost:5443/mcp`. The web Inspector needs a client ID, so under **Client Settings → Client ID Metadata Document** paste any metadata URL, such as MCPJam's `https://www.mcpjam.com/.well-known/oauth/client-metadata.json`, enable **Use Client ID Metadata Document**, and connect. Its callback is on localhost, so SluiceBase uses the URL only as the client ID and never fetches it. (`NODE_TLS_REJECT_UNAUTHORIZED=0` is only needed to accept the local dev certificate.)
+
+   To use the dev configured client instead, run the Inspector's CLI or TUI, which can pin the callback: `--client-id sluicebase-dev --callback-url http://127.0.0.1:43123/callback`.
 
    **Claude Code:**
 
@@ -265,7 +292,7 @@ The MCP endpoint is served through the gateway at **`https://localhost:5443/mcp`
 The OAuth + tool round-trip is also covered by the integration tests:
 
 ```bash
-dotnet test tests/IntegrationTests --filter "McpTokenServiceTests|OAuthFlowTests|McpToolsTests"
+dotnet test tests/IntegrationTests --filter "McpTokenServiceTests|OAuthFlowTests|OAuthMetadataTests|McpToolsTests"
 ```
 
 ## License

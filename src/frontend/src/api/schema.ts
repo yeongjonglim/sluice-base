@@ -245,43 +245,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/mcp/oauth/register": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["RegisterClientRequest"];
-                };
-            };
-            responses: {
-                /** @description OK */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content?: never;
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/mcp/oauth/authorize": {
         parameters: {
             query?: never;
@@ -308,7 +271,24 @@ export interface paths {
             };
         };
         put?: never;
-        post?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1140,10 +1120,6 @@ export interface components {
         };
         /** @enum {string} */
         QuerySource: "Ui" | "Mcp";
-        RegisterClientRequest: {
-            client_name: null | string;
-            redirect_uris: null | string[];
-        };
         ReviewUpdateRequest: {
             note: string;
         };
