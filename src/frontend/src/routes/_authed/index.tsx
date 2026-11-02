@@ -1,4 +1,4 @@
-import { Badge, Box, Button, Card, Group, Skeleton, Stack, Text, ThemeIcon, Title } from "@mantine/core";
+import { Badge, Box, Button, Card, Group, SimpleGrid, Skeleton, Stack, Text, ThemeIcon, Title, VisuallyHidden } from "@mantine/core";
 import {
   IconArrowRight,
   IconDatabase,
@@ -7,6 +7,7 @@ import {
   IconShieldOff,
 } from "@tabler/icons-react";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
+import classes from "./Home.module.css";
 import type { ReactNode } from "react";
 import { useCatalogServer, useQueryHistory, useUpdateRequests } from "@/api/hooks";
 import { useAuth } from "@/auth/hooks/useAuth.tsx";
@@ -46,7 +47,9 @@ function SectionCard({
           <ThemeIcon variant="light" size="sm" color="gray">
             {icon}
           </ThemeIcon>
-          <Text fw={600}>{title}</Text>
+          <Text component="h3" fw={600} style={{ margin: 0 }}>
+            {title}
+          </Text>
           {count !== undefined && count > 0 && (
             <Badge size="sm" variant="light" color="blue">
               {count}
@@ -62,17 +65,7 @@ function SectionCard({
 
 function ApprovalRowLink({ id, children }: { id: string; children: ReactNode }) {
   return (
-    <Link
-      to="/update/$id"
-      params={{ id }}
-      style={{
-        display: "block",
-        padding: "8px 4px",
-        borderTop: "1px solid var(--mantine-color-default-border)",
-        color: "inherit",
-        textDecoration: "none",
-      }}
-    >
+    <Link to="/update/$id" params={{ id }} className={classes.row}>
       {children}
     </Link>
   );
@@ -179,11 +172,12 @@ function RecentQueries() {
         <Box
           key={item.id}
           style={{
-            padding: "8px 4px",
+            padding: "8px 6px",
             borderTop: "1px solid var(--mantine-color-default-border)",
           }}
         >
           <Group gap={8} wrap="nowrap">
+            <VisuallyHidden>{item.status}</VisuallyHidden>
             <Box
               w={6}
               h={6}
@@ -314,16 +308,10 @@ function HomePage() {
       {canApprove && <PendingApprovals />}
 
       {hasWork && (
-        <Group align="flex-start" gap="lg" wrap="wrap" style={{ alignItems: "stretch" }}>
-          {showsHistory && (
-            <Box style={{ flex: "1 1 420px", minWidth: 0 }}>
-              <RecentQueries />
-            </Box>
-          )}
-          <Box style={{ flex: "1 1 360px", minWidth: 0 }}>
-            <Databases canQuery={canQuery} />
-          </Box>
-        </Group>
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+          {showsHistory && <RecentQueries />}
+          <Databases canQuery={canQuery} />
+        </SimpleGrid>
       )}
     </Stack>
   );

@@ -145,6 +145,10 @@ function UpdateDetailPage() {
   const lastPreviewFailed = lastPreview?.success === false;
   const lastPreviewError = lastPreview?.error ?? null;
 
+  function runPreview() {
+    preview.mutate(id, { onSuccess: (data) => setPreviewResult(data) });
+  }
+
   function openReview(action: ReviewAction) {
     setReviewNote("");
     setOverridePreview(false);
@@ -324,15 +328,16 @@ function UpdateDetailPage() {
       {/* Header: identity, status, and every action — always visible, never scrolls */}
       <Group
         justify="space-between"
-        wrap="nowrap"
+        wrap="wrap"
+        gap="sm"
         px="sm"
         py="xs"
         style={{ flexShrink: 0, borderBottom: BORDER }}
       >
-        <Stack gap={2} style={{ minWidth: 0 }}>
-          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
-            <Title order={3}>Update request</Title>
-            <Badge color={STATUS_COLOR[r.status] ?? "gray"} size="lg">
+        <Stack gap={2} style={{ minWidth: 0, flex: "1 1 280px" }}>
+          <Group gap="sm" wrap="wrap" style={{ minWidth: 0 }}>
+            <Title order={3} style={{ whiteSpace: "nowrap" }}>Update request</Title>
+            <Badge color={STATUS_COLOR[r.status] ?? "gray"} size="lg" style={{ flexShrink: 0 }}>
               {r.status}
             </Badge>
             {r.status === "Pending" && lastPreviewFailed && (
@@ -368,7 +373,7 @@ function UpdateDetailPage() {
             )}
           </Group>
         </Stack>
-        <Group gap="xs">
+        <Group gap="xs" justify="flex-end" style={{ marginInlineStart: "auto" }}>
           {r.status === "Pending" && canApprove && (
             <>
               <Button color="green" onClick={() => openReview("approve")} loading={approve.isPending}>
@@ -395,7 +400,7 @@ function UpdateDetailPage() {
               color="grape"
               leftSection={<IconEye size={16} />}
               loading={preview.isPending}
-              onClick={() => preview.mutate(id, { onSuccess: (data) => setPreviewResult(data) })}
+              onClick={runPreview}
             >
               Preview
             </Button>
@@ -463,6 +468,7 @@ function UpdateDetailPage() {
                         }
                       : null
                   }
+                  onRunPreview={runPreview}
                 />
               </Splitter.Pane>
             </Splitter>

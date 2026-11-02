@@ -1,4 +1,4 @@
-import { Alert, Badge, Box, Code, Group, Loader, Text } from "@mantine/core";
+import { Alert, Badge, Box, Button, Code, Group, Loader, Text } from "@mantine/core";
 import { IconEye } from "@tabler/icons-react";
 import type { UpdatePreviewResponse } from "@/api/hooks";
 import { ApiError } from "@/api/client";
@@ -19,12 +19,20 @@ interface PreviewPaneProps {
   result: UpdatePreviewResponse | null;
   /** Last preview recorded in the request's event log, shown when this session has none. */
   lastPreview?: RecordedPreview | null;
+  onRunPreview?: () => void;
 }
 
 // The preview pane is a sandbox: it runs the query in a transaction and throws
 // the transaction away. The header states that plainly so the returned rows are
 // never mistaken for a committed change.
-export function PreviewPane({ isPending, isError, error, result, lastPreview }: PreviewPaneProps) {
+export function PreviewPane({
+  isPending,
+  isError,
+  error,
+  result,
+  lastPreview,
+  onRunPreview,
+}: PreviewPaneProps) {
   return (
     <Box style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
       <Group
@@ -49,13 +57,14 @@ export function PreviewPane({ isPending, isError, error, result, lastPreview }: 
           error={error}
           result={result}
           lastPreview={lastPreview}
+          onRunPreview={onRunPreview}
         />
       </Box>
     </Box>
   );
 }
 
-function PreviewBody({ isPending, isError, error, result, lastPreview }: PreviewPaneProps) {
+function PreviewBody({ isPending, isError, error, result, lastPreview, onRunPreview }: PreviewPaneProps) {
   if (isPending) {
     return (
       <Group gap="xs" p="md" c="dimmed">
@@ -109,12 +118,24 @@ function PreviewBody({ isPending, isError, error, result, lastPreview }: Preview
       >
         <Text size="sm">
           {lastPreview.success
-            ? `${lastPreview.affectedRows ?? 0} rows would change · ${new Date(lastPreview.at).toLocaleString()}`
+            ? `${lastPreview.affectedRows ?? 0} rows would change`
             : (lastPreview.error ?? "The preview did not complete.")}
         </Text>
-        <Text size="xs" c="dimmed" mt={6}>
-          Run Preview to re-check against current data.
+        <Text size="xs" c="dimmed" mt={4}>
+          {new Date(lastPreview.at).toLocaleString()}
         </Text>
+        {onRunPreview && (
+          <Button
+            mt="sm"
+            size="compact-xs"
+            variant="light"
+            color="grape"
+            leftSection={<IconEye size={12} />}
+            onClick={onRunPreview}
+          >
+            Run preview again
+          </Button>
+        )}
       </Alert>
     );
   }

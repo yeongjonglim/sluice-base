@@ -175,6 +175,15 @@ export function PermissionsAdminPage() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
+            {filtered.length === 0 && (
+              <Table.Tr>
+                <Table.Td colSpan={permissions.length + 2}>
+                  <Text size="sm" c="dimmed">
+                    No users match “{search}”.
+                  </Text>
+                </Table.Td>
+              </Table.Tr>
+            )}
             {filtered.map((user) => (
               <Table.Tr key={user.id}>
                 <Table.Td>
