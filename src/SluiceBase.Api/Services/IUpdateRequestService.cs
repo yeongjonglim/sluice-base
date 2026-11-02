@@ -23,10 +23,17 @@ internal sealed record GetUpdateResult(
     GetUpdateOutcome Outcome,
     UpdateEndpoints.UpdateRequestDetailResponse? Detail);
 
-// Shared submit/list/get logic for update requests, called by both the REST endpoints
+internal enum CancelUpdateOutcome { Ok, NotFound, Forbidden, Conflict }
+
+internal sealed record CancelUpdateResult(
+    CancelUpdateOutcome Outcome,
+    UpdateEndpoints.UpdateRequestDetailResponse? Detail,
+    string? Error);
+
+// Shared submit/list/get/cancel logic for update requests, called by both the REST endpoints
 // (UpdateEndpoints) and the MCP tools (UpdateTools) so the two surfaces cannot drift.
-// Mutation transitions (approve/reject/cancel/execute/preview) are NOT here — they remain
-// REST/UI-only and are never exposed over MCP.
+// The remaining mutation transitions (approve/reject/execute/preview) are NOT here — they
+// remain REST/UI-only and are never exposed over MCP.
 internal interface IUpdateRequestService
 {
     Task<SubmitUpdateResult> SubmitAsync(
@@ -38,6 +45,11 @@ internal interface IUpdateRequestService
         DatabaseId? databaseId, UpdateRequestStatus? status, CancellationToken ct);
 
     Task<GetUpdateResult> GetAsync(User user, UpdateRequestId id, CancellationToken ct);
+
+    // requireSubmitter limits the cancel to requests the user submitted themselves (MCP), on top
+    // of the update:submit permission that REST already requires.
+    Task<CancelUpdateResult> CancelAsync(
+        User user, UpdateRequestId id, string note, bool requireSubmitter, CancellationToken ct);
 }
 
 internal sealed class UpdateRequestService(
@@ -135,5 +147,46 @@ internal sealed class UpdateRequestService(
         }
 
         return new GetUpdateResult(GetUpdateOutcome.Ok, UpdateEndpoints.ToDetail(request));
+    }
+
+    public async Task<CancelUpdateResult> CancelAsync(
+        User user, UpdateRequestId id, string note, bool requireSubmitter, CancellationToken ct)
+    {
+        var request = await db.UpdateRequests.SingleOrDefaultAsync(r => r.Id == id, ct);
+        if (request is null)
+        {
+            return new CancelUpdateResult(CancelUpdateOutcome.NotFound, null, null);
+        }
+
+        if (request.DatabaseId is null)
+        {
+            return new CancelUpdateResult(CancelUpdateOutcome.Forbidden, null, null);
+        }
+
+        var hasSubmitRole = await resolver.HasDatabasePermissionAsync(user.Id, request.DatabaseId.Value, Permissions.UpdateSubmit, ct);
+        if (!hasSubmitRole)
+        {
+            return new CancelUpdateResult(CancelUpdateOutcome.Forbidden, null, null);
+        }
+
+        if (requireSubmitter && request.SubmitterId != user.Id)
+        {
+            return new CancelUpdateResult(
+                CancelUpdateOutcome.Forbidden, null, "You can only cancel update requests you submitted.");
+        }
+
+        try
+        {
+            request.Cancel(new Actioned(user.Id, timeProvider.GetUtcNow()), note);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new CancelUpdateResult(CancelUpdateOutcome.Conflict, null, ex.Message);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        var cancelled = await UpdateEndpoints.LoadDetail(db, id, ct);
+        return new CancelUpdateResult(CancelUpdateOutcome.Ok, UpdateEndpoints.ToDetail(cancelled!), null);
     }
 }
