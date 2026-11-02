@@ -88,10 +88,11 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
     public async Task Issuer_IsIdenticalAcrossMetadataAndIss()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
+        // Metadata and iss are built from the request origin, so read both through the same gateway session.
+        using var session = await new KeycloakLoginHelper(factory.InitialisedApp).SignInAsync("alice", "dev", ct);
 
-        var resource = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-protected-resource", ct);
-        var server = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-authorization-server", ct);
+        var resource = await session.Client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-protected-resource", ct);
+        var server = await session.Client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-authorization-server", ct);
 
         var issuer = server.GetProperty("issuer").GetString()!;
         var firstAuthServer = resource.GetProperty("authorization_servers").EnumerateArray().First().GetString()!;
@@ -99,7 +100,6 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
         Assert.False(issuer.EndsWith('/'));
         Assert.False(firstAuthServer.EndsWith('/'));
 
-        using var session = await new KeycloakLoginHelper(factory.InitialisedApp).SignInAsync("alice", "dev", ct);
         var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_');
         var authorize = await session.Client.GetAsync(
