@@ -34,4 +34,19 @@ public class McpOptionsTests
 
         Assert.Equal("sluicebase", options.GetValidatedServerName());
     }
+
+    [Fact]
+    public void GetValidatedClients_RedirectUriWithFragment_Skipped()
+    {
+        var options = new McpOptions
+        {
+            Clients =
+            [
+                new McpConfiguredClient { ClientId = "frag", RedirectUris = ["https://x.example/cb#f"] },
+                new McpConfiguredClient { ClientId = "ok", RedirectUris = ["https://x.example/cb"] },
+            ],
+        };
+
+        Assert.Equal(["ok"], options.GetValidatedClients().Select(c => c.ClientId));
+    }
 }

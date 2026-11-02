@@ -1,9 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
+using System.Web;
 using Aspire.Hosting.Testing;
 using IntegrationTests.Supports;
-using Npgsql;
 
 namespace IntegrationTests;
 
@@ -51,12 +53,14 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
         Assert.True(body.TryGetProperty("token_endpoint", out var tokenEndpoint));
         Assert.False(string.IsNullOrWhiteSpace(tokenEndpoint.GetString()));
 
-        Assert.True(body.TryGetProperty("registration_endpoint", out var registrationEndpoint));
-        Assert.False(string.IsNullOrWhiteSpace(registrationEndpoint.GetString()));
+        Assert.False(body.TryGetProperty("registration_endpoint", out _));
 
         Assert.True(body.TryGetProperty("code_challenge_methods_supported", out var pkce));
         var methods = pkce.EnumerateArray().Select(e => e.GetString()!).ToArray();
         Assert.Equal(["S256"], methods);
+
+        Assert.True(body.GetProperty("authorization_response_iss_parameter_supported").GetBoolean());
+        Assert.True(body.GetProperty("client_id_metadata_document_supported").GetBoolean());
     }
 
     [Fact]
@@ -74,65 +78,41 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
         Assert.Equal("https://localhost:5443", resource.GetProperty("authorization_servers").EnumerateArray().First().GetString());
     }
 
-    // ── Dynamic Client Registration ───────────────────────────────────────────
-
     [Fact]
-    public async Task Register_WithValidRedirectUri_Returns201AndClientId()
+    public async Task Issuer_IsIdenticalAcrossMetadataAndIss()
     {
         var ct = TestContext.Current.CancellationToken;
         using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
 
-        var body = new
-        {
-            client_name = "Test MCP Client",
-            redirect_uris = new[] { "https://example.com/callback" },
-        };
+        var resource = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-protected-resource", ct);
+        var server = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-authorization-server", ct);
 
-        var response = await client.PostAsJsonAsync("/mcp/oauth/register", body, ct);
+        var issuer = server.GetProperty("issuer").GetString()!;
+        var firstAuthServer = resource.GetProperty("authorization_servers").EnumerateArray().First().GetString()!;
+        Assert.Equal(issuer, firstAuthServer);
+        Assert.False(issuer.EndsWith('/'));
+        Assert.False(firstAuthServer.EndsWith('/'));
 
-        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-
-        var result = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
-
-        Assert.True(result.TryGetProperty("client_id", out var clientId));
-        Assert.False(string.IsNullOrWhiteSpace(clientId.GetString()));
-
-        Assert.True(result.TryGetProperty("client_name", out var clientName));
-        Assert.Equal("Test MCP Client", clientName.GetString());
-
-        Assert.True(result.TryGetProperty("redirect_uris", out var redirectUris));
-        var uris = redirectUris.EnumerateArray().Select(e => e.GetString()).ToArray();
-        Assert.Contains("https://example.com/callback", uris);
-
-        // Verify the row exists in the metadata DB
-        var metaConnStr = await factory.InitialisedApp.GetConnectionStringAsync("metadata-db", ct);
-        await using var conn = new NpgsqlConnection(metaConnStr);
-        await conn.OpenAsync(ct);
-        await using var cmd = new NpgsqlCommand(
-            "SELECT COUNT(*) FROM mcp_oauth_client WHERE client_id = @clientId", conn);
-        cmd.Parameters.AddWithValue("@clientId", clientId.GetString()!);
-        var count = (long)(await cmd.ExecuteScalarAsync(ct))!;
-        Assert.Equal(1L, count);
+        using var session = await new KeycloakLoginHelper(factory.InitialisedApp).SignInAsync("alice", "dev", ct);
+        var challenge = Convert.ToBase64String(SHA256.HashData(Encoding.ASCII.GetBytes("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk")))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var authorize = await session.Client.GetAsync(
+            $"/mcp/oauth/authorize?client_id={Uri.EscapeDataString(CimdStubServer.LoopbackClientId)}" +
+            $"&redirect_uri={Uri.EscapeDataString("http://127.0.0.1:43123/callback")}&response_type=code" +
+            $"&code_challenge={challenge}&code_challenge_method=S256&state=iss", ct);
+        Assert.Equal(HttpStatusCode.Redirect, authorize.StatusCode);
+        var iss = HttpUtility.ParseQueryString(authorize.Headers.Location!.Query)["iss"];
+        Assert.Equal(issuer, iss);
     }
 
     [Fact]
-    public async Task Register_WithEmptyRedirectUris_Returns400()
+    public async Task Register_Returns404()
     {
         var ct = TestContext.Current.CancellationToken;
         using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
 
-        var body = new
-        {
-            client_name = "Bad Client",
-            redirect_uris = Array.Empty<string>(),
-        };
+        var response = await client.PostAsJsonAsync("/mcp/oauth/register", new { client_name = "x" }, ct);
 
-        var response = await client.PostAsJsonAsync("/mcp/oauth/register", body, ct);
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-
-        var result = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
-        Assert.True(result.TryGetProperty("error", out var error));
-        Assert.Equal("invalid_redirect_uri", error.GetString());
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
 }

@@ -6,21 +6,28 @@ using System.Text.Json;
 using System.Web;
 using Aspire.Hosting.Testing;
 using IntegrationTests.Supports;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using SluiceBase.Api.Data;
+using SluiceBase.Api.Mcp;
 
 namespace IntegrationTests;
 
 /// <summary>
 /// Integration tests for /mcp/oauth/authorize and /mcp/oauth/token.
 ///
-/// The full-flow tests (authorize → Keycloak login → code → token → refresh) are
-/// CI-gated: they require the Aspire stack with a running Keycloak container and a
-/// registered test user. They will NOT run locally unless the full stack is healthy.
-///
-/// The negative tests (unregistered redirect_uri, bogus code) do NOT require login and
-/// are the primary compile-time + CI gate for these endpoints.
+/// Clients are either the configured <c>sluicebase-dev</c> client from the dev AppHost or CIMD
+/// documents served by <see cref="CimdStubServer"/>. The signed-in tests use
+/// <see cref="KeycloakLoginHelper"/> and need the full Aspire stack with Keycloak.
 /// </summary>
 public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
 {
+    private const string ConfiguredClientId = "sluicebase-dev";
+    private const string LoopbackRedirectUri = "http://127.0.0.1:43123/callback";
+    private const string WebRedirectUri = "https://client.example/cb";
+    private const string ExpectedIssuer = "https://localhost:5443";
+    private const string Verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+
     private KeycloakLoginHelper LoginHelper => new(factory.InitialisedApp);
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -28,18 +35,16 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
     /// <summary>Creates a plain (non-authenticated, non-redirect-following) HTTP client pointed at the api.</summary>
     private HttpClient ApiClient() => factory.InitialisedApp.CreateHttpClient("api", "https");
 
-    /// <summary>Registers a new MCP OAuth client and returns the assigned client_id.</summary>
-    private static async Task<string> RegisterClientAsync(HttpClient client, string redirectUri, CancellationToken ct)
+    private static string AuthorizeUrl(
+        string clientId, string redirectUri, string state, string? challenge = null, string responseType = "code")
     {
-        var body = new
-        {
-            client_name = "OAuthFlowTest Client",
-            redirect_uris = new[] { redirectUri },
-        };
-        var response = await client.PostAsJsonAsync("/mcp/oauth/register", body, ct);
-        response.EnsureSuccessStatusCode();
-        var result = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
-        return result.GetProperty("client_id").GetString()!;
+        var url = $"/mcp/oauth/authorize" +
+                  $"?client_id={Uri.EscapeDataString(clientId)}" +
+                  $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
+                  $"&response_type={responseType}" +
+                  $"&code_challenge_method=S256" +
+                  $"&state={Uri.EscapeDataString(state)}";
+        return challenge is null ? url : url + $"&code_challenge={Uri.EscapeDataString(challenge)}";
     }
 
     /// <summary>Computes the PKCE S256 code challenge for a given verifier.</summary>
@@ -52,52 +57,20 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
             .Replace('/', '_');
     }
 
-    // ── Negative tests (no login needed) ──────────────────────────────────────
+    private static async Task<string> ErrorAsync(HttpResponseMessage response, CancellationToken ct) =>
+        (await response.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("error").GetString()!;
 
-    [Fact]
-    public async Task Authorize_WithUnregisteredRedirectUri_Returns400()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        using var client = ApiClient();
+    private static FormUrlEncodedContent CodeExchange(string clientId, string code, string redirectUri) =>
+        new(new Dictionary<string, string>
+        {
+            ["grant_type"] = "authorization_code",
+            ["client_id"] = clientId,
+            ["code"] = code,
+            ["redirect_uri"] = redirectUri,
+            ["code_verifier"] = Verifier,
+        });
 
-        var clientId = await RegisterClientAsync(client, "https://registered.example.com/callback", ct);
-        var verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-        var challenge = S256Challenge(verifier);
-
-        var url = $"/mcp/oauth/authorize" +
-                  $"?client_id={Uri.EscapeDataString(clientId)}" +
-                  $"&redirect_uri={Uri.EscapeDataString("https://UNREGISTERED.example.com/callback")}" +
-                  $"&response_type=code" +
-                  $"&code_challenge={Uri.EscapeDataString(challenge)}" +
-                  $"&code_challenge_method=S256" +
-                  $"&state=somestate";
-
-        var response = await client.GetAsync(url, ct);
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
-
-    [Fact]
-    public async Task Authorize_WithUnknownClientId_Returns400()
-    {
-        var ct = TestContext.Current.CancellationToken;
-        using var client = ApiClient();
-
-        var verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-        var challenge = S256Challenge(verifier);
-
-        var url = $"/mcp/oauth/authorize" +
-                  $"?client_id=does-not-exist" +
-                  $"&redirect_uri={Uri.EscapeDataString("https://example.com/callback")}" +
-                  $"&response_type=code" +
-                  $"&code_challenge={Uri.EscapeDataString(challenge)}" +
-                  $"&code_challenge_method=S256" +
-                  $"&state=somestate";
-
-        var response = await client.GetAsync(url, ct);
-
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-    }
+    // ── Shape errors (no login needed) ────────────────────────────────────────
 
     [Fact]
     public async Task Authorize_WithMissingCodeChallenge_Returns400()
@@ -105,17 +78,7 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://example.com/callback", ct);
-
-        var url = $"/mcp/oauth/authorize" +
-                  $"?client_id={Uri.EscapeDataString(clientId)}" +
-                  $"&redirect_uri={Uri.EscapeDataString("https://example.com/callback")}" +
-                  $"&response_type=code" +
-                  $"&code_challenge_method=S256" +
-                  $"&state=somestate";
-        // Deliberately omitted: code_challenge
-
-        var response = await client.GetAsync(url, ct);
+        var response = await client.GetAsync(AuthorizeUrl(ConfiguredClientId, LoopbackRedirectUri, "somestate"), ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -126,22 +89,29 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://example.com/callback", ct);
-        var verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-        var challenge = S256Challenge(verifier);
-
-        var url = $"/mcp/oauth/authorize" +
-                  $"?client_id={Uri.EscapeDataString(clientId)}" +
-                  $"&redirect_uri={Uri.EscapeDataString("https://example.com/callback")}" +
-                  $"&response_type=token" + // invalid — must be "code"
-                  $"&code_challenge={Uri.EscapeDataString(challenge)}" +
-                  $"&code_challenge_method=S256" +
-                  $"&state=somestate";
-
-        var response = await client.GetAsync(url, ct);
+        var response = await client.GetAsync(
+            AuthorizeUrl(ConfiguredClientId, LoopbackRedirectUri, "somestate", S256Challenge(Verifier), responseType: "token"), ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
+
+    [Fact]
+    public async Task Authorize_SignedOut_UnknownClient_RedirectsToLogin()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // Through the gateway: Keycloak only accepts the gateway's OIDC callback as a redirect_uri.
+        using var client = factory.InitialisedApp.CreateHttpClient("gateway", "https");
+        factory.CimdStub.Clear();
+
+        var response = await client.GetAsync(
+            AuthorizeUrl("https://localhost:47443/signed-out.json", LoopbackRedirectUri, "s", S256Challenge(Verifier)), ct);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.Contains("/realms/sluicebase/protocol/openid-connect/auth", response.Headers.Location!.ToString());
+        Assert.DoesNotContain("/signed-out.json", factory.CimdStub.RequestedPaths);
+    }
+
+    // ── Token endpoint negatives (no login needed) ────────────────────────────
 
     [Fact]
     public async Task Token_WithBogusCode_Returns400WithInvalidGrant()
@@ -149,23 +119,11 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://example.com/callback", ct);
-
-        var form = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["grant_type"] = "authorization_code",
-            ["client_id"] = clientId,
-            ["code"] = "this-is-not-a-real-code",
-            ["redirect_uri"] = "https://example.com/callback",
-            ["code_verifier"] = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk",
-        });
-
-        var response = await client.PostAsync("/mcp/oauth/token", form, ct);
+        var response = await client.PostAsync(
+            "/mcp/oauth/token", CodeExchange(ConfiguredClientId, "this-is-not-a-real-code", LoopbackRedirectUri), ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
-        Assert.True(body.TryGetProperty("error", out var error));
-        Assert.Equal("invalid_grant", error.GetString());
+        Assert.Equal("invalid_grant", await ErrorAsync(response, ct));
     }
 
     [Fact]
@@ -174,21 +132,17 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://example.com/callback", ct);
-
         var form = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "refresh_token",
-            ["client_id"] = clientId,
+            ["client_id"] = ConfiguredClientId,
             ["refresh_token"] = "not-a-real-refresh-token",
         });
 
         var response = await client.PostAsync("/mcp/oauth/token", form, ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
-        Assert.True(body.TryGetProperty("error", out var error));
-        Assert.Equal("invalid_grant", error.GetString());
+        Assert.Equal("invalid_grant", await ErrorAsync(response, ct));
     }
 
     [Fact]
@@ -197,91 +151,277 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var ct = TestContext.Current.CancellationToken;
         using var client = ApiClient();
 
-        var clientId = await RegisterClientAsync(client, "https://example.com/callback", ct);
-
         var form = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "client_credentials",
-            ["client_id"] = clientId,
+            ["client_id"] = ConfiguredClientId,
         });
 
         var response = await client.PostAsync("/mcp/oauth/token", form, ct);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        var body = await response.Content.ReadFromJsonAsync<JsonElement>(ct);
-        Assert.True(body.TryGetProperty("error", out var error));
-        Assert.Equal("invalid_grant", error.GetString());
+        Assert.Equal("invalid_grant", await ErrorAsync(response, ct));
     }
 
-    // ── Full OAuth flow (CI-gated: requires Keycloak + running Aspire stack) ──
-    //
-    // The full dance: register → authorize → capture code from redirect → POST /token
-    // with code_verifier → assert tokens → POST /token with refresh_token → assert new tokens.
-    //
-    // Authentication reuses KeycloakLoginHelper.SignInAsync (the proven login path used by
-    // every other authenticated test), which returns a session whose Client carries the
-    // sb.auth cookie and uses AllowAutoRedirect=false. Because the session is already
-    // authenticated, GET /mcp/oauth/authorize issues the code immediately and returns a
-    // 302 to redirect_uri?code=...&state=... — no Keycloak login form scraping required.
+    [Fact]
+    public async Task Token_WithBogusCode_DoesNotFetchUnknownCimdUrl()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var client = ApiClient();
+        factory.CimdStub.Clear();
+
+        var response = await client.PostAsync(
+            "/mcp/oauth/token", CodeExchange("https://localhost:47443/never.json", "bogus-code", LoopbackRedirectUri), ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_grant", await ErrorAsync(response, ct));
+        Assert.DoesNotContain("/never.json", factory.CimdStub.RequestedPaths);
+    }
 
     [Fact]
-    public async Task FullFlow_AuthorizeCodeExchange_ReturnsTokens()
+    public async Task Token_WithUnknownClient_Returns401InvalidClient()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        // The token endpoint only resolves the client once a live grant exists, so seed a code
+        // bound to a client id that neither config nor CIMD can resolve.
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+
+        var metadata = await factory.InitialisedApp.GetConnectionStringAsync("metadata-db", ct);
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql(metadata)
+            .UseSnakeCaseNamingConvention()
+            .Options);
+        var user = await db.Users.AsNoTracking().FirstAsync(ct);
+        var service = new McpTokenService(db, TimeProvider.System, Options.Create(new McpOptions()));
+        var code = await service.IssueAuthCodeAsync(
+            "does-not-exist", user.Id, LoopbackRedirectUri, S256Challenge(Verifier), ct);
+
+        using var client = ApiClient();
+        var response = await client.PostAsync(
+            "/mcp/oauth/token", CodeExchange("does-not-exist", code, LoopbackRedirectUri), ct);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("invalid_client", await ErrorAsync(response, ct));
+    }
+
+    // ── Signed-in authorize (CI-gated: requires Keycloak + running Aspire stack) ──
+
+    [Fact]
+    public async Task Authorize_SignedIn_UnknownClient_Returns400()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+
+        var response = await session.Client.GetAsync(
+            AuthorizeUrl("does-not-exist", LoopbackRedirectUri, "s", S256Challenge(Verifier)), ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
+
+    [Fact]
+    public async Task Authorize_WithUnknownClientId_Returns400()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+
+        var response = await session.Client.GetAsync(
+            AuthorizeUrl("https://localhost:47443/missing.json", LoopbackRedirectUri, "s", S256Challenge(Verifier)), ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid_client_or_redirect_uri", await response.Content.ReadAsStringAsync(ct));
+    }
+
+    [Theory]
+    [InlineData(ConfiguredClientId, "http://127.0.0.1:43123/other")]
+    [InlineData(CimdStubServer.LoopbackClientId, "http://127.0.0.1:43123/other")]
+    [InlineData(CimdStubServer.WebClientId, "https://attacker.example/cb")]
+    public async Task Authorize_WithUnregisteredRedirectUri_Returns400(string clientId, string redirectUri)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+
+        var response = await session.Client.GetAsync(AuthorizeUrl(clientId, redirectUri, "s", S256Challenge(Verifier)), ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
+
+    [Fact]
+    public async Task Authorize_CimdMismatch_Returns400()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+
+        var response = await session.Client.GetAsync(
+            AuthorizeUrl(CimdStubServer.MismatchClientId, LoopbackRedirectUri, "s", S256Challenge(Verifier)), ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+    }
+
+    [Fact]
+    public async Task Authorize_CimdLoopback_IssuesCodeWithoutConsent_WithIss()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+
+        var response = await session.Client.GetAsync(
+            AuthorizeUrl(CimdStubServer.LoopbackClientId, LoopbackRedirectUri, "loop-state", S256Challenge(Verifier)), ct);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var location = response.Headers.Location!;
+        Assert.StartsWith(LoopbackRedirectUri + "?", location.ToString());
+        var qs = HttpUtility.ParseQueryString(location.Query);
+        Assert.False(string.IsNullOrEmpty(qs["code"]));
+        Assert.Equal("loop-state", qs["state"]);
+        Assert.Equal(ExpectedIssuer, qs["iss"]);
+    }
+
+    [Fact]
+    public async Task Authorize_ConfiguredClient_IssuesCodeWithoutConsent()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+
+        var response = await session.Client.GetAsync(
+            AuthorizeUrl(ConfiguredClientId, LoopbackRedirectUri, "cfg-state", S256Challenge(Verifier)), ct);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var qs = HttpUtility.ParseQueryString(response.Headers.Location!.Query);
+        Assert.False(string.IsNullOrEmpty(qs["code"]));
+        Assert.Equal("cfg-state", qs["state"]);
+        Assert.Equal(ExpectedIssuer, qs["iss"]);
+    }
+
+    [Fact]
+    public async Task Authorize_CimdWeb_ShowsConsentWithVerifiedHost()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+
+        var response = await session.Client.GetAsync(
+            AuthorizeUrl(CimdStubServer.WebClientId, WebRedirectUri, "s", S256Challenge(Verifier)), ct);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Null(response.Headers.Location);
+        Assert.Contains("frame-ancestors 'none'", response.Headers.GetValues("Content-Security-Policy").Single());
+        var html = await response.Content.ReadAsStringAsync(ct);
+        Assert.Contains("<strong>localhost</strong>", html);
+        Assert.Contains("Example Web Tool", html);
+    }
+
+    [Fact]
+    public async Task Authorize_PostWithoutAntiforgeryToken_Returns400()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["client_id"] = CimdStubServer.WebClientId,
+            ["redirect_uri"] = WebRedirectUri,
+            ["response_type"] = "code",
+            ["code_challenge"] = S256Challenge(Verifier),
+            ["code_challenge_method"] = "S256",
+            ["state"] = "s",
+            ["decision"] = "allow",
+        });
+
+        var response = await session.Client.PostAsync("/mcp/oauth/authorize", form, ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Authorize_PostWithoutAntiforgeryToken_DoesNotFetchCimd()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+        factory.CimdStub.Clear();
+        var form = new FormUrlEncodedContent(new Dictionary<string, string>
+        {
+            ["client_id"] = "https://localhost:47443/forged-post.json",
+            ["redirect_uri"] = WebRedirectUri,
+            ["response_type"] = "code",
+            ["code_challenge"] = S256Challenge(Verifier),
+            ["code_challenge_method"] = "S256",
+            ["state"] = "s",
+            ["decision"] = "allow",
+        });
+
+        var response = await session.Client.PostAsync("/mcp/oauth/authorize", form, ct);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("invalid_csrf_token", await response.Content.ReadAsStringAsync(ct));
+        Assert.DoesNotContain("/forged-post.json", factory.CimdStub.RequestedPaths);
+    }
+
+    [Fact]
+    public async Task Authorize_CimdWeb_Allow_RedirectsWithCodeAndIss()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var consent = await session.Client.GetAsync(
+            AuthorizeUrl(CimdStubServer.WebClientId, WebRedirectUri, "allow-state", S256Challenge(Verifier)), ct);
+        var fields = McpConsentForm.Fields(await consent.Content.ReadAsStringAsync(ct), "allow");
+
+        var response = await session.Client.PostAsync("/mcp/oauth/authorize", new FormUrlEncodedContent(fields), ct);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        Assert.StartsWith(WebRedirectUri + "?", response.Headers.Location!.ToString());
+        var qs = HttpUtility.ParseQueryString(response.Headers.Location!.Query);
+        Assert.False(string.IsNullOrEmpty(qs["code"]));
+        Assert.Equal("allow-state", qs["state"]);
+        Assert.Equal(ExpectedIssuer, qs["iss"]);
+    }
+
+    [Fact]
+    public async Task Authorize_Deny_RedirectsWithAccessDeniedAndIss()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var consent = await session.Client.GetAsync(
+            AuthorizeUrl(CimdStubServer.WebClientId, WebRedirectUri, "deny-state", S256Challenge(Verifier)), ct);
+        var fields = McpConsentForm.Fields(await consent.Content.ReadAsStringAsync(ct), "deny");
+
+        var response = await session.Client.PostAsync("/mcp/oauth/authorize", new FormUrlEncodedContent(fields), ct);
+
+        Assert.Equal(HttpStatusCode.Redirect, response.StatusCode);
+        var qs = HttpUtility.ParseQueryString(response.Headers.Location!.Query);
+        Assert.Equal("access_denied", qs["error"]);
+        Assert.Equal("deny-state", qs["state"]);
+        Assert.Equal(ExpectedIssuer, qs["iss"]);
+        Assert.Null(qs["code"]);
+    }
+
+    [Fact]
+    public async Task FullFlow_CimdLoopback_CodeExchangeAndRefresh_ReturnsTokens()
     {
         var ct = TestContext.Current.CancellationToken;
 
-        // Redirect URI must be registered. We use a localhost path we control so we
-        // can capture the code from the Location header when the redirect fires.
-        var redirectUri = "https://localhost/mcp-test/callback";
-        const string verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
-        var challenge = S256Challenge(verifier);
+        // The CIMD document registers a portless loopback URI; native clients bind an ephemeral
+        // port per sign-in (RFC 8252 §7.3).
+        const string requestedRedirectUri = "http://127.0.0.1:51234/callback";
         const string state = "test-state-abc123";
 
-        // Use a plain client to register the OAuth client (no redirect needed).
-        string clientId;
-        using (var setupClient = ApiClient())
-        {
-            clientId = await RegisterClientAsync(setupClient, redirectUri, ct);
-        }
-
-        var authorizeUrl = $"/mcp/oauth/authorize" +
-                           $"?client_id={Uri.EscapeDataString(clientId)}" +
-                           $"&redirect_uri={Uri.EscapeDataString(redirectUri)}" +
-                           $"&response_type=code" +
-                           $"&code_challenge={Uri.EscapeDataString(challenge)}" +
-                           $"&code_challenge_method=S256" +
-                           $"&state={Uri.EscapeDataString(state)}";
-
-        // Sign in via KeycloakLoginHelper — the session Client carries the sb.auth cookie
-        // and has AllowAutoRedirect=false. Because the session is already authenticated,
-        // GET /mcp/oauth/authorize returns 302 directly to redirect_uri?code=...
         using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
 
-        var authorizeResponse = await session.Client.GetAsync(authorizeUrl, ct);
-
-        // The endpoint should redirect us to our redirect_uri with ?code=...&state=...
+        // Step 1: authorize → redirect straight to redirect_uri?code=...&state=...&iss=...
+        var authorizeResponse = await session.Client.GetAsync(
+            AuthorizeUrl(CimdStubServer.LoopbackClientId, requestedRedirectUri, state, S256Challenge(Verifier)), ct);
         Assert.Equal(HttpStatusCode.Redirect, authorizeResponse.StatusCode);
         var location = authorizeResponse.Headers.Location!;
-        Assert.NotNull(location);
-        Assert.StartsWith(redirectUri, location.ToString());
+        Assert.StartsWith(requestedRedirectUri, location.ToString());
 
         var qs = HttpUtility.ParseQueryString(location.Query);
         var code = qs["code"];
-        var returnedState = qs["state"];
         Assert.False(string.IsNullOrEmpty(code), "Expected 'code' in redirect query string");
-        Assert.Equal(state, returnedState);
+        Assert.Equal(state, qs["state"]);
 
         // Step 2: Exchange code for tokens via POST /mcp/oauth/token (on the api directly).
         using var tokenClient = ApiClient();
-
-        var tokenForm = new FormUrlEncodedContent(new Dictionary<string, string>
-        {
-            ["grant_type"] = "authorization_code",
-            ["client_id"] = clientId,
-            ["code"] = code!,
-            ["redirect_uri"] = redirectUri,
-            ["code_verifier"] = verifier,
-        });
-        var tokenResponse = await tokenClient.PostAsync("/mcp/oauth/token", tokenForm, ct);
+        var tokenResponse = await tokenClient.PostAsync(
+            "/mcp/oauth/token", CodeExchange(CimdStubServer.LoopbackClientId, code!, requestedRedirectUri), ct);
         Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
 
         var tokenBody = await tokenResponse.Content.ReadFromJsonAsync<JsonElement>(ct);
@@ -298,7 +438,7 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
         var refreshForm = new FormUrlEncodedContent(new Dictionary<string, string>
         {
             ["grant_type"] = "refresh_token",
-            ["client_id"] = clientId,
+            ["client_id"] = CimdStubServer.LoopbackClientId,
             ["refresh_token"] = refreshToken.GetString()!,
         });
         var refreshResponse = await tokenClient.PostAsync("/mcp/oauth/token", refreshForm, ct);

@@ -58,7 +58,12 @@ var api = builder.AddProject<Projects.SluiceBase_Api>("api")
     // Example override for the client alias shown in the Connect AI tools snippets.
     // Operators set Mcp__ServerName per instance; defaults to "sluicebase" if unset.
     .WithEnvironment("Mcp__ServerName", "db-local")
-    .WithEnvironment("PublicBaseUrl", "https://localhost:5443");
+    .WithEnvironment("PublicBaseUrl", "https://localhost:5443")
+    // Test-only: lets the CIMD fetcher reach loopback stubs. The API refuses to start with this outside Development.
+    .WithEnvironment("Mcp__Cimd__AllowLoopbackForTesting", "true")
+    .WithEnvironment("Mcp__Clients__0__ClientId", "sluicebase-dev")
+    .WithEnvironment("Mcp__Clients__0__Name", "SluiceBase dev client")
+    .WithEnvironment("Mcp__Clients__0__RedirectUris__0", "http://127.0.0.1:43123/callback");
 
 builder.AddYarp("gateway")
     .WithHostHttpsPort(5443)
