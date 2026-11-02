@@ -2,7 +2,6 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
 using SluiceBase.Api.Endpoints;
@@ -55,12 +54,12 @@ builder.Services.AddScoped<ICatalogService, CatalogService>();
 builder.Services.AddScoped<ISchemaService, SchemaService>();
 builder.Services.AddScoped<IQueryService, QueryService>();
 builder.Services.AddScoped<IUpdateRequestService, UpdateRequestService>();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IBaseUrlResolver, BaseUrlResolver>();
 builder.Services.AddScoped<SensitiveColumnGuard>();
 
 builder.Services.Configure<McpOptions>(builder.Configuration.GetSection(McpOptions.SectionName));
 builder.Services.AddScoped<IMcpTokenService, McpTokenService>();
-builder.Services.AddHttpContextAccessor();
-builder.Services.AddSingleton<IMcpIssuer, McpIssuer>();
 
 var mcpEnabled = builder.Configuration.GetValue($"{McpOptions.SectionName}:Enabled", true);
 if (mcpEnabled)
@@ -102,11 +101,9 @@ if (builder.Configuration.GetValue("Migrations:AutoApply", true)
     await db.Database.MigrateAsync();
 }
 
-if (mcpEnabled)
-{
-    app.Services.GetRequiredService<IOptions<McpOptions>>().Value
-        .GetValidatedPublicBaseUrl(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<McpOptions>());
-}
+BaseUrlResolver.Validate(
+    builder.Configuration[BaseUrlResolver.ConfigKey],
+    app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<BaseUrlResolver>());
 
 app.UseForwardedHeaders(new ForwardedHeadersOptions
 {

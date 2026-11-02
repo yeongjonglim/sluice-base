@@ -85,7 +85,7 @@ The container listens on HTTP only, so deploy it behind a reverse proxy (nginx, 
    proxy_set_header X-Forwarded-Proto $scheme;
    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
    ```
-3. **`Mcp__PublicBaseUrl=https://your-domain`** pins the MCP OAuth issuer and the links MCP tools return, so they don't depend on request headers at all.
+3. **`PublicBaseUrl=https://your-domain`** pins the app's absolute URLs (the MCP OAuth issuer, links MCP tools return), so they don't depend on request headers at all. Without it each request's own scheme and `Host` are used, so a user reaching the app at an internal hostname gets URLs with that hostname.
 
 ## Environment variables
 
@@ -96,6 +96,7 @@ The container listens on HTTP only, so deploy it behind a reverse proxy (nginx, 
 | `Oidc__ClientId` | ✓ | — | OIDC client ID |
 | `Oidc__ClientSecret` | ✓ | — | OIDC client secret |
 | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | ✓ behind a proxy | `false` | Trust `X-Forwarded-Proto`/`X-Forwarded-For` from the TLS-terminating proxy — see [Behind a reverse proxy](#behind-a-reverse-proxy) |
+| `PublicBaseUrl` | | _(derived from request)_ | Public origin of this server, e.g. `https://sluice.example.com` (scheme, host, optional port; no path; trailing slash removed, host lowercased). Strongly recommended behind a reverse proxy; used for absolute URLs such as the MCP OAuth issuer and links MCP tools return. If unset it is built from the request's scheme and `Host` header (correct only when the [proxy setup](#behind-a-reverse-proxy) is right) and a warning is logged at startup |
 | `Migrations__AutoApply` | | `true` | Apply pending DB migrations on startup |
 | `Permissions__Bootstrap__Admins__0` | | — | Email of the first admin (granted full permissions on first login) |
 | `Branding__AppName` | | `SluiceBase` | Application name shown in the UI |
@@ -108,7 +109,6 @@ The container listens on HTTP only, so deploy it behind a reverse proxy (nginx, 
 | `Mcp__AccessTokenMinutes` | | `60` | Lifetime of an MCP access token in minutes |
 | `Mcp__RefreshTokenDays` | | `30` | Lifetime of an MCP refresh token in days |
 | `Mcp__AuthCodeSeconds` | | `120` | Lifetime of an MCP OAuth authorization code in seconds |
-| `Mcp__PublicBaseUrl` | | _(derived from request)_ | Public origin of this server, e.g. `https://sluice.example.com` (scheme, host, optional port; no path; trailing slash removed, host lowercased). Strongly recommended behind a reverse proxy; becomes the OAuth issuer and the base of links MCP tools return. If unset it is built from the request's scheme and `Host` header (correct only when the [proxy setup](#behind-a-reverse-proxy) is right) and a warning is logged at startup |
 
 ### Branding colours
 
