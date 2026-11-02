@@ -1293,7 +1293,7 @@ export interface components {
         /** Format: uuid */
         UpdateRequestId: string;
         /** @enum {string} */
-        UpdateRequestStatus: "Pending" | "Approved" | "Rejected" | "Cancelled" | "Executed";
+        UpdateRequestStatus: "Pending" | "Approved" | "Executing" | "Rejected" | "Cancelled" | "Executed";
         UpdateServerRequest: {
             name: string;
             host: string;

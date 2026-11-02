@@ -271,6 +271,37 @@ public class UpdateEndpointTests
         Assert.Null(executed.ExecError);
     }
 
+    // Without the claim saved before the SQL runs, both calls would pass the status check and run the SQL twice.
+    [Fact]
+    public async Task Execute_ConcurrentCalls_RunTheSqlOnce()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AliceWithBlueServerAsync(
+            [Permissions.UpdateSubmit, Permissions.UpdateApprove, Permissions.UpdateExecute],
+            ct);
+        using var _ = session;
+
+        using var submitReq = MutationRequest(HttpMethod.Post, "/api/update", xsrf,
+            new { databaseId, sqlText = "SELECT pg_sleep(1)", reason = "concurrent execute" });
+        var submitResp = await session.Client.SendAsync(submitReq, ct);
+        submitResp.EnsureSuccessStatusCode();
+        var requestId = (await submitResp.Content
+            .ReadFromJsonAsync<UpdateEndpoints.UpdateRequestDetailResponse>(_jsonSerializerOptions, ct))!.Id.Value;
+
+        using var approveReq = MutationRequest(HttpMethod.Post, $"/api/update/{requestId}/approve", xsrf,
+            new { note = "ok" });
+        (await session.Client.SendAsync(approveReq, ct)).EnsureSuccessStatusCode();
+
+        var responses = await Task.WhenAll(Enumerable.Range(0, 2).Select(async _ =>
+        {
+            using var executeReq = MutationRequest(HttpMethod.Post, $"/api/update/{requestId}/execute", xsrf);
+            return await session.Client.SendAsync(executeReq, ct);
+        }));
+
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
+        Assert.Single(responses, r => r.StatusCode == HttpStatusCode.Conflict);
+    }
+
     // ── state machine guards ─────────────────────────────────────────────────
 
     [Fact]

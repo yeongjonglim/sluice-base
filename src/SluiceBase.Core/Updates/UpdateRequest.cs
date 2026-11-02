@@ -54,6 +54,7 @@ public sealed class UpdateRequest
         Approve,
         Reject,
         Cancel,
+        BeginExecution,
         Execute
     }
 
@@ -82,6 +83,7 @@ public sealed class UpdateRequest
         var approveTrigger = machine.SetTriggerParameters<TriggerRequest>(Trigger.Approve);
         var rejectTrigger = machine.SetTriggerParameters<TriggerRequest>(Trigger.Reject);
         var cancelTrigger = machine.SetTriggerParameters<TriggerRequest>(Trigger.Cancel);
+        var beginExecutionTrigger = machine.SetTriggerParameters<Actioned>(Trigger.BeginExecution);
         var executeTrigger = machine.SetTriggerParameters<ExecuteTriggerRequest>(Trigger.Execute);
 
         machine.Configure(UpdateRequestStatus.Pending)
@@ -98,7 +100,11 @@ public sealed class UpdateRequest
                     ReviewedAt = x.Actioned.At;
                 })
             .PermitIf(cancelTrigger, UpdateRequestStatus.Cancelled)
-            .PermitIf(executeTrigger, UpdateRequestStatus.Executed);
+            .PermitIf(beginExecutionTrigger, UpdateRequestStatus.Executing);
+
+        machine.Configure(UpdateRequestStatus.Executing)
+            .OnEntryFrom(beginExecutionTrigger, x => ExecutorId = x.UserId)
+            .PermitIf(executeTrigger, UpdateRequestStatus.Executed, x => x.Actioned.UserId == ExecutorId);
 
         machine.Configure(UpdateRequestStatus.Rejected)
             .OnEntryFrom(rejectTrigger,
@@ -176,7 +182,16 @@ public sealed class UpdateRequest
         StateMachine.Fire(triggerWithParameters, new TriggerRequest(actioned, note));
     }
 
-    // Fires the Execute trigger and records the outcome.
+    // Claims the approved request for one executor before its SQL runs. Persisting the claim is what stops a
+    // second executor (or a cancel) from acting on the same request, since Status is a concurrency token.
+    public void BeginExecution(Actioned actioned)
+    {
+        var triggerWithParameters =
+            new StateMachine<UpdateRequestStatus, Trigger>.TriggerWithParameters<Actioned>(Trigger.BeginExecution);
+        StateMachine.Fire(triggerWithParameters, actioned);
+    }
+
+    // Fires the Execute trigger and records the outcome. Only the executor who began the execution can record it.
     // The caller is responsible for running the SQL and passing the result here.
     public void RecordExecution(
         Actioned actioned,
@@ -198,7 +213,7 @@ public sealed class UpdateRequest
     }
 
     // Exposed for the execute endpoint to pre-check before running expensive SQL.
-    public bool CanExecute() => StateMachine.CanFire(Trigger.Execute);
+    public bool CanExecute() => StateMachine.CanFire(Trigger.BeginExecution);
     // public bool CanExecute(
     //     Actioned actioned,
     //     bool success,

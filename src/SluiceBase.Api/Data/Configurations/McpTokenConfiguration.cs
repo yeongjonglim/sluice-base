@@ -14,6 +14,8 @@ internal sealed class McpTokenConfiguration : IEntityTypeConfiguration<McpToken>
         builder.Property(t => t.TokenHash).IsRequired();
         builder.Property(t => t.ClientId).IsRequired();
         builder.Property(t => t.Type).HasMaxLength(16).IsRequired();
+        // Rotating a refresh token saves with "WHERE revoked = false", so it can be exchanged only once.
+        builder.Property(t => t.Revoked).IsConcurrencyToken();
         builder.HasIndex(t => t.TokenHash).IsUnique();
         builder.HasIndex(t => new { t.UserId, t.Type });
 

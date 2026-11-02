@@ -13,7 +13,9 @@ internal sealed class UpdateRequestConfiguration : IEntityTypeConfiguration<Upda
         builder.HasKey(r => r.Id);
         builder.Property(r => r.SqlText).IsRequired();
         builder.Property(r => r.Reason).IsRequired();
-        builder.Property(r => r.Status).HasMaxLength(16).IsRequired();
+        // Every transition saves with "WHERE status = <status it was loaded with>", so two concurrent
+        // transitions (two executes, or an execute and a cancel) cannot both succeed.
+        builder.Property(r => r.Status).HasMaxLength(16).IsRequired().IsConcurrencyToken();
 
         builder.HasOne(r => r.Database).WithMany()
             .HasForeignKey(r => r.DatabaseId)

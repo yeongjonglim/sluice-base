@@ -15,6 +15,8 @@ internal sealed class McpAuthCodeConfiguration : IEntityTypeConfiguration<McpAut
         builder.Property(c => c.ClientId).IsRequired();
         builder.Property(c => c.RedirectUri).IsRequired();
         builder.Property(c => c.CodeChallenge).IsRequired();
+        // Redeeming saves with "WHERE consumed = false", so two concurrent redemptions cannot both issue tokens.
+        builder.Property(c => c.Consumed).IsConcurrencyToken();
         builder.HasIndex(c => c.CodeHash).IsUnique();
 
         builder.HasOne<User>().WithMany()

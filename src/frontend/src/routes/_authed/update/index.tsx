@@ -37,6 +37,7 @@ export const Route = createFileRoute("/_authed/update/")({
 const STATUS_COLOR: Record<string, string> = {
   Pending: "blue",
   Approved: "green",
+  Executing: "yellow",
   Rejected: "red",
   Cancelled: "gray",
   Executed: "teal",
@@ -46,6 +47,7 @@ const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
   { value: "Pending", label: "Pending" },
   { value: "Approved", label: "Approved" },
+  { value: "Executing", label: "Executing" },
   { value: "Rejected", label: "Rejected" },
   { value: "Cancelled", label: "Cancelled" },
   { value: "Executed", label: "Executed" },
@@ -61,7 +63,7 @@ function paramToDate(s: string | undefined): string | null {
 }
 
 function statusBadge(
-  status: "Pending" | "Approved" | "Rejected" | "Cancelled" | "Executed",
+  status: "Pending" | "Approved" | "Executing" | "Rejected" | "Cancelled" | "Executed",
   execSuccess?: boolean | null,
 ) {
   if (status === "Executed" && execSuccess === false) {
