@@ -40,7 +40,7 @@ export function PlanNodeRow({
         borderLeft: isHottest ? "2px solid var(--mantine-color-red-6)" : "2px solid transparent",
       }}
     >
-      <Group gap={6} wrap="nowrap" align="center" py={2}>
+      <Group gap={6} wrap="wrap" align="center" py={2}>
         {hasChildren ? (
           <ActionIcon
             variant="subtle"
