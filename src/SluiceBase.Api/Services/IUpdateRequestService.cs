@@ -82,6 +82,7 @@ internal sealed class UpdateRequestService(
         UpdateRequestId? sourceRequestId, CancellationToken ct)
     {
         var database = await db.Databases.AsNoTracking()
+            .Include(d => d.Server)
             .SingleOrDefaultAsync(d => d.Id == databaseId, ct);
         if (database is null)
         {
@@ -102,6 +103,11 @@ internal sealed class UpdateRequestService(
         if (!database.CanWrite)
         {
             return new SubmitUpdateResult(SubmitOutcome.BadRequest, null, "Server has no write credentials configured.");
+        }
+
+        if (engineRegistry.Resolve(database.Server!.Kind).ValidateUpdateSql(sqlText) is { } sqlProblem)
+        {
+            return new SubmitUpdateResult(SubmitOutcome.BadRequest, null, sqlProblem);
         }
 
         var request = UpdateRequest.Create(
