@@ -223,6 +223,8 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
             "Expected WWW-Authenticate header on 401");
         var wwwAuth = string.Join(", ", values!);
         Assert.Contains("resource_metadata", wwwAuth, StringComparison.OrdinalIgnoreCase);
+        // The pointer is path-specific (RFC 9728), so it names the /mcp resource rather than the root.
+        Assert.Contains("/.well-known/oauth-protected-resource/mcp\"", wwwAuth, StringComparison.Ordinal);
     }
 
     // ── Test 2: list_databases via MCP bearer ──────────────────────────────────
@@ -436,6 +438,13 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         Assert.DoesNotContain(toolNames, n => n.Contains("reject", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(toolNames, n => n.Contains("cancel", StringComparison.OrdinalIgnoreCase));
         Assert.DoesNotContain(toolNames, n => n.Contains("execute", StringComparison.OrdinalIgnoreCase));
+
+        // Clients use these hints to decide what needs the user's approval.
+        foreach (var tool in tools)
+        {
+            Assert.True(tool.ProtocolTool.Annotations?.ReadOnlyHint, tool.Name);
+            Assert.False(tool.ProtocolTool.Annotations?.OpenWorldHint, tool.Name);
+        }
     }
 
     // ── Test 6: submit_update_request creates a Pending request readable via get ──
@@ -476,10 +485,9 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
 
         var submitText = ContentText(submitResult);
         Assert.Contains("Pending", submitText);
-        // A server-relative path to the detail page is returned for the client to resolve against
-        // its own MCP base URL — never an absolute link built from the (proxy-unreliable) server host.
-        Assert.Contains("/update/", submitText);
-        Assert.DoesNotContain("http", submitText, StringComparison.OrdinalIgnoreCase);
+        // The link uses the origin this MCP client connected to.
+        var apiOrigin = factory.InitialisedApp.GetEndpoint("api", "https").GetLeftPart(UriPartial.Authority);
+        Assert.Contains($"{apiOrigin}/update/", submitText);
 
         var idMatch = System.Text.RegularExpressions.Regex.Match(
             submitText, "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");

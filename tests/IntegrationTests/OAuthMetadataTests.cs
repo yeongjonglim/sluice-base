@@ -59,6 +59,27 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
         Assert.Equal(["S256"], methods);
     }
 
+    [Fact]
+    public async Task ProtectedResource_RootAndPathSpecific_UseTheRequestOrigin()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
+        var origin = client.BaseAddress!.GetLeftPart(UriPartial.Authority);
+
+        var root = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-protected-resource", ct);
+        var mcp = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-protected-resource/mcp", ct);
+        var server = await client.GetFromJsonAsync<JsonElement>("/.well-known/oauth-authorization-server", ct);
+
+        Assert.Equal(origin, root.GetProperty("resource").GetString());
+        Assert.Equal($"{origin}/mcp", mcp.GetProperty("resource").GetString());
+        Assert.Equal(origin, server.GetProperty("issuer").GetString());
+        foreach (var document in new[] { root, mcp })
+        {
+            Assert.Equal([origin], document.GetProperty("authorization_servers").EnumerateArray().Select(e => e.GetString()));
+            Assert.Equal(["header"], document.GetProperty("bearer_methods_supported").EnumerateArray().Select(e => e.GetString()));
+        }
+    }
+
     // ── Dynamic Client Registration ───────────────────────────────────────────
 
     [Fact]

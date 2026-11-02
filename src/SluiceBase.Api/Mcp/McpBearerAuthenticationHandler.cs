@@ -35,13 +35,4 @@ internal sealed class McpBearerAuthenticationHandler(
         var principal = new ClaimsPrincipal(identity);
         return AuthenticateResult.Success(new AuthenticationTicket(principal, SchemeName));
     }
-
-    protected override Task HandleChallengeAsync(AuthenticationProperties properties)
-    {
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
-        Response.StatusCode = 401;
-        Response.Headers.WWWAuthenticate =
-            $"Bearer resource_metadata=\"{baseUrl}/.well-known/oauth-protected-resource\"";
-        return Task.CompletedTask;
-    }
 }

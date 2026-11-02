@@ -394,18 +394,6 @@
         }
       }
     },
-    "/.well-known/oauth-protected-resource": {
-      "get": {
-        "tags": [
-          "SluiceBase.Api"
-        ],
-        "responses": {
-          "200": {
-            "description": "OK"
-          }
-        }
-      }
-    },
     "/.well-known/oauth-authorization-server": {
       "get": {
         "tags": [
