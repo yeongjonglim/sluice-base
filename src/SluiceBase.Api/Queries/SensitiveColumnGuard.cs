@@ -22,8 +22,10 @@ internal sealed class SensitiveColumnGuard(
     ITargetEngineRegistry engineRegistry,
     IConfiguration configuration)
 {
+    // credential is the one the SQL will run with: EXPLAIN checks the same privileges, so an UPDATE in a
+    // preview has to be planned with the write credential.
     public async Task<SensitiveColumnDecision> EvaluateAsync(
-        UserId userId, DatabaseId databaseId, string sql, CancellationToken ct)
+        UserId userId, DatabaseId databaseId, string sql, CredentialKind credential, CancellationToken ct)
     {
         var sensitiveColumns = await db.SensitiveColumns
             .AsNoTracking()
@@ -49,15 +51,21 @@ internal sealed class SensitiveColumnGuard(
             .Select(c => (c.SchemaName, c.TableName, c.ColumnName))
             .ToList();
 
-        var touchedHits = await ResolveTouchedAsync(databaseId, sql, sensitiveTuples, ct);
-        if (touchedHits.Count == 0)
-        {
-            return new SensitiveColumnDecision([], []);
-        }
+        var (touchedHits, unverifiableReason) = await ResolveTouchedAsync(databaseId, sql, credential, sensitiveTuples, ct);
 
         var touched = touchedHits
             .Select(h => $"{h.Schema}.{h.Table}.{h.Column}")
             .ToArray();
+
+        if (unverifiableReason is not null)
+        {
+            return new SensitiveColumnDecision([], touched, unverifiableReason);
+        }
+
+        if (touchedHits.Count == 0)
+        {
+            return new SensitiveColumnDecision([], []);
+        }
 
         var sensitiveColumnIds = sensitiveColumns.Select(c => c.Id).ToList();
         var bypassed = await db.UserColumnBypasses
@@ -77,12 +85,22 @@ internal sealed class SensitiveColumnGuard(
         return new SensitiveColumnDecision(blockedHits, touched);
     }
 
-    // Returns the sensitive columns the SQL actually touches. Uses EXPLAIN-based resolution per
-    // statement; on any failure for a statement (including a resolution timeout), falls back to
-    // the SqlColumnChecker tokenizer (conservative — never under-blocks).
-    private async Task<IReadOnlyList<SensitiveColumnHit>> ResolveTouchedAsync(
+    // Statements that cannot return rows. When EXPLAIN cannot plan one of these, the tokenizer check is
+    // enough; any other statement EXPLAIN cannot plan (EXECUTE, FETCH, CALL, DO, a SELECT on a table an
+    // earlier statement creates, ...) could return data no check can see, so it is blocked instead.
+    private static readonly HashSet<string> NoRowOutputStatements = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CREATE", "ALTER", "DROP", "COMMENT", "GRANT", "REVOKE", "TRUNCATE", "REINDEX", "VACUUM", "ANALYZE",
+        "CLUSTER", "REFRESH", "SET", "RESET", "LOCK", "SHOW",
+    };
+
+    // Returns the sensitive columns the SQL actually touches, using EXPLAIN-based resolution per statement.
+    // UnverifiableReason is set when a statement could return data that cannot be checked: the query must
+    // then be blocked, since the tokenizer can be fooled and is only trusted for statements without rows.
+    private async Task<(IReadOnlyList<SensitiveColumnHit> Hits, string? UnverifiableReason)> ResolveTouchedAsync(
         DatabaseId databaseId,
         string sql,
+        CredentialKind credential,
         IReadOnlyList<(string Schema, string Table, string Column)> sensitiveTuples,
         CancellationToken ct)
     {
@@ -106,17 +124,14 @@ internal sealed class SensitiveColumnGuard(
                 .SingleAsync(d => d.Id == databaseId, token);
             engine = engineRegistry.Resolve(database.Server!.Kind);
             connectionString = await connectionFactory.GetConnectionStringAsync(
-                databaseId, CredentialKind.Read, token);
+                databaseId, credential, token);
         }
         catch (Exception) when (!ct.IsCancellationRequested)
         {
-            // Cannot connect / resolve engine, or resolution timed out — tokenizer over the
-            // whole SQL keeps us safe. A genuine caller cancellation (ct) still propagates.
-            foreach (var h in SqlColumnChecker.FindBlockedColumns(sql, sensitiveTuples))
-            {
-                hits.Add(h);
-            }
-            return [.. hits];
+            // Cannot connect / resolve engine, or resolution timed out. A genuine caller cancellation (ct)
+            // still propagates.
+            return ([], "The query could not be checked against the sensitive-column policy because the database " +
+                        "could not be reached, so it was blocked.");
         }
 
         foreach (var statement in SqlStatementSplitter.Split(sql))
@@ -135,11 +150,21 @@ internal sealed class SensitiveColumnGuard(
                     }
                 }
             }
-            catch (Exception) when (!ct.IsCancellationRequested)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                // EXPLAIN failed for this statement (unplannable, permission, opaque, or
-                // resolution timeout) — conservative tokenizer fallback for this statement only.
+                // EXPLAIN failed for this statement (unplannable, permission, opaque, or resolution timeout).
                 // A genuine caller cancellation (ct) still propagates.
+                var keyword = SqlLexing.LeadingWords(statement, 1).FirstOrDefault() ?? "";
+                if (!NoRowOutputStatements.Contains(keyword))
+                {
+                    var why = ex is OperationCanceledException
+                        ? "it could not be planned in time"
+                        : ex.Message.Split('\n')[0];
+                    return ([.. hits],
+                        "A statement could not be checked against the sensitive-column policy, so the query was " +
+                        $"blocked ({why}).");
+                }
+
                 foreach (var h in SqlColumnChecker.FindBlockedColumns(statement, sensitiveTuples))
                 {
                     hits.Add(h);
@@ -147,7 +172,7 @@ internal sealed class SensitiveColumnGuard(
             }
         }
 
-        return [.. hits];
+        return ([.. hits], null);
     }
 
     private static bool Eq(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);

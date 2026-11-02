@@ -128,6 +128,22 @@ internal static class SqlTokenizer
                 continue;
             }
 
+            // Unicode-escaped identifier: U&"\0073sn" names the column ssn, so it is decoded before matching.
+            if ((c == 'U' || c == 'u') && pos + 2 < len && sql[pos + 1] == '&' && sql[pos + 2] == '"'
+                && (pos == 0 || !SqlLexing.IsIdentifierChar(sql[pos - 1])))
+            {
+                pos += 3;
+                var raw = ReadQuotedBody(sql, ref pos, '"');
+                var escape = ReadUescape(sql, ref pos);
+                var decoded = DecodeUnicodeEscapes(raw, escape);
+                if (decoded.Length > 0)
+                {
+                    identifiers.Add(decoded);
+                }
+                prev = Prev.Value;
+                continue;
+            }
+
             // Double-quoted identifier: "..." with "" as escape — emit as identifier
             if (c == '"')
             {
@@ -171,11 +187,17 @@ internal static class SqlTokenizer
                 }
                 if (pos < len && sql[pos] == '\'')
                 {
-                    // Prefix string — skip the following string literal
+                    // Prefix string — skip the following string literal. In E'...' a backslash escapes the
+                    // next character, so E'\'' does not end the string.
+                    var backslashEscapes = SqlLexing.IsEscapeStringPrefix(sql, pos);
                     pos++;
                     while (pos < len)
                     {
-                        if (sql[pos] == '\'')
+                        if (backslashEscapes && sql[pos] == '\\')
+                        {
+                            pos += 2;
+                        }
+                        else if (sql[pos] == '\'')
                         {
                             pos++;
                             if (pos < len && sql[pos] == '\'')
@@ -233,5 +255,97 @@ internal static class SqlTokenizer
         }
 
         return new Result(identifiers, hasWildcard);
+    }
+
+    // Reads up to the closing quote (a doubled quote is a literal quote) and leaves pos after it.
+    private static string ReadQuotedBody(string sql, ref int pos, char quote)
+    {
+        var sb = new StringBuilder();
+        while (pos < sql.Length)
+        {
+            if (sql[pos] == quote)
+            {
+                pos++;
+                if (pos < sql.Length && sql[pos] == quote)
+                {
+                    sb.Append(quote);
+                    pos++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            else
+            {
+                sb.Append(sql[pos++]);
+            }
+        }
+        return sb.ToString();
+    }
+
+    // An optional UESCAPE 'c' clause after a U&"..." identifier replaces the default backslash escape.
+    private static char ReadUescape(string sql, ref int pos)
+    {
+        var p = pos;
+        while (p < sql.Length && char.IsWhiteSpace(sql[p]))
+        {
+            p++;
+        }
+        if (p + 7 > sql.Length || !sql.AsSpan(p, 7).Equals("UESCAPE", StringComparison.OrdinalIgnoreCase))
+        {
+            return '\\';
+        }
+        p += 7;
+        while (p < sql.Length && char.IsWhiteSpace(sql[p]))
+        {
+            p++;
+        }
+        if (p + 2 < sql.Length && sql[p] == '\'' && sql[p + 2] == '\'')
+        {
+            pos = p + 3;
+            return sql[p + 1];
+        }
+        return '\\';
+    }
+
+    private static string DecodeUnicodeEscapes(string raw, char escape)
+    {
+        var sb = new StringBuilder();
+        for (var i = 0; i < raw.Length; i++)
+        {
+            if (raw[i] != escape || i + 1 >= raw.Length)
+            {
+                sb.Append(raw[i]);
+            }
+            else if (raw[i + 1] == escape)
+            {
+                sb.Append(escape);
+                i++;
+            }
+            else if (raw[i + 1] == '+' && TryHex(raw, i + 2, 6, out var codePoint))
+            {
+                sb.Append(char.ConvertFromUtf32(codePoint));
+                i += 7;
+            }
+            else if (TryHex(raw, i + 1, 4, out var unit))
+            {
+                sb.Append((char)unit);
+                i += 4;
+            }
+            else
+            {
+                sb.Append(raw[i]);
+            }
+        }
+        return sb.ToString();
+    }
+
+    private static bool TryHex(string s, int start, int length, out int value)
+    {
+        value = 0;
+        return start + length <= s.Length
+            && int.TryParse(s.AsSpan(start, length), System.Globalization.NumberStyles.HexNumber, null, out value)
+            && value is >= 0 and <= 0x10FFFF;
     }
 }

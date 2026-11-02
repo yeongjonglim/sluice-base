@@ -25,6 +25,16 @@ describe("splitSqlStatements", () => {
     expect(s.map((x) => x.text)).toEqual(["SELECT ';' AS a", "SELECT 2"]);
   });
 
+  it("treats a backslash-escaped quote in an E-string as part of the string", () => {
+    const s = splitSqlStatements("SELECT E'it\\'s; ok' AS a; SELECT 2");
+    expect(s.map((x) => x.text)).toEqual(["SELECT E'it\\'s; ok' AS a", "SELECT 2"]);
+  });
+
+  it("does not treat a quote after an identifier ending in e as an E-string", () => {
+    const s = splitSqlStatements("SELECT name'\\'; SELECT 2");
+    expect(s.map((x) => x.text)).toEqual(["SELECT name'\\'", "SELECT 2"]);
+  });
+
   it("handles doubled single-quote escapes inside a literal", () => {
     const s = splitSqlStatements("SELECT 'it''s; ok' AS a; SELECT 2");
     expect(s.map((x) => x.text)).toEqual(["SELECT 'it''s; ok' AS a", "SELECT 2"]);

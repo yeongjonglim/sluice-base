@@ -6,7 +6,7 @@ export interface SqlStatement {
   toLine: number;
 }
 
-type Mode = "normal" | "single" | "lineComment" | "blockComment" | "dollar";
+type Mode = "normal" | "single" | "escapeString" | "lineComment" | "blockComment" | "dollar";
 
 // At a '$', match a dollar-quote opener like $$ or $tag$ and return the full
 // tag (including both $). Returns null when it's not a dollar quote (e.g. $1).
@@ -64,7 +64,14 @@ export function splitSqlStatements(sql: string): Array<SqlStatement> {
     const next = sql[i + 1];
 
     if (mode === "normal") {
-      if (c === "'") { mode = "single"; hasNonCommentContent = true; i++; continue; }
+      if (c === "'") {
+        // E'...' strings treat a backslash as an escape, so E'\'' does not end the string.
+        const isEscapeString = /[eE]/.test(sql[i - 1] ?? "") && !/[A-Za-z0-9_$]/.test(sql[i - 2] ?? "");
+        mode = isEscapeString ? "escapeString" : "single";
+        hasNonCommentContent = true;
+        i++;
+        continue;
+      }
       if (c === "-" && next === "-") { mode = "lineComment"; i += 2; continue; }
       if (c === "/" && next === "*") { mode = "blockComment"; i += 2; continue; }
       if (c === "$") {
@@ -88,6 +95,15 @@ export function splitSqlStatements(sql: string): Array<SqlStatement> {
     if (mode === "single") {
       if (c === "'") {
         if (next === "'") { i += 2; continue; } // escaped quote
+        mode = "normal"; i++; continue;
+      }
+      i++; continue;
+    }
+
+    if (mode === "escapeString") {
+      if (c === "\\") { i += 2; continue; }
+      if (c === "'") {
+        if (next === "'") { i += 2; continue; }
         mode = "normal"; i++; continue;
       }
       i++; continue;

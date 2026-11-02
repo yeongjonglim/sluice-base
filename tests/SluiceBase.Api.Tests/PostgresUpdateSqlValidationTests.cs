@@ -16,6 +16,7 @@ public class PostgresUpdateSqlValidationTests
     [InlineData("/* ROLLBACK */ DELETE FROM t WHERE id = 1")]
     [InlineData("PREPARE p AS SELECT 1")]
     [InlineData("UPDATE \"commit\" SET a = 1")]
+    [InlineData("UPDATE t SET note = E'it\\'s; COMMIT' WHERE id = 1")]
     public void ValidateUpdateSql_AllowsOrdinaryStatements(string sql)
     {
         Assert.Null(Engine.ValidateUpdateSql(sql));
@@ -38,6 +39,7 @@ public class PostgresUpdateSqlValidationTests
     [InlineData("PREPARE TRANSACTION 'x'")]
     [InlineData("COMMIT PREPARED 'x'")]
     [InlineData("/* hide */ COMMIT")]
+    [InlineData("SELECT E'\\'' AS a; COMMIT; DELETE FROM t WHERE id = 4; SELECT 'x'")]
     [InlineData("/* outer /* nested */ still */ COMMIT")]
     [InlineData("-- hide\nCOMMIT")]
     public void ValidateUpdateSql_RejectsTransactionControl(string sql)

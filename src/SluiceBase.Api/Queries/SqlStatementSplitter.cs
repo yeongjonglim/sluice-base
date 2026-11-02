@@ -2,7 +2,8 @@ namespace SluiceBase.Api.Queries;
 
 // Splits a SQL batch into individual statements on top-level semicolons, skipping any `;`
 // inside line comments, block comments (nesting), single-quoted strings, double-quoted
-// identifiers, and dollar-quoted strings — the same lexical constructs SqlTokenizer skips.
+// identifiers, and dollar-quoted strings — the same lexical constructs SqlTokenizer skips. In E'...'
+// strings a backslash escapes the next character, so E'\'' does not end the string.
 internal static class SqlStatementSplitter
 {
     public static IReadOnlyList<string> Split(string sql)
@@ -60,10 +61,15 @@ internal static class SqlStatementSplitter
             if (c == '\'' || c == '"')
             {
                 var quote = c;
+                var backslashEscapes = c == '\'' && SqlLexing.IsEscapeStringPrefix(sql, pos);
                 pos++;
                 while (pos < len)
                 {
-                    if (sql[pos] == quote)
+                    if (backslashEscapes && sql[pos] == '\\')
+                    {
+                        pos += 2;
+                    }
+                    else if (sql[pos] == quote)
                     {
                         pos++;
                         if (pos < len && sql[pos] == quote) { pos++; } else { break; }

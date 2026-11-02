@@ -212,6 +212,95 @@ public class SensitiveColumnResolutionTests(SluiceBaseStackFactory factory)
         Assert.Contains("query_to_xml", body.GetProperty("reason").GetString());
     }
 
+    private async Task<(AuthenticatedSession session, string xsrf, DatabaseId databaseId, string schema)>
+        AliceWithSensitiveEmailAsync(CancellationToken ct)
+    {
+        var (session, xsrf, databaseId) = await QueryTestSetup.AliceWithBlueServerAsync(factory, ct);
+        var conn = (await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct))!;
+        var schema = await ResolutionSchemaFixture.CreateAsync(conn, ct);
+        await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), schema, "users", "email", xsrf, ct);
+        return (session, xsrf, databaseId, schema);
+    }
+
+    private static async Task<HttpResponseMessage> QueryAsync(
+        AuthenticatedSession session, string xsrf, DatabaseId databaseId, string sql, CancellationToken ct)
+    {
+        using var req = QueryTestSetup.MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId, sql));
+        return await session.Client.SendAsync(req, ct);
+    }
+
+    // EXPLAIN cannot plan PREPARE (or EXECUTE, FETCH, CALL, ...), and the tokenizer is not trusted with a
+    // statement that can return rows, so the query is blocked rather than allowed through.
+    [Fact]
+    public async Task Query_StatementExplainCannotPlan_BlockedWithReason()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId, schema) = await AliceWithSensitiveEmailAsync(ct);
+        using var _ = session;
+
+        var resp = await QueryAsync(session, xsrf, databaseId,
+            $$"""PREPARE p AS SELECT id, U&"\0065mail" FROM "{{schema}}".users""", ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Equal("sensitive_columns", body.GetProperty("type").GetString());
+        Assert.Contains("could not be checked", body.GetProperty("reason").GetString());
+    }
+
+    [Fact]
+    public async Task Query_EscapeStringCannotHideSensitiveColumn()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId, schema) = await AliceWithSensitiveEmailAsync(ct);
+        using var _ = session;
+
+        var resp = await QueryAsync(session, xsrf, databaseId,
+            $$"""SET application_name = E'\''; SELECT id, email FROM "{{schema}}".users; SELECT 'x'""", ct);
+
+        Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
+        var body = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
+        Assert.Contains(body.GetProperty("columns").EnumerateArray(),
+            c => c.GetProperty("column").GetString() == "email");
+    }
+
+    [Fact]
+    public async Task Query_ShowStatement_StillRunsOnDatabaseWithSensitiveColumns()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId, _) = await AliceWithSensitiveEmailAsync(ct);
+        using var __ = session;
+
+        var resp = await QueryAsync(session, xsrf, databaseId, "SHOW timezone", ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
+    // The guard plans a preview with the write credential, which (unlike the read credential) may UPDATE.
+    [Fact]
+    public async Task UpdatePreview_UpdateNotTouchingSensitiveColumn_NotBlocked()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AliceWithWritableBlueServerAsync(ct);
+        using var _ = session;
+
+        await SensitiveColumnTestHelper.MarkColumnAsync(
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
+
+        using var submitReq = QueryTestSetup.MutationRequest(HttpMethod.Post, "/api/update", xsrf,
+            new UpdateEndpoints.SubmitUpdateRequest(databaseId, "UPDATE public.users SET id = id WHERE false", "preview test"));
+        var submitResp = await session.Client.SendAsync(submitReq, ct);
+        submitResp.EnsureSuccessStatusCode();
+        using var submitDoc = JsonDocument.Parse(await submitResp.Content.ReadAsStringAsync(ct));
+        var id = submitDoc.RootElement.GetProperty("id").GetGuid();
+
+        using var previewReq = QueryTestSetup.MutationRequest(HttpMethod.Post, $"/api/update/{id}/preview", xsrf);
+        var resp = await session.Client.SendAsync(previewReq, ct);
+
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
     // We have NOT empirically confirmed (Docker is unavailable in this environment) whether
     // Postgres renders whole-row serialization of `u` in the scan node's Output as enumerated
     // columns ("users.email", "users.ssn") or as a whole-row var, which

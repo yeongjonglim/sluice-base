@@ -458,4 +458,73 @@ public sealed class TargetEngineTests(SluiceBaseStackFactory factory)
                 ct));
         Assert.Equal(Npgsql.PostgresErrorCodes.ReadOnlySqlTransaction, ex.SqlState);
     }
+
+    // Each payload would escape the read-only transaction if Npgsql split it into a batch.
+    [Theory]
+    [InlineData("SET TRANSACTION READ WRITE; UPDATE public.users SET email = 'escaped@test.com' WHERE id = 1")]
+    [InlineData("COMMIT; UPDATE public.users SET email = 'escaped@test.com' WHERE id = 1")]
+    [InlineData("SELECT E'\\'' AS a; COMMIT; UPDATE public.users SET email = 'escaped@test.com' WHERE id = 1")]
+    public async Task TargetEngine_Postgres_ExecuteQuery_RejectsMultipleStatements_AndLeavesDataUnchanged(string sql)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+        var before = await UserEmailAsync(connectionString, ct);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _targetEngine.ExecuteQueryAsync(connectionString, sql, ct));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _targetEngine.ExplainAsync(connectionString, sql, analyze: true, ct));
+
+        Assert.Equal(before, await UserEmailAsync(connectionString, ct));
+    }
+
+    // Resolution has no splitter pre-check, so this exercises Postgres's own one-statement rule.
+    [Fact]
+    public async Task TargetEngine_Postgres_ResolveReferencedColumns_ServerRejectsMultipleStatements()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await factory.InitialisedApp.GetConnectionStringAsync("blue-appdb", ct);
+        Assert.NotNull(connectionString);
+        var before = await UserEmailAsync(connectionString, ct);
+
+        var ex = await Assert.ThrowsAsync<PostgresException>(() => _targetEngine.ResolveReferencedColumnsAsync(
+            connectionString, "SELECT 1; COMMIT; UPDATE public.users SET email = 'escaped@test.com' WHERE id = 1", ct));
+
+        Assert.Equal(PostgresErrorCodes.SyntaxError, ex.SqlState);
+        Assert.Equal(before, await UserEmailAsync(connectionString, ct));
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_ExecuteUpdate_EscapeStringCannotHideTransactionControl()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await BlueWriterConnectionStringAsync(ct);
+        var before = await UserEmailAsync(connectionString, ct);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _targetEngine.ExecuteUpdateAsync(
+            connectionString,
+            "SELECT E'\\'' AS a; COMMIT; UPDATE public.users SET email = 'escaped@test.com' WHERE id = 1; SELECT 'x'",
+            commit: false,
+            ct));
+
+        Assert.Contains("transaction", ex.Message);
+        Assert.Equal(before, await UserEmailAsync(connectionString, ct));
+    }
+
+    [Fact]
+    public async Task TargetEngine_Postgres_ExecuteUpdate_Preview_HandlesEscapeStrings()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var connectionString = await BlueWriterConnectionStringAsync(ct);
+
+        var result = await _targetEngine.ExecuteUpdateAsync(
+            connectionString,
+            "SELECT E'it\\'s; fine' AS a; UPDATE public.users SET email = email WHERE id = 1",
+            commit: false,
+            ct);
+
+        Assert.Equal("it's; fine", Assert.Single(result.ResultSets).Rows[0][0]);
+        Assert.Equal(1, result.AffectedRows);
+    }
 }

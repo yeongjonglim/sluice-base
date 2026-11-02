@@ -213,10 +213,10 @@ public class QueryEndpointTests(SluiceBaseStackFactory factory)
         using var _ = session;
 
         await SensitiveColumnTestHelper.MarkColumnAsync(
-            session, databaseId.ToString(), "public", "user", "email", xsrf, ct);
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
 
         using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
-            new QueryEndpoints.QueryRequest(databaseId, "SELECT email FROM public.user LIMIT 1"));
+            new QueryEndpoints.QueryRequest(databaseId, "SELECT email FROM public.users LIMIT 1"));
         var resp = await session.Client.SendAsync(req, ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
@@ -237,12 +237,12 @@ public class QueryEndpointTests(SluiceBaseStackFactory factory)
         var alice = users!.Users.Single(u => u.Email == "alice@example.com");
 
         var columnId = await SensitiveColumnTestHelper.MarkColumnAsync(
-            session, databaseId.ToString(), "public", "user", "email", xsrf, ct);
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
         await SensitiveColumnTestHelper.GrantBypassAsync(
             session, databaseId.ToString(), columnId, alice.Id, xsrf, ct);
 
         using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
-            new QueryEndpoints.QueryRequest(databaseId, "SELECT email FROM public.user LIMIT 1"));
+            new QueryEndpoints.QueryRequest(databaseId, "SELECT email FROM public.users LIMIT 1"));
         var resp = await session.Client.SendAsync(req, ct);
 
         Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
@@ -256,11 +256,11 @@ public class QueryEndpointTests(SluiceBaseStackFactory factory)
         using var _ = session;
 
         await SensitiveColumnTestHelper.MarkColumnAsync(
-            session, databaseId.ToString(), "public", "user", "email", xsrf, ct);
+            session, databaseId.ToString(), "public", "users", "email", xsrf, ct);
 
         using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
             new QueryEndpoints.QueryRequest(databaseId,
-                "SELECT id FROM public.user WHERE email = 'test@example.com'"));
+                "SELECT id FROM public.users WHERE email = 'test@example.com'"));
         var resp = await session.Client.SendAsync(req, ct);
 
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
