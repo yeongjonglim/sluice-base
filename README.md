@@ -196,6 +196,12 @@ Codex runs the same OAuth flow on first use.
 | `list_databases` | Lists the databases the user can query, grouped by server |
 | `get_schema` | Returns a database's table/column schema (sensitive columns flagged) |
 | `run_query` | Executes a read-only SQL query (subject to the user's `query:execute` permission, sensitive-column blocking, and audit logging — MCP-origin queries are tagged in the history) |
+| `submit_update_request` | Submits write SQL for human review (requires `update:submit`); returns a link to the request |
+| `list_update_requests` | Lists update requests on databases the user can see, optionally filtered by database or status |
+| `get_update_request` | Returns one update request's detail and event history |
+| `cancel_update_request` | Withdraws a Pending or Approved request the user submitted themselves, with a note |
+
+Agents can never approve, reject, or execute an update request — those steps stay with a human in the app.
 
 Set `Mcp__Enabled=false` to disable the MCP server and its OAuth endpoints entirely.
 
