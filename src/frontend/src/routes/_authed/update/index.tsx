@@ -65,9 +65,9 @@ function statusBadge(
   execSuccess?: boolean | null,
 ) {
   if (status === "Executed" && execSuccess === false) {
-    return <Badge color="red">Failed</Badge>;
+    return <Badge color="red" variant="light">Failed</Badge>;
   }
-  return <Badge color={STATUS_COLOR[status] ?? "gray"}>{status}</Badge>;
+  return <Badge color={STATUS_COLOR[status] ?? "gray"} variant="light">{status}</Badge>;
 }
 
 function UpdateListPage() {

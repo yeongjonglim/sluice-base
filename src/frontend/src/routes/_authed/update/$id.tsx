@@ -196,9 +196,9 @@ function UpdateDetailPage() {
   const execBadge =
     r.status === "Executed" ? (
       r.execSuccess ? (
-        <Badge color="teal">Succeeded</Badge>
+        <Badge color="teal" variant="light">Succeeded</Badge>
       ) : (
-        <Badge color="red">Failed</Badge>
+        <Badge color="red" variant="light">Failed</Badge>
       )
     ) : null;
 
@@ -375,7 +375,7 @@ function UpdateDetailPage() {
         <Stack gap={2} style={{ minWidth: 0, flex: "1 1 280px" }}>
           <Group gap="sm" wrap="wrap" style={{ minWidth: 0 }}>
             <Title order={3} style={{ whiteSpace: "nowrap" }}>Update request</Title>
-            <Badge color={STATUS_COLOR[r.status] ?? "gray"} size="lg" style={{ flexShrink: 0 }}>
+            <Badge color={STATUS_COLOR[r.status] ?? "gray"} variant="light" size="lg" style={{ flexShrink: 0 }}>
               {r.status}
             </Badge>
             {r.status === "Pending" && lastPreviewFailed && (
