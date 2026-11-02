@@ -1,11 +1,12 @@
 using SluiceBase.Api.Extensions;
+using SluiceBase.Core.Mcp;
 
 namespace SluiceBase.Api.Mcp.Oauth;
 
 internal static class OAuthMetadataEndpoints
 {
     private static readonly string[] ResponseTypes = ["code"];
-    private static readonly string[] GrantTypes = ["authorization_code", "refresh_token"];
+    private static readonly string[] GrantTypes = [GrantType.AuthorizationCode.Value, GrantType.RefreshToken.Value];
     private static readonly string[] CodeChallengeMethods = ["S256"];
     private static readonly string[] TokenEndpointAuthMethods = ["none"];
 

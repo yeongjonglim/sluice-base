@@ -7,22 +7,15 @@ internal static class OAuthTokenEndpoints
         app.MapPost("/mcp/oauth/token", async (HttpContext ctx, IMcpTokenService tokens, CancellationToken ct) =>
         {
             var form = await ctx.Request.ReadFormAsync(ct);
-            var grant = form["grant_type"].ToString();
-            var clientId = form["client_id"].ToString();
-
-            var issued = grant switch
+            if (!TokenGrant.TryFromForm(form, out var grant))
             {
-                "authorization_code" => await tokens.RedeemAuthCodeAsync(
-                    clientId, form["code"].ToString(), form["redirect_uri"].ToString(),
-                    form["code_verifier"].ToString(), ct),
-                "refresh_token" => await tokens.RefreshAsync(
-                    clientId, form["refresh_token"].ToString(), ct),
-                _ => null,
-            };
+                return InvalidGrant();
+            }
 
+            var issued = await grant.RedeemAsync(tokens, ct);
             if (issued is null)
             {
-                return Results.Json(new { error = "invalid_grant" }, statusCode: 400);
+                return InvalidGrant();
             }
 
             return Results.Json(new Dictionary<string, object?>
@@ -34,4 +27,6 @@ internal static class OAuthTokenEndpoints
             });
         }).AllowAnonymous();
     }
+
+    private static IResult InvalidGrant() => Results.Json(new { error = "invalid_grant" }, statusCode: 400);
 }
