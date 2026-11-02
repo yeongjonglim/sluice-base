@@ -26,9 +26,10 @@ internal sealed class UpdateTools
         "statements in your SQL. The request can be PREVIEWED — run in the rolled-back transaction, " +
         "returning any result sets it produces — by reviewers and, through preview_update_request, by " +
         "you. Write the SQL so its preview reveals the before/after data change (see the 'sql' argument " +
-        "for how to structure it), then preview it and show the user the before/after rows before they " +
-        "ask a reviewer to approve it. On success this returns a 'url' to the request's page — give " +
-        "that clickable link to the user so they can review and approve it.")]
+        "for how to structure it), then preview it once and show the user the result inline as a " +
+        "before/after comparison. On success this returns a 'url' to the request's page — give that " +
+        "clickable link to the user so they can review and approve it. Preview results are not saved on " +
+        "that page, so don't send the user there to see them.")]
     public static async Task<object> SubmitUpdateRequest(
         [Description("The database id (GUID) from list_databases.")] string databaseId,
         [Description("The write/update SQL to run once a human approves and executes it. Do not wrap it in a " +
@@ -70,8 +71,9 @@ internal sealed class UpdateTools
             url,
             message = "Submitted for human review — you cannot approve or execute it, but you can withdraw it " +
                       "with cancel_update_request while it is still Pending or Approved. Call " +
-                      "preview_update_request with this id to show the user the before/after result sets. " +
-                      $"Give the user this link to review it: {url}",
+                      "preview_update_request with this id once and show the user its rows inline as a " +
+                      "before/after comparison; preview results are not saved on the request's page. " +
+                      $"Give the user this link to review and approve it: {url}",
         };
     }
 
@@ -164,7 +166,11 @@ internal sealed class UpdateTools
         "until the rollback: the data changes are undone, but sequence increments, NOTIFY, and calls out to " +
         "other systems are not, and it holds row locks while it runs. Allowed only if you submitted the " +
         "request or can approve or execute updates on its database, and only while it is Pending or Approved. " +
-        "Each run is recorded on the request's timeline. Show the user the before/after rows it returns.")]
+        "Each run is recorded on the request's timeline, but its results are NOT saved: the request's page " +
+        "cannot show them, so present them to the user here, inline, as a before/after comparison of the " +
+        "changed rows (for example a small table with the key and each changed column before and after). " +
+        "Run it once per request; don't re-run it to show the same result again or send the user to the " +
+        "link to preview it themselves.")]
     public static async Task<object> PreviewUpdateRequest(
         [Description("The update request id (GUID) from submit_update_request or list_update_requests.")] string id,
         IUpdateRequestService updates, ICurrentUserAccessor currentUser, CancellationToken ct)
