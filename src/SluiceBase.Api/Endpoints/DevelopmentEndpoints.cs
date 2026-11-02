@@ -14,6 +14,8 @@ internal static class DevelopmentEndpoints
                     return TypedResults.Ok(new EncryptResponse(protector.Protect(req.Plaintext)));
                 })
             .RequireHost("localhost")
+            // Called by the AppHost seeder, not the browser.
+            .DisableAntiforgery()
             .ExcludeFromDescription();
     }
 
