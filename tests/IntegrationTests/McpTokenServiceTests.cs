@@ -184,6 +184,24 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task DisabledUser_TokensStopWorkingAndCannotRefresh()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var svc = CreateService(db);
+        var userId = await SeedUserAsync(db, ct);
+        var tokens = await SignInAsync(svc, userId, ct);
+
+        var user = await db.Users.SingleAsync(u => u.Id == userId, ct);
+        user.Disable(DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync(ct);
+
+        Assert.Null(await svc.ValidateAccessTokenAsync(tokens.AccessToken, ct));
+        Assert.Null(await svc.RefreshAsync(ClientId, tokens.RefreshToken, ct));
+    }
+
+    [Fact]
     public async Task RevokeToken_RefreshTokenEndsGrant_WrongClientDoesNothing()
     {
         var ct = TestContext.Current.CancellationToken;
@@ -226,6 +244,10 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
 
         Assert.Single(await svc.ListGrantsAsync(userId, ct));
         Assert.Equal(userId, await svc.ValidateAccessTokenAsync(kept.AccessToken, ct));
+
+        await svc.RevokeAllAsync(userId, ct);
+        db.ChangeTracker.Clear();
+        Assert.Empty(await svc.ListGrantsAsync(userId, ct));
     }
 
     [Fact]

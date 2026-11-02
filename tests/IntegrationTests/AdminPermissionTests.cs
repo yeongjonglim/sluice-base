@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Aspire.Hosting.Testing;
 using IntegrationTests.Supports;
 using SluiceBase.Core.Permissions;
@@ -70,6 +71,50 @@ public class AdminPermissionTests(SluiceBaseStackFactory factory)
             TestContext.Current.CancellationToken);
         Assert.NotNull(body);
         Assert.Contains(body.Users, u => u.Email == "alice@example.com");
+    }
+
+    // ── disable / enable ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task DisableUser_EndsTheirSessionUntilEnabled()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var bobSession = await LoginHelper.SignInAsync("bob", "dev", ct);
+        var me = await bobSession.Client.GetFromJsonAsync<MeBody>("/api/me", ct);
+
+        using var aliceSession = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var xsrf = await GetXsrfAsync(aliceSession, ct);
+        try
+        {
+            using var disable = MutationRequest(HttpMethod.Post, $"/api/admin/user/{me!.Id}/disable", xsrf);
+            Assert.Equal(HttpStatusCode.NoContent, (await aliceSession.Client.SendAsync(disable, ct)).StatusCode);
+
+            Assert.Equal(HttpStatusCode.Unauthorized, (await bobSession.Client.GetAsync("/api/me", ct)).StatusCode);
+            var users = await aliceSession.Client.GetFromJsonAsync<JsonElement>("/api/admin/user", ct);
+            var bob = users.GetProperty("users").EnumerateArray()
+                .Single(u => u.GetProperty("id").GetString() == me.Id);
+            Assert.Equal(JsonValueKind.String, bob.GetProperty("disabledAt").ValueKind);
+        }
+        finally
+        {
+            using var enable = MutationRequest(HttpMethod.Post, $"/api/admin/user/{me!.Id}/enable", xsrf);
+            (await aliceSession.Client.SendAsync(enable, ct)).EnsureSuccessStatusCode();
+        }
+
+        using var bobAgain = await LoginHelper.SignInAsync("bob", "dev", ct);
+        Assert.Equal(HttpStatusCode.OK, (await bobAgain.Client.GetAsync("/api/me", ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task DisableUser_Self_Returns400()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var aliceSession = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var me = await aliceSession.Client.GetFromJsonAsync<MeBody>("/api/me", ct);
+        var xsrf = await GetXsrfAsync(aliceSession, ct);
+
+        using var disable = MutationRequest(HttpMethod.Post, $"/api/admin/user/{me!.Id}/disable", xsrf);
+        Assert.Equal(HttpStatusCode.BadRequest, (await aliceSession.Client.SendAsync(disable, ct)).StatusCode);
     }
 
     // ── grant permission ──────────────────────────────────────────────────────

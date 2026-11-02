@@ -39,6 +39,7 @@ internal interface IMcpTokenService
 
     Task<IReadOnlyList<McpGrantSummary>> ListGrantsAsync(UserId userId, CancellationToken ct);
     Task<bool> RevokeGrantAsync(UserId userId, McpGrantId grantId, CancellationToken ct);
+    Task RevokeAllAsync(UserId userId, CancellationToken ct);
 }
 
 internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOptions<McpOptions> options) : IMcpTokenService
@@ -103,6 +104,11 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
             return null;
         }
 
+        if (await IsDisabledAsync(authCode.UserId, ct))
+        {
+            return null;
+        }
+
         // Single-use: mark consumed. The Consume() mutation and the new token rows are flushed
         // together by the single SaveChangesAsync inside IssueTokenPairAsync (one unit of work).
         authCode.Consume();
@@ -144,7 +150,7 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
             return null;
         }
 
-        if (token.GrantExpiresAt <= now)
+        if (token.GrantExpiresAt <= now || await IsDisabledAsync(token.UserId, ct))
         {
             return null;
         }
@@ -179,6 +185,11 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
         }
 
         if (token.Type != McpTokenType.Access)
+        {
+            return null;
+        }
+
+        if (await IsDisabledAsync(token.UserId, ct))
         {
             return null;
         }
@@ -275,9 +286,20 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
     public async Task<bool> RevokeGrantAsync(UserId userId, McpGrantId grantId, CancellationToken ct) =>
         await RevokeWhereAsync(t => t.UserId == userId && t.GrantId == grantId, ct) > 0;
 
+    public async Task RevokeAllAsync(UserId userId, CancellationToken ct)
+    {
+        await RevokeWhereAsync(t => t.UserId == userId, ct);
+        await db.McpAuthCodes
+            .Where(c => c.UserId == userId && !c.Consumed)
+            .ExecuteUpdateAsync(s => s.SetProperty(c => c.Consumed, true), ct);
+    }
+
     private Task<int> RevokeWhereAsync(System.Linq.Expressions.Expression<Func<McpToken, bool>> predicate, CancellationToken ct) =>
         db.McpTokens.Where(predicate).Where(t => !t.Revoked)
             .ExecuteUpdateAsync(s => s.SetProperty(t => t.Revoked, true), ct);
+
+    private Task<bool> IsDisabledAsync(UserId userId, CancellationToken ct) =>
+        db.Users.AnyAsync(u => u.Id == userId && u.DisabledAt != null, ct);
 
     // Saves the consumed code or rotated refresh token together with the new pair. A concurrency conflict means
     // another request redeemed the same code or refresh token first, so this one gets nothing.

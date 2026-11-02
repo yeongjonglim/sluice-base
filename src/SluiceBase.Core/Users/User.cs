@@ -22,10 +22,18 @@ public sealed class User
     public string? Email { get; private set; }
     public string? Name { get; private set; }
     public DateTimeOffset CreatedAt { get; private set; }
+
+    // A disabled user cannot sign in, and their browser sessions and MCP tokens stop working.
+    public DateTimeOffset? DisabledAt { get; private set; }
+    public bool IsDisabled => DisabledAt is not null;
     public IList<UserPermissionMap> Permissions { get; init; } = [];
 
     public static User Create(string? email, string? name, DateTimeOffset at) =>
         new(UserId.FromNewVersion7Guid(), email, name, at);
+
+    public void Disable(DateTimeOffset at) => DisabledAt ??= at;
+
+    public void Enable() => DisabledAt = null;
 
     public bool HasPermission(string permission) =>
         Permissions.Any(p => p.Permission == permission);

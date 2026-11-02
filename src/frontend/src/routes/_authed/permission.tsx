@@ -1,14 +1,31 @@
-import { Badge, Box, Card, Group, Stack, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
+import {
+  ActionIcon,
+  Badge,
+  Box,
+  Card,
+  Group,
+  Menu,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { IconDots, IconPlugConnectedX, IconUserCheck, IconUserOff } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import type { paths } from "@/api/schema.ts";
 import {
   meQueryOptions,
+  useDisableUser,
+  useEnableUser,
   useGrantPermission,
   useMe,
   usePermissionCatalog,
   useRevokePermission,
+  useRevokeUserMcpGrants,
   useUsers,
 } from "@/api/hooks";
 import { EffectiveCell } from "@/components/EffectiveCell";
@@ -34,6 +51,53 @@ export const Route = createFileRoute("/_authed/permission")({
   },
   component: PermissionsAdminPage,
 });
+
+function AccountActions({ user, isSelf }: { user: UserSummary; isSelf: boolean }) {
+  const disable = useDisableUser();
+  const enable = useEnableUser();
+  const revokeMcp = useRevokeUserMcpGrants();
+  const label = user.email ?? user.id;
+
+  function confirmDisable() {
+    modals.openConfirmModal({
+      title: `Disable ${label}?`,
+      children: (
+        <Text size="sm">
+          They are signed out on their next request, cannot sign in again, and their AI tool connections are
+          revoked. You can enable the account again later.
+        </Text>
+      ),
+      labels: { confirm: "Disable", cancel: "Cancel" },
+      confirmProps: { color: "red" },
+      onConfirm: () => disable.mutate(user.id),
+    });
+  }
+
+  return (
+    <Menu position="bottom-end" withinPortal>
+      <Menu.Target>
+        <ActionIcon variant="subtle" aria-label={`Account actions for ${label}`}>
+          <IconDots size={16} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item leftSection={<IconPlugConnectedX size={14} />} onClick={() => revokeMcp.mutate(user.id)}>
+          Revoke AI tool connections
+        </Menu.Item>
+        {!isSelf &&
+          (user.disabledAt ? (
+            <Menu.Item leftSection={<IconUserCheck size={14} />} onClick={() => enable.mutate(user.id)}>
+              Enable account
+            </Menu.Item>
+          ) : (
+            <Menu.Item color="red" leftSection={<IconUserOff size={14} />} onClick={confirmDisable}>
+              Disable account
+            </Menu.Item>
+          ))}
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
 
 // The same control the Access matrix uses, so one fact always has one rendering.
 // Inert: it is a key, not a second set of toggles.
@@ -172,12 +236,13 @@ export function PermissionsAdminPage() {
                   </Tooltip>
                 </Table.Th>
               ))}
+              <Table.Th />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {filtered.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={permissions.length + 2}>
+                <Table.Td colSpan={permissions.length + 3}>
                   <Text size="sm" c="dimmed">
                     No users match “{search}”.
                   </Text>
@@ -195,6 +260,11 @@ export function PermissionsAdminPage() {
                       {user.id === me.data?.id && (
                         <Badge size="xs" variant="outline">
                           you
+                        </Badge>
+                      )}
+                      {user.disabledAt && (
+                        <Badge size="xs" color="red" variant="light">
+                          disabled
                         </Badge>
                       )}
                     </Group>
@@ -247,6 +317,9 @@ export function PermissionsAdminPage() {
                     </Table.Td>
                   );
                 })}
+                <Table.Td>
+                  <AccountActions user={user} isSelf={user.id === me.data?.id} />
+                </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>

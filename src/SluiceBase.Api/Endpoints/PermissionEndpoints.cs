@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
+using SluiceBase.Api.Mcp;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Users;
 
@@ -24,6 +25,9 @@ internal static class PermissionEndpoints
             .WithName("GrantPermission");
         admin.MapDelete("/user/{userId}/permission/{permission}", RevokePermission)
             .WithName("RevokePermission");
+        admin.MapPost("/user/{userId}/disable", DisableUser).WithName("DisableUser");
+        admin.MapPost("/user/{userId}/enable", EnableUser).WithName("EnableUser");
+        admin.MapDelete("/user/{userId}/mcp-grant", RevokeUserMcpGrants).WithName("RevokeUserMcpGrants");
     }
 
     private static async Task<Ok<ListUsersResponse>> ListUsers(AppDbContext db, CancellationToken ct)
@@ -32,7 +36,7 @@ internal static class PermissionEndpoints
             .Include(u => u.User).ThenInclude(u => u.Permissions)
             .AsNoTracking()
             .OrderBy(u => u.Email)
-            .Select(u => new { u.UserId, u.Email, u.Name, u.LastLoginAt,
+            .Select(u => new { u.UserId, u.Email, u.Name, u.LastLoginAt, u.User.DisabledAt,
                 Direct = u.User.Permissions.Select(p => p.Permission).ToList() })
             .ToListAsync(ct);
 
@@ -52,7 +56,7 @@ internal static class PermissionEndpoints
                     perm, u.Direct.Contains(perm),
                     groupsForUser.Where(g => g.Permission == perm).Select(g => g.Group).ToList()))
                 .ToList();
-            return new UserSummaryResponse(u.UserId, u.Email, u.Name, u.LastLoginAt, perms);
+            return new UserSummaryResponse(u.UserId, u.Email, u.Name, u.LastLoginAt, u.DisabledAt, perms);
         }).ToList();
 
         return TypedResults.Ok(new ListUsersResponse(result));
@@ -115,6 +119,62 @@ internal static class PermissionEndpoints
 
         return TypedResults.NoContent();
     }
+
+    // Disabling ends the user's browser sessions on their next request and revokes their MCP tokens now.
+    private static async Task<Results<NoContent, NotFound, ValidationProblem>> DisableUser(
+        UserId userId,
+        AppDbContext db,
+        ICurrentUserAccessor currentUser,
+        IMcpTokenService tokens,
+        TimeProvider clock,
+        CancellationToken ct)
+    {
+        var actor = await currentUser.GetAsync(ct);
+        if (actor?.Id == userId)
+        {
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["userId"] = ["You cannot disable your own account."],
+            });
+        }
+
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        user.Disable(clock.GetUtcNow());
+        await db.SaveChangesAsync(ct);
+        await tokens.RevokeAllAsync(userId, ct);
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<Results<NoContent, NotFound>> EnableUser(
+        UserId userId, AppDbContext db, CancellationToken ct)
+    {
+        var user = await db.Users.SingleOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        user.Enable();
+        await db.SaveChangesAsync(ct);
+        return TypedResults.NoContent();
+    }
+
+    private static async Task<Results<NoContent, NotFound>> RevokeUserMcpGrants(
+        UserId userId, AppDbContext db, IMcpTokenService tokens, CancellationToken ct)
+    {
+        if (!await db.Users.AnyAsync(u => u.Id == userId, ct))
+        {
+            return TypedResults.NotFound();
+        }
+
+        await tokens.RevokeAllAsync(userId, ct);
+        return TypedResults.NoContent();
+    }
 }
 
 internal sealed record PermissionCatalogResponse(string[] Permissions);
@@ -126,6 +186,7 @@ internal sealed record UserSummaryResponse(
     string? Email,
     string? Name,
     DateTimeOffset? LastLoginAt,
+    DateTimeOffset? DisabledAt,
     IReadOnlyList<EffectivePermission> Permissions);
 
 internal sealed record ListUsersResponse(IReadOnlyList<UserSummaryResponse> Users);

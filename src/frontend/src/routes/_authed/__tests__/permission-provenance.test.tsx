@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MantineProvider } from "@mantine/core";
+import { modals } from "@mantine/modals";
 import React from "react";
 import { PermissionsAdminPage } from "@/routes/_authed/permission.tsx";
 
@@ -19,6 +20,9 @@ const mockUseUsers = vi.fn();
 const mockUsePermissionCatalog = vi.fn();
 const mockUseGrantPermission = vi.fn();
 const mockUseRevokePermission = vi.fn();
+const mockDisable = vi.fn();
+const mockEnable = vi.fn();
+const mockRevokeMcp = vi.fn();
 
 vi.mock("@/api/hooks", () => ({
   meQueryOptions: { queryKey: ["me"] },
@@ -27,6 +31,9 @@ vi.mock("@/api/hooks", () => ({
   usePermissionCatalog: (...args: Array<unknown>) => mockUsePermissionCatalog(...args),
   useGrantPermission: () => mockUseGrantPermission(),
   useRevokePermission: () => mockUseRevokePermission(),
+  useDisableUser: () => ({ mutate: mockDisable }),
+  useEnableUser: () => ({ mutate: mockEnable }),
+  useRevokeUserMcpGrants: () => ({ mutate: mockRevokeMcp }),
 }));
 
 afterEach(cleanup);
@@ -54,7 +61,7 @@ const USERS = {
       ],
     },
     {
-      id: "user-2", email: "bob@example.com", name: "Bob", lastLoginAt: null,
+      id: "user-2", email: "bob@example.com", name: "Bob", lastLoginAt: null, disabledAt: "2026-06-02T10:00:00Z",
       permissions: [
         // server:manage is inherited only via a group
         { permission: "server:manage", fromDirect: false, fromGroups: [{ groupId: "g1", name: "Platform" }] },
@@ -114,6 +121,23 @@ describe("PermissionsAdminPage provenance", () => {
     expect(aliceServerBox).not.toBeChecked();
     await userEvent.click(aliceServerBox);
     expect(grantFn).toHaveBeenCalledWith({ userId: "user-1", permission: "server:manage" });
+  });
+
+  it("marks a disabled user and offers to enable them", async () => {
+    render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
+    const bobRow = rowFor("bob@example.com");
+    expect(within(bobRow).getByText("disabled")).toBeInTheDocument();
+    await userEvent.click(within(bobRow).getByLabelText(/account actions for bob@example.com/i));
+    await userEvent.click(await screen.findByText("Enable account"));
+    expect(mockEnable).toHaveBeenCalledWith("user-2");
+  });
+
+  it("does not offer to disable your own account", async () => {
+    render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
+    await userEvent.click(within(rowFor("alice@example.com")).getByLabelText(/account actions for alice/i));
+    expect(await screen.findByText("Revoke AI tool connections")).toBeInTheDocument();
+    expect(screen.queryByText("Disable account")).not.toBeInTheDocument();
+    expect(modals.openConfirmModal).not.toHaveBeenCalled();
   });
 
   it("filters users by the search box", async () => {
