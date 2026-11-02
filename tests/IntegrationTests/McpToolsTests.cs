@@ -521,8 +521,8 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
             new Dictionary<string, object?>
             {
                 ["databaseId"] = databaseId,
-                ["sql"] = "SELECT id, active FROM people WHERE id = 1; " +
-                          "UPDATE people SET active = NOT active WHERE id = 1 RETURNING id, active",
+                ["sql"] = "SELECT id, email FROM public.users WHERE id = 1; " +
+                          "UPDATE public.users SET email = 'mcp-preview@test.com' WHERE id = 1 RETURNING id, email",
                 ["reason"] = $"mcp-preview-{Guid.NewGuid():N}",
             },
             cancellationToken: ct);
