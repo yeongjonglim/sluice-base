@@ -53,6 +53,8 @@ public sealed class OAuthMetadataTests(SluiceBaseStackFactory factory)
         Assert.True(body.TryGetProperty("token_endpoint", out var tokenEndpoint));
         Assert.False(string.IsNullOrWhiteSpace(tokenEndpoint.GetString()));
 
+        Assert.EndsWith("/mcp/oauth/revoke", body.GetProperty("revocation_endpoint").GetString());
+
         Assert.False(body.TryGetProperty("registration_endpoint", out _));
 
         Assert.True(body.TryGetProperty("code_challenge_methods_supported", out var pkce));

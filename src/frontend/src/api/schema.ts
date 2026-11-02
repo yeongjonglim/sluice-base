@@ -328,6 +328,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mcp/oauth/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/mcp-grant": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ListMyMcpGrants"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/me/mcp-grant/{grantId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["RevokeMyMcpGrant"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/user": {
         parameters: {
             query?: never;
@@ -1029,6 +1094,9 @@ export interface components {
             isPrimary: boolean;
             method: string;
         };
+        ListMcpGrantsResponse: {
+            grants: components["schemas"]["McpGrantResponse"][];
+        };
         ListServersResponse: {
             servers: components["schemas"]["ServerResponse"][];
         };
@@ -1048,6 +1116,19 @@ export interface components {
             columns: components["schemas"]["ColumnInfo"][];
             indexes: components["schemas"]["IndexInfo"][];
             definition?: null | string;
+        };
+        /** Format: uuid */
+        McpGrantId: string;
+        McpGrantResponse: {
+            id: components["schemas"]["McpGrantId"];
+            clientId: string;
+            isLoopback: boolean;
+            /** Format: date-time */
+            signedInAt: string;
+            /** Format: date-time */
+            lastUsedAt: null | string;
+            /** Format: date-time */
+            expiresAt: string;
         };
         MeResponse: {
             id: components["schemas"]["UserId"];
@@ -1677,6 +1758,53 @@ export interface operations {
                 content: {
                     "application/json": string;
                 };
+            };
+        };
+    };
+    ListMyMcpGrants: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListMcpGrantsResponse"];
+                };
+            };
+        };
+    };
+    RevokeMyMcpGrant: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grantId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

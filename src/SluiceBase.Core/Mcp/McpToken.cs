@@ -20,12 +20,19 @@ public sealed class McpToken
     // The sign-in behind this token went to a loopback callback, so its client is never resolved.
     public bool IsLoopbackGrant { get; private set; }
 
-    public static McpToken Issue(string tokenHash, McpTokenType type, UserId userId,
-        string clientId, bool isLoopbackGrant, DateTimeOffset createdAt, DateTimeOffset expiresAt) => new()
+    // Every token issued from one sign-in shares a grant. Refreshing keeps it, revoking it ends the whole session,
+    // and no token in it outlives GrantExpiresAt however often it is refreshed.
+    public McpGrantId GrantId { get; private set; }
+    public DateTimeOffset GrantExpiresAt { get; private set; }
+
+    public static McpToken Issue(string tokenHash, McpTokenType type, UserId userId, string clientId,
+        bool isLoopbackGrant, McpGrantId grantId, DateTimeOffset grantExpiresAt, DateTimeOffset createdAt,
+        DateTimeOffset expiresAt) => new()
     {
         Id = McpTokenId.FromNewVersion7Guid(),
         TokenHash = tokenHash, Type = type, UserId = userId, ClientId = clientId,
-        IsLoopbackGrant = isLoopbackGrant, CreatedAt = createdAt, ExpiresAt = expiresAt,
+        IsLoopbackGrant = isLoopbackGrant, GrantId = grantId, GrantExpiresAt = grantExpiresAt,
+        CreatedAt = createdAt, ExpiresAt = expiresAt < grantExpiresAt ? expiresAt : grantExpiresAt,
     };
 
     public void Touch(DateTimeOffset at) => LastUsedAt = at;

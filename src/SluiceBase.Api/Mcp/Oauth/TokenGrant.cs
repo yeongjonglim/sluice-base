@@ -50,8 +50,16 @@ internal sealed record AuthorizationCodeGrant(string ClientId, string Code, stri
 
 internal sealed record RefreshTokenGrant(string ClientId, string RefreshToken) : TokenGrant(ClientId)
 {
-    public override Task<LiveGrant?> FindLiveAsync(IMcpTokenService tokens, CancellationToken ct) =>
-        tokens.FindLiveRefreshTokenAsync(ClientId, RefreshToken, ct);
+    public override async Task<LiveGrant?> FindLiveAsync(IMcpTokenService tokens, CancellationToken ct)
+    {
+        var live = await tokens.FindLiveRefreshTokenAsync(ClientId, RefreshToken, ct);
+        if (live is null)
+        {
+            await tokens.RevokeGrantIfRefreshTokenReusedAsync(ClientId, RefreshToken, ct);
+        }
+
+        return live;
+    }
 
     public override Task<IssuedTokens?> RedeemAsync(IMcpTokenService tokens, CancellationToken ct) =>
         tokens.RefreshAsync(ClientId, RefreshToken, ct);

@@ -9,6 +9,8 @@ internal sealed partial class McpOptions
     public string ServerName { get; set; } = "sluicebase";
     public int AccessTokenMinutes { get; set; } = 60;
     public int RefreshTokenDays { get; set; } = 30;
+    // Absolute lifetime of one sign-in: refreshing never extends a grant past this, so the user signs in again.
+    public int MaxGrantDays { get; set; } = 90;
     public int AuthCodeSeconds { get; set; } = 120;
 
     public List<McpConfiguredClient> Clients { get; set; } = [];

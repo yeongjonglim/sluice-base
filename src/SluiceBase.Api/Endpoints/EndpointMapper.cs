@@ -8,6 +8,7 @@ internal static class EndpointMapper
     public static IEndpointRouteBuilder MapAllEndpoints(this WebApplication app)
     {
         AuthEndpoints.Map(app);
+        McpGrantEndpoints.Map(app);
         HealthEndpoints.Map(app);
         PermissionEndpoints.Map(app);
         DatabaseRoleEndpoints.Map(app);

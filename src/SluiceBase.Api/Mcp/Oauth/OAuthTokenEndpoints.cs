@@ -47,6 +47,21 @@ internal static class OAuthTokenEndpoints
                 ["refresh_token"] = issued.RefreshToken,
             });
         }).AllowAnonymous();
+
+        // RFC 7009. Clients are public, so the client_id only has to match the token's; the response is 200 whether
+        // or not the token was found, so a caller learns nothing about tokens it does not hold.
+        app.MapPost("/mcp/oauth/revoke", async (HttpContext ctx, IMcpTokenService tokens, CancellationToken ct) =>
+        {
+            var form = await ctx.Request.ReadFormAsync(ct);
+            var token = form["token"].ToString();
+            if (string.IsNullOrEmpty(token))
+            {
+                return Results.Json(new { error = "invalid_request" }, statusCode: 400);
+            }
+
+            await tokens.RevokeTokenAsync(form["client_id"].ToString(), token, ct);
+            return Results.Ok();
+        }).AllowAnonymous();
     }
 
     private static IResult InvalidGrant() => Results.Json(new { error = "invalid_grant" }, statusCode: 400);
