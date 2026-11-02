@@ -34,6 +34,7 @@ internal sealed partial class McpOptions
     {
         if (string.IsNullOrWhiteSpace(PublicBaseUrl))
         {
+            logger?.WarningPublicBaseUrlNotSet();
             return null;
         }
 

@@ -118,10 +118,7 @@ if (mcpEnabled)
 {
     var mcpLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger<McpOptions>();
     var mcpOptions = app.Services.GetRequiredService<IOptions<McpOptions>>().Value;
-    if (mcpOptions.GetValidatedPublicBaseUrl(mcpLogger) is null && string.IsNullOrWhiteSpace(mcpOptions.PublicBaseUrl))
-    {
-        mcpLogger.WarningPublicBaseUrlNotSet();
-    }
+    mcpOptions.GetValidatedPublicBaseUrl(mcpLogger);
 
     // Logs any misconfigured Mcp:Clients entry at boot instead of on the first sign-in.
     mcpOptions.GetValidatedClients(mcpLogger);

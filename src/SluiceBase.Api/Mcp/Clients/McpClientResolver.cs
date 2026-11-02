@@ -4,11 +4,11 @@ namespace SluiceBase.Api.Mcp.Clients;
 
 internal sealed class McpClientResolver(
     IOptions<McpOptions> options,
-    ICimdClientSource cimdSource,
-    ILogger<McpClientResolver> logger) : IMcpClientResolver
+    ICimdClientSource cimdSource) : IMcpClientResolver
 {
+    // No logger: Program.cs already logs invalid entries at boot.
     private readonly Lazy<IReadOnlyDictionary<string, ResolvedClient>> _configured = new(() =>
-        options.Value.GetValidatedClients(logger).ToDictionary(
+        options.Value.GetValidatedClients().ToDictionary(
             c => c.ClientId,
             c => new ResolvedClient(
                 c.ClientId,

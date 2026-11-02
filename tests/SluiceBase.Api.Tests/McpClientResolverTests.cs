@@ -1,4 +1,3 @@
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SluiceBase.Api.Mcp;
 using SluiceBase.Api.Mcp.Clients;
@@ -22,7 +21,7 @@ public class McpClientResolverTests
     }
 
     private static McpClientResolver Create(McpOptions options, FakeCimdSource source) =>
-        new(Options.Create(options), source, NullLogger<McpClientResolver>.Instance);
+        new(Options.Create(options), source);
 
     private static McpConfiguredClient Configured(string id) =>
         new() { ClientId = id, Name = "Configured App", RedirectUris = ["https://cb.example/cb"] };
