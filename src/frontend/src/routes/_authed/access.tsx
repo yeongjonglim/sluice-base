@@ -123,7 +123,7 @@ export function ByDatabaseTab() {
               <Text size="xs" c="dimmed" fw={500}>
                 {s.name}
               </Text>
-              {s.isDisabled && <Badge size="xs" color="gray">disabled</Badge>}
+              {s.isDisabled && <Badge size="xs" color="gray" variant="light">disabled</Badge>}
             </Group>
             {s.databases.map((d) => (
               <Button
