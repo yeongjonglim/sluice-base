@@ -74,4 +74,42 @@ describe("apiRequest", () => {
     const headers = new Headers(init.headers);
     expect(headers.get("X-XSRF-TOKEN")).toBeNull();
   });
+
+  it("refreshes a stale antiforgery token once and retries the mutation", async () => {
+    document.cookie = "XSRF-TOKEN=stale";
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ type: "antiforgery" }), {
+          status: 400,
+          headers: { "content-type": "application/json" },
+        }),
+      )
+      .mockImplementationOnce(() => {
+        document.cookie = "XSRF-TOKEN=fresh";
+        return Promise.resolve(new Response("{}", { status: 200, headers: { "content-type": "application/json" } }));
+      })
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await apiRequest("/api/things", { method: "POST", body: { x: 1 } });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/antiforgery-token");
+    const retried = new Headers((fetchMock.mock.calls[2][1] as RequestInit).headers);
+    expect(retried.get("X-XSRF-TOKEN")).toBe("fresh");
+  });
+
+  it("does not retry other 400s", async () => {
+    document.cookie = "XSRF-TOKEN=ok";
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ title: "bad input" }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    await expect(apiRequest("/api/things", { method: "POST", body: { x: 1 } })).rejects.toMatchObject({
+      status: 400,
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });

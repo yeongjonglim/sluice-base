@@ -36,8 +36,9 @@ builder.Services.Configure<BrandingOptions>(
 
 builder.Services.AddAntiforgery(o =>
 {
-    o.HeaderName = "X-XSRF-TOKEN";
-    o.Cookie.Name = "XSRF-TOKEN";
+    o.HeaderName = AuthEndpoints.AntiforgeryHeaderName;
+    // The HttpOnly half of the token pair. The request token goes in the readable XSRF-TOKEN cookie instead.
+    o.Cookie.Name = "sb.antiforgery";
 });
 
 builder.Services.ConfigureHttpJsonOptions(options => { options.SerializerOptions.Converters.Add(new JsonStringEnumConverter()); });
@@ -152,6 +153,7 @@ if (!builder.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+app.UseMiddleware<ApiAntiforgeryMiddleware>();
 
 if (builder.Environment.IsDevelopment())
 {

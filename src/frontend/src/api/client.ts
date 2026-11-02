@@ -23,11 +23,20 @@ export interface ApiRequestOptions<TRequest> {
   signal?: AbortSignal;
 }
 
-export async function apiRequest<TRequest, TResponse>(
-  path: string,
-  options: ApiRequestOptions<TRequest> = {},
-): Promise<TResponse> {
-  const method = (options.method ?? "GET").toUpperCase();
+// The server answers a missing or stale token (one issued before the user last signed in) with this type.
+const ANTIFORGERY_FAILURE = "antiforgery";
+
+async function refreshXsrfToken(): Promise<void> {
+  await fetch("/api/antiforgery-token", { credentials: "include", headers: { Accept: "application/json" } });
+}
+
+async function isAntiforgeryFailure(response: Response): Promise<boolean> {
+  if (response.status !== 400 || !(response.headers.get("content-type") ?? "").includes("json")) return false;
+  const body = (await response.clone().json()) as { type?: string } | null;
+  return body?.type === ANTIFORGERY_FAILURE;
+}
+
+function send<TRequest>(path: string, method: string, options: ApiRequestOptions<TRequest>): Promise<Response> {
   const headers = new Headers({
     Accept: "application/json",
   });
@@ -43,13 +52,31 @@ export async function apiRequest<TRequest, TResponse>(
     }
   }
 
-  const response = await fetch(path, {
+  return fetch(path, {
     method,
     headers,
     credentials: "include",
     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
     signal: options.signal,
   });
+}
+
+export async function apiRequest<TRequest, TResponse>(
+  path: string,
+  options: ApiRequestOptions<TRequest> = {},
+): Promise<TResponse> {
+  const method = (options.method ?? "GET").toUpperCase();
+  const mutating = MUTATING_METHODS.has(method);
+
+  if (mutating && !readCookie(ANTIFORGERY_COOKIE)) {
+    await refreshXsrfToken();
+  }
+
+  let response = await send(path, method, options);
+  if (mutating && (await isAntiforgeryFailure(response))) {
+    await refreshXsrfToken();
+    response = await send(path, method, options);
+  }
 
   const contentType = response.headers.get("content-type") ?? "";
   const isJson = contentType.includes("/json") || contentType.includes("+json");
