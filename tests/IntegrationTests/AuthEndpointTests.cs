@@ -32,6 +32,18 @@ public class AuthEndpointTests(SluiceBaseStackFactory factory)
             response.Headers.Location!.ToString());
     }
 
+    [Fact]
+    public async Task Responses_CarrySecurityHeaders()
+    {
+        using var client = factory.InitialisedApp.CreateHttpClient("api", "https");
+
+        var response = await client.GetAsync("/api/me", TestContext.Current.CancellationToken);
+
+        Assert.Equal("DENY", response.Headers.GetValues("X-Frame-Options").Single());
+        Assert.Contains("frame-ancestors 'none'", response.Headers.GetValues("Content-Security-Policy").Single());
+        Assert.Equal("nosniff", response.Headers.GetValues("X-Content-Type-Options").Single());
+    }
+
     private const string RevokeUnknownPermissionPath =
         "/api/admin/user/00000000-0000-0000-0000-000000000000/permission/server:manage";
 

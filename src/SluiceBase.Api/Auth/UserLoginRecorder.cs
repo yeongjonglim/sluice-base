@@ -8,14 +8,15 @@ namespace SluiceBase.Api.Auth;
 
 internal interface IUserLoginRecorder
 {
-    Task<User> RecordLoginAsync(string issuer, string sub, string? email, string? name, DateTimeOffset at, IEnumerable<ClaimRecord> claims, CancellationToken ct);
+    // verifiedEmail is the IdP-verified email used to match the bootstrap admin list; email is only for display.
+    Task<User> RecordLoginAsync(string issuer, string sub, string? email, string? verifiedEmail, string? name, DateTimeOffset at, IEnumerable<ClaimRecord> claims, CancellationToken ct);
 }
 
 internal sealed class UserLoginRecorder(
     AppDbContext db,
     IOptions<BootstrapAdminOptions> bootstrap) : IUserLoginRecorder
 {
-    public async Task<User> RecordLoginAsync(string issuer, string sub, string? email, string? name, DateTimeOffset at, IEnumerable<ClaimRecord> claims, CancellationToken
+    public async Task<User> RecordLoginAsync(string issuer, string sub, string? email, string? verifiedEmail, string? name, DateTimeOffset at, IEnumerable<ClaimRecord> claims, CancellationToken
             ct)
     {
         var externalLogin = await db.ExternalLogins
@@ -35,8 +36,8 @@ internal sealed class UserLoginRecorder(
             externalLogin.RecordLogin(at, email, name, claims);
         }
 
-        var emailMatchesBootstrap = bootstrap.Value.Admins.Any(b =>
-            string.Equals(b, email, StringComparison.OrdinalIgnoreCase));
+        var emailMatchesBootstrap = verifiedEmail is not null && bootstrap.Value.Admins.Any(b =>
+            string.Equals(b, verifiedEmail, StringComparison.OrdinalIgnoreCase));
 
         if (emailMatchesBootstrap && !externalLogin.User.HasPermission(Permissions.PermissionManage))
         {

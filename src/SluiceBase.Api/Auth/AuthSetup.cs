@@ -99,13 +99,23 @@ internal static class AuthSetup
                         throw new InvalidOperationException("Principal is null");
                     }
 
+                    // Claims under the sb: prefix are SluiceBase's own (such as the internal user id); one the IdP
+                    // sends, say from a user-editable attribute, must not be mistaken for them.
+                    foreach (var identity in ctx.Principal.Identities)
+                    {
+                        foreach (var claim in identity.FindAll(c => c.Type.StartsWith(AppClaims.Prefix, StringComparison.Ordinal)).ToList())
+                        {
+                            identity.TryRemoveClaim(claim);
+                        }
+                    }
+
                     var issuer = ctx.Principal.GetIssuer();
                     var sub = ctx.Principal.GetSubject();
                     var email = ctx.Principal.GetEmail();
                     var name = ctx.Principal.GetName();
 
                     var user = await recorder.RecordLoginAsync(
-                        issuer, sub, email, name, clock.GetUtcNow(),
+                        issuer, sub, email, ctx.Principal.GetVerifiedEmail(), name, clock.GetUtcNow(),
                         ctx.Principal.GetClaims(),
                         ctx.HttpContext.RequestAborted);
 
