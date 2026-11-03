@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
+using SluiceBase.Api.Servers;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Servers;
 using SluiceBase.Core.Users;
@@ -219,7 +220,7 @@ internal static class AccessGroupEndpoints
             return TypedResults.NotFound();
         }
 
-        if (!await db.Databases.AnyAsync(d => d.Id == databaseId, ct))
+        if (!await db.Databases.Live().AnyAsync(d => d.Id == databaseId, ct))
         {
             return TypedResults.NotFound();
         }

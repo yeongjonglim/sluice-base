@@ -472,7 +472,10 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         psi.ArgumentList.Add($"--host={builder.Host}");
         psi.ArgumentList.Add($"--port={builder.Port}");
         psi.ArgumentList.Add($"--username={builder.Username}");
-        psi.ArgumentList.Add($"--dbname={builder.Database}");
+        // --dbname is parsed as a connection string when it contains '=' or a URI prefix, so an admin-entered database
+        // name could otherwise redirect pg_dump to another host or user; quoted, it stays a literal name. Host and
+        // port stay separate options because Debian's pg_wrapper reads them to pick a pg_dump new enough for the server.
+        psi.ArgumentList.Add("--dbname=" + ConnInfo("dbname", builder.Database));
 
         // Password is passed only via the child process environment — never on the command line.
         psi.Environment["PGPASSWORD"] = builder.Password ?? string.Empty;
@@ -506,6 +509,10 @@ internal sealed class PostgresTargetEngine : ITargetEngine
 
         return stdout;
     }
+
+    // A libpq keyword/value pair with the value single-quoted, so spaces, quotes and '=' stay part of it.
+    internal static string ConnInfo(string keyword, string? value) =>
+        $"{keyword}='{(value ?? "").Replace(@"\", @"\\").Replace("'", @"\'")}'";
 
     // Reads the CURRENT result set of an open reader into a QueryData, using the
     // same value formatting as ExecuteQueryAsync (including the interval handling

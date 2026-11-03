@@ -98,7 +98,7 @@ Users reaching SluiceBase at more than one hostname (for example an internal and
 | `Oidc__ClientSecret` | ✓ | — | OIDC client secret |
 | `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | ✓ behind a proxy | `false` | Trust `X-Forwarded-Proto`/`X-Forwarded-For` from the TLS-terminating proxy — see [Behind a reverse proxy](#behind-a-reverse-proxy) |
 | `Migrations__AutoApply` | | `true` | Apply pending DB migrations on startup |
-| `Permissions__Bootstrap__Admins__0` | | — | Email of the first admin (granted full permissions on first login) |
+| `Permissions__Bootstrap__Admins__0` | | — | Email of the first admin (granted full permissions on first login). Matched only against the IdP's `email` claim when `email_verified` is `true` |
 | `Branding__AppName` | | `SluiceBase` | Application name shown in the UI |
 | `Branding__PrimaryColor` | | `teal` | Mantine colour — see [supported values](#branding-colours) |
 | `Branding__LogoUrl` | | — | URL to a custom logo image — see [using local files](#using-local-branding-files) |

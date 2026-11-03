@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 using SluiceBase.Api.Auth;
 using SluiceBase.Api.Data;
+using SluiceBase.Api.Servers;
 using SluiceBase.Core.Permissions;
 using SluiceBase.Core.Servers;
 using SluiceBase.Core.Users;
@@ -120,7 +121,7 @@ internal static class DatabaseRoleEndpoints
             return TypedResults.NotFound();
         }
 
-        var dbExists = await db.Databases.AnyAsync(d => d.Id == databaseId, ct);
+        var dbExists = await db.Databases.Live().AnyAsync(d => d.Id == databaseId, ct);
         if (!dbExists)
         {
             return TypedResults.NotFound();
@@ -223,7 +224,7 @@ internal static class DatabaseRoleEndpoints
             return TypedResults.NotFound();
         }
 
-        var dbExists = await db.Databases.AnyAsync(d => d.Id == req.DatabaseId, ct);
+        var dbExists = await db.Databases.Live().AnyAsync(d => d.Id == req.DatabaseId, ct);
         if (!dbExists)
         {
             return TypedResults.NotFound();
