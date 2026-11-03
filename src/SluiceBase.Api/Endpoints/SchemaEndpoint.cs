@@ -53,7 +53,7 @@ internal static class SchemaEndpoints
     {
         var user = await currentUser.GetAsync(ct);
 
-        var database = await db.Databases.AsNoTracking()
+        var database = await db.Databases.AsNoTracking().Live()
             .Include(d => d.Server)
             .SingleOrDefaultAsync(d => d.Id == databaseId, ct);
         if (database is null)

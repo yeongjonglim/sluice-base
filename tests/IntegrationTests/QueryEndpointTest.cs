@@ -266,6 +266,29 @@ public class QueryEndpointTests(SluiceBaseStackFactory factory)
         Assert.Equal(HttpStatusCode.Forbidden, resp.StatusCode);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PostQuery_DeletedDatabaseOrServer_Returns404(bool deleteServer)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (session, xsrf, databaseId) = await AuthorizedSessionWithBlueServerAsync(ct);
+        using var _ = session;
+
+        var servers = await session.Client.GetFromJsonAsync<ServerEndpoints.ListServersResponse>("/api/server", ct);
+        var server = servers!.Servers.Single(s => s.Databases.Any(d => d.Id == databaseId));
+
+        using var deleteReq = MutationRequest(HttpMethod.Delete,
+            deleteServer ? $"/api/server/{server.Id}" : $"/api/server/{server.Id}/database/{databaseId}", xsrf);
+        (await session.Client.SendAsync(deleteReq, ct)).EnsureSuccessStatusCode();
+
+        using var req = MutationRequest(HttpMethod.Post, "/api/query", xsrf,
+            new QueryEndpoints.QueryRequest(databaseId, "SELECT 1"));
+        var resp = await session.Client.SendAsync(req, ct);
+
+        Assert.Equal(HttpStatusCode.NotFound, resp.StatusCode);
+    }
+
     private sealed record ListUserBody(UserRow[] Users);
     private sealed record UserRow(string Id, string Email);
 }

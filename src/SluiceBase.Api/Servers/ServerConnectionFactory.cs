@@ -20,6 +20,7 @@ internal sealed class ServerConnectionFactory(
     {
         var database = await db.Databases
             .AsNoTracking()
+            .Live()
             .Include(d => d.Server)
             .SingleOrDefaultAsync(d => d.Id == databaseId, ct)
             ?? throw new InvalidOperationException($"Database {databaseId} not found.");
@@ -42,7 +43,7 @@ internal sealed class ServerConnectionFactory(
 
         var credential = await db.Credentials
             .AsNoTracking()
-            .SingleOrDefaultAsync(c => c.Id == credentialId, ct)
+            .SingleOrDefaultAsync(c => c.Id == credentialId && c.DeletedAt == null, ct)
             ?? throw new InvalidOperationException($"Credential {credentialId} not found.");
 
         var password = _protector.Unprotect(credential.EncryptedPassword);
