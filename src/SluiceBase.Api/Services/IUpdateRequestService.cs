@@ -258,7 +258,8 @@ internal sealed class UpdateRequestService(
 
         // Sensitive-column gate — same policy as the read path. A hit blocks the run
         // entirely; the SQL never executes and no event is recorded.
-        var decision = await sensitiveGuard.EvaluateAsync(user.Id, request.DatabaseId.Value, request.SqlText, ct);
+        var decision = await sensitiveGuard.EvaluateAsync(
+            user.Id, request.DatabaseId.Value, request.SqlText, CredentialKind.Write, ct);
         if (decision.BlockedHits.Count > 0 || decision.PolicyBlockReason is not null)
         {
             return new PreviewUpdateResult(PreviewUpdateOutcome.Blocked, null, null, decision);

@@ -40,4 +40,19 @@ public class SqlStatementSplitterTests
         var parts = SqlStatementSplitter.Split("SELECT 1;;  ;");
         Assert.Single(parts);
     }
+
+    [Fact]
+    public void Split_BackslashEscapedQuoteInEscapeString_NotAStringEnd()
+    {
+        var parts = SqlStatementSplitter.Split("SELECT E'\\'' AS a; COMMIT; DELETE FROM t");
+        Assert.Equal(["SELECT E'\\'' AS a", "COMMIT", "DELETE FROM t"], parts);
+    }
+
+    [Fact]
+    public void Split_QuoteAfterIdentifierEndingInE_IsAPlainString()
+    {
+        // Only a lone E opens an escape string; in name'...' the backslash is an ordinary character.
+        var parts = SqlStatementSplitter.Split("SELECT name'\\'; SELECT 2");
+        Assert.Equal(2, parts.Count);
+    }
 }

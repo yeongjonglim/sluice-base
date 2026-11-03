@@ -352,8 +352,7 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
     /// <summary>
     /// A query that references a sensitive column must be blocked and the tool result must
     /// carry the structured deterrence payload — the discriminator, the offending column, and
-    /// guidance steering the agent to exclude it — rather than a bare error string. The guard
-    /// blocks before execution, so the referenced table need not exist.
+    /// guidance steering the agent to exclude it — rather than a bare error string.
     /// </summary>
     [Fact]
     public async Task RunQuery_BlockedBySensitiveColumn_ReturnsGuidancePayload()
@@ -368,7 +367,7 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
         var bob = users!.Users.Single(u => u.Email == "bob@example.com");
 
         await DatabaseRoleTestHelper.AssignByDatabaseAsync(admin, bob.Id, Permissions.QueryExecute, databaseId, adminXsrf, ct);
-        await SensitiveColumnTestHelper.MarkColumnAsync(admin, databaseId, "public", "people", "ssn", adminXsrf, ct);
+        await SensitiveColumnTestHelper.MarkColumnAsync(admin, databaseId, "public", "users", "email", adminXsrf, ct);
 
         var accessToken = await MintAccessTokenAsync("bob", "dev", ct);
         await using var transport = CreateMcpTransport(accessToken);
@@ -379,13 +378,13 @@ public sealed class McpToolsTests(SluiceBaseStackFactory factory)
             new Dictionary<string, object?>
             {
                 ["databaseId"] = databaseId,
-                ["sql"] = "SELECT ssn FROM people",
+                ["sql"] = "SELECT email FROM public.users",
             },
             cancellationToken: ct);
 
         var text = ContentText(callResult);
         Assert.Contains("sensitive_columns_blocked", text);
-        Assert.Contains("ssn", text);
+        Assert.Contains("public.users.email", text);
         // The guidance must steer a cooperative agent to exclude and stop probing.
         Assert.Contains("without them", text, StringComparison.OrdinalIgnoreCase);
     }

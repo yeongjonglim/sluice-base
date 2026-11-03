@@ -72,7 +72,7 @@ internal sealed class QueryService(
         }
 
         // ── sensitive column check (shared with the update-preview endpoint) ──
-        var decision = await sensitiveGuard.EvaluateAsync(user.Id, database.Id, sql, ct);
+        var decision = await sensitiveGuard.EvaluateAsync(user.Id, database.Id, sql, CredentialKind.Read, ct);
         var touchedSensitive = decision.Touched.ToArray();
 
         if (decision.BlockedHits.Count > 0 || decision.PolicyBlockReason is not null)

@@ -553,6 +553,8 @@ internal sealed class PostgresTargetEngine : ITargetEngine
 
     public async Task<QueryData> ExecuteQueryAsync(string connectionString, string sql, CancellationToken ct)
     {
+        RequireSingleStatement(sql);
+
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
@@ -563,8 +565,8 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         }
 
         QueryData data;
-        await using (var cmd = new NpgsqlCommand(sql, conn, tx))
-        await using (var reader = await cmd.ExecuteReaderAsync(ct))
+        await using (var batch = SingleStatement(sql, conn, tx))
+        await using (var reader = await batch.ExecuteReaderAsync(ct))
         {
             data = await ReadResultSet(reader, ct);
         }
@@ -576,6 +578,8 @@ internal sealed class PostgresTargetEngine : ITargetEngine
     public async Task<QueryPlan> ExplainAsync(
         string connectionString, string sql, bool analyze, CancellationToken ct)
     {
+        RequireSingleStatement(sql);
+
         await using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync(ct);
         await using var tx = await conn.BeginTransactionAsync(ct);
@@ -592,9 +596,9 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         var explainSql = $"EXPLAIN ({options}) {sql}";
 
         string planJson;
-        await using (var cmd = new NpgsqlCommand(explainSql, conn, tx))
+        await using (var batch = SingleStatement(explainSql, conn, tx))
         {
-            var result = await cmd.ExecuteScalarAsync(ct);
+            var result = await batch.ExecuteScalarAsync(ct);
             planJson = result as string ?? result?.ToString() ?? "[]";
         }
 
@@ -618,9 +622,9 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         }
 
         string planJson;
-        await using (var cmd = new NpgsqlCommand($"EXPLAIN (VERBOSE, FORMAT JSON, COSTS OFF) {sql}", conn, tx))
+        await using (var batch = SingleStatement($"EXPLAIN (VERBOSE, FORMAT JSON, COSTS OFF) {sql}", conn, tx))
         {
-            var result = await cmd.ExecuteScalarAsync(ct);
+            var result = await batch.ExecuteScalarAsync(ct);
             planJson = result as string ?? result?.ToString() ?? "[]";
         }
 
@@ -761,13 +765,13 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         var resultSets = new List<QueryData>();
         var affected = 0;
 
-        // One command per statement, so Postgres runs exactly the statements checked above. If one still
-        // ends the transaction (say the splitter and Postgres disagree on a boundary), the id check stops
-        // the rest from running outside it.
+        // One single-statement batch per statement, so Postgres runs exactly the statements checked above and
+        // rejects any piece where the splitter missed a boundary. The id check is a further guard against a
+        // statement that ends the transaction.
         foreach (var statement in statements)
         {
-            await using (var cmd = new NpgsqlCommand(statement, conn, tx))
-            await using (var reader = await cmd.ExecuteReaderAsync(ct))
+            await using (var batch = SingleStatement(statement, conn, tx))
+            await using (var reader = await batch.ExecuteReaderAsync(ct))
             {
                 do
                 {
@@ -808,6 +812,22 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         return new UpdateExecutionResult(resultSets, affected);
     }
 
+    // An NpgsqlCommand whose text holds several statements is split by Npgsql and sent as a batch, so user SQL
+    // like "SET TRANSACTION READ WRITE; DELETE ..." or "COMMIT; DELETE ..." would escape the read-only or
+    // rolled-back transaction it runs in. A one-command NpgsqlBatch goes to Postgres as a single Parse message
+    // instead, and Postgres rejects any text that holds more than one statement (42601), however it is quoted.
+    private static NpgsqlBatch SingleStatement(string sql, NpgsqlConnection conn, NpgsqlTransaction tx) =>
+        new(conn, tx) { BatchCommands = { new NpgsqlBatchCommand(sql) } };
+
+    // Gives a clear error for the common case; SingleStatement is what enforces it.
+    private static void RequireSingleStatement(string sql)
+    {
+        if (SqlStatementSplitter.Split(sql).Count > 1)
+        {
+            throw new InvalidOperationException("Run one statement at a time: the SQL contains more than one statement.");
+        }
+    }
+
     private static async Task<long?> TransactionIdAsync(
         NpgsqlConnection conn, NpgsqlTransaction tx, string sql, CancellationToken ct)
     {
@@ -826,7 +846,7 @@ internal sealed class PostgresTargetEngine : ITargetEngine
     {
         foreach (var statement in statements)
         {
-            var words = LeadingWords(statement, 2);
+            var words = SqlLexing.LeadingWords(statement, 2);
             var first = words.Count > 0 ? words[0] : "";
             var second = words.Count > 1 ? words[1] : "";
             if (TransactionControlKeywords.Contains(first)
@@ -839,66 +859,5 @@ internal sealed class PostgresTargetEngine : ITargetEngine
         }
 
         return null;
-    }
-
-    // The first words of a statement, skipping whitespace and comments (block comments nest in Postgres).
-    private static List<string> LeadingWords(string statement, int count)
-    {
-        var words = new List<string>(count);
-        var pos = 0;
-        var len = statement.Length;
-        while (words.Count < count && pos < len)
-        {
-            var c = statement[pos];
-            if (char.IsWhiteSpace(c))
-            {
-                pos++;
-            }
-            else if (c == '-' && pos + 1 < len && statement[pos + 1] == '-')
-            {
-                while (pos < len && statement[pos] != '\n')
-                {
-                    pos++;
-                }
-            }
-            else if (c == '/' && pos + 1 < len && statement[pos + 1] == '*')
-            {
-                pos += 2;
-                var depth = 1;
-                while (pos < len && depth > 0)
-                {
-                    if (statement[pos] == '/' && pos + 1 < len && statement[pos + 1] == '*')
-                    {
-                        depth++;
-                        pos += 2;
-                    }
-                    else if (statement[pos] == '*' && pos + 1 < len && statement[pos + 1] == '/')
-                    {
-                        depth--;
-                        pos += 2;
-                    }
-                    else
-                    {
-                        pos++;
-                    }
-                }
-            }
-            else if (char.IsLetter(c) || c == '_')
-            {
-                var start = pos;
-                while (pos < len && (char.IsLetterOrDigit(statement[pos]) || statement[pos] == '_'))
-                {
-                    pos++;
-                }
-
-                words.Add(statement[start..pos]);
-            }
-            else
-            {
-                break;
-            }
-        }
-
-        return words;
     }
 }
