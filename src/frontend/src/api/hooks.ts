@@ -128,6 +128,44 @@ export function useRevokePermission() {
   });
 }
 
+function useAdminUserAction(
+  path: (userId: string) => string,
+  method: "POST" | "DELETE",
+  successTitle: string,
+  failureTitle: string,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => apiRequest(path(userId), { method }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "user"] });
+      notifications.show({ title: successTitle, message: "", color: "teal" });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: failureTitle,
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
+export function useDisableUser() {
+  return useAdminUserAction(
+    (id) => `/api/admin/user/${id}/disable`, "POST", "User disabled", "Disable failed");
+}
+
+export function useEnableUser() {
+  return useAdminUserAction(
+    (id) => `/api/admin/user/${id}/enable`, "POST", "User enabled", "Enable failed");
+}
+
+export function useRevokeUserMcpGrants() {
+  return useAdminUserAction(
+    (id) => `/api/admin/user/${id}/mcp-grant`, "DELETE", "MCP access revoked", "Revoke failed");
+}
+
 // ── MCP grants (the signed-in user's own) ─────────────────────────────────
 
 export type McpGrant =

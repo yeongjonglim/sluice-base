@@ -598,6 +598,94 @@
         }
       }
     },
+    "/api/admin/user/{userId}/disable": {
+      "post": {
+        "tags": [
+          "PermissionEndpoints"
+        ],
+        "operationId": "DisableUser",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/user/{userId}/enable": {
+      "post": {
+        "tags": [
+          "PermissionEndpoints"
+        ],
+        "operationId": "EnableUser",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
+    "/api/admin/user/{userId}/mcp-grant": {
+      "delete": {
+        "tags": [
+          "PermissionEndpoints"
+        ],
+        "operationId": "RevokeUserMcpGrants",
+        "parameters": [
+          {
+            "name": "userId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
     "/api/admin/server": {
       "get": {
         "tags": [
@@ -4562,6 +4650,7 @@
           "email",
           "name",
           "lastLoginAt",
+          "disabledAt",
           "permissions"
         ],
         "type": "object",
@@ -4582,6 +4671,13 @@
             ]
           },
           "lastLoginAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "disabledAt": {
             "type": [
               "null",
               "string"

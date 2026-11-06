@@ -104,6 +104,7 @@ Users reaching SluiceBase at more than one hostname (for example an internal and
 | `Branding__LogoUrl` | | — | URL to a custom logo image — see [using local files](#using-local-branding-files) |
 | `Branding__FaviconUrl` | | — | URL to a custom favicon — see [using local files](#using-local-branding-files) |
 | `Query__TimeoutSeconds` | | `30` | Maximum query execution time in seconds |
+| `Auth__AbsoluteSessionHours` | | `24` | A browser session ends this many hours after sign-in, even while in use |
 | `Mcp__Enabled` | | `true` | Enable the MCP server and its OAuth endpoints (see [Connecting AI tools](#connecting-ai-tools-mcp)) |
 | `Mcp__ServerName` | | `sluicebase` | Client alias shown in connect snippets (letters, digits, `-`, `_`; falls back to `sluicebase` if invalid) |
 | `Mcp__AccessTokenMinutes` | | `60` | Lifetime of an MCP access token in minutes |
@@ -167,7 +168,7 @@ The ID token must include the `sub`, `email`, and `name` claims.
 
 SluiceBase exposes a [Model Context Protocol](https://modelcontextprotocol.io) server so AI coding tools (Claude Code, Codex) can list databases, browse schema, and run read-only queries **as the authenticated user** — reusing the same per-database permissions, sensitive-column screening, and audit logging as the web UI.
 
-The MCP endpoint is served at `https://your-domain/mcp` (streamable HTTP). Authentication uses OAuth 2.1: SluiceBase acts as the authorization server and brokers login to your existing OIDC provider, so users sign in with the **same login page they already use** — no extra credentials, and tokens are user-scoped and revocable. Users revoke a connected tool under **MCP connections** in the user menu. Clients can also revoke their own tokens at `/mcp/oauth/revoke` (RFC 7009).
+The MCP endpoint is served at `https://your-domain/mcp` (streamable HTTP). Authentication uses OAuth 2.1: SluiceBase acts as the authorization server and brokers login to your existing OIDC provider, so users sign in with the **same login page they already use** — no extra credentials, and tokens are user-scoped and revocable. Users revoke a connected tool under **MCP connections** in the user menu; admins revoke all of a user's connections, or disable the account, from the Permissions page. Clients can also revoke their own tokens at `/mcp/oauth/revoke` (RFC 7009).
 
 Signed-in users can also open **Connect AI tools** (the ✨ icon in the app header) for copy-ready, per-client setup snippets pre-filled with this instance's URL and server name.
 
@@ -265,7 +266,7 @@ The MCP endpoint is served through the gateway at **`https://localhost:5443/mcp`
 
 4. Connect a client:
 
-   **MCP Inspector** (quickest way to drive the OAuth flow and check tool schemas): the AppHost runs it as the `mcp-inspector` resource, pointed at the gateway and trusting the dev certificate. Open it from the Aspire dashboard, then under **Client settings → OAuth Client ID Metadata Document** enable **Use Client ID Metadata Document** and paste any metadata URL, such as MCPJam's `https://www.mcpjam.com/.well-known/oauth/client-metadata.json`, and switch on the `gateway` server. Its callback is on localhost, so SluiceBase uses the URL only as the client ID and never fetches it. **Connection Info** shows the negotiated protocol, capabilities and OAuth details, and each tool shows schema portability warnings. To run without it, start the AppHost with `dotnet run --project src/AppHost -- McpInspector:Enabled=false`.
+   **MCP Inspector** (quickest way to drive the OAuth flow and check tool schemas): the AppHost can run it as the `mcp-inspector` resource, pointed at the gateway and trusting the dev certificate. It's off by default; start the AppHost with `dotnet run --project src/AppHost -- McpInspector:Enabled=true` (or set `McpInspector:Enabled` to `true` in the AppHost's user secrets to keep it on). Open it from the Aspire dashboard, then under **Client settings → OAuth Client ID Metadata Document** enable **Use Client ID Metadata Document** and paste any metadata URL, such as MCPJam's `https://www.mcpjam.com/.well-known/oauth/client-metadata.json`, and switch on the `gateway` server. Its callback is on localhost, so SluiceBase uses the URL only as the client ID and never fetches it. **Connection Info** shows the negotiated protocol, capabilities and OAuth details, and each tool shows schema portability warnings.
 
    To use the dev configured client instead, run the Inspector's CLI or TUI, which can pin the callback: `--client-id sluicebase-dev --callback-url http://127.0.0.1:43123/callback`.
 

@@ -26,6 +26,7 @@ internal static class AppClaims
 
     public const string Prefix = "sb:";
     public const string InternalUserIdClaim = Prefix + "uid";
+    public const string SignedInAtClaim = Prefix + "signed_in_at";
 
     extension(ClaimsPrincipal principal)
     {
@@ -40,6 +41,11 @@ internal static class AppClaims
             userId = UserId.Unknown;
             return false;
         }
+
+        public DateTimeOffset? GetSignedInAt() =>
+            long.TryParse(principal.FindFirstValue(SignedInAtClaim), out var seconds)
+                ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+                : null;
 
         public IEnumerable<ClaimRecord> GetClaims() => principal.Claims.Select(c => new ClaimRecord(c.Type, c.Value, c.ValueType));
 

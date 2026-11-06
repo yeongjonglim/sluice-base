@@ -1,14 +1,31 @@
-import { Badge, Box, Card, Group, Stack, Table, Text, TextInput, Title, Tooltip } from "@mantine/core";
+import {
+  ActionIcon,
+  Badge,
+  Box,
+  Card,
+  Group,
+  Menu,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Title,
+  Tooltip,
+} from "@mantine/core";
+import { IconDots, IconPlugConnectedX, IconUserCheck, IconUserOff } from "@tabler/icons-react";
 import { modals } from "@mantine/modals";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import type { paths } from "@/api/schema.ts";
 import {
   meQueryOptions,
+  useDisableUser,
+  useEnableUser,
   useGrantPermission,
   useMe,
   usePermissionCatalog,
   useRevokePermission,
+  useRevokeUserMcpGrants,
   useUsers,
 } from "@/api/hooks";
 import { EffectiveCell } from "@/components/EffectiveCell";
@@ -23,6 +40,11 @@ const PERMISSION_LABELS: Record<string, { short: string; scope: string; full: st
   "permission:manage": { short: "Permissions", scope: "admin", full: "Manage permissions" },
 };
 
+const DISABLED_DATE = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
+
+// A disabled account keeps its grants, so they would look live without this.
+const DISABLED_GRANTS_NOTE = "Account disabled: grants are kept and apply again when it's enabled.";
+
 type UserSummary = paths["/api/admin/user"]["get"]["responses"][200]["content"]["application/json"]["users"][0];
 
 export const Route = createFileRoute("/_authed/permission")({
@@ -34,6 +56,53 @@ export const Route = createFileRoute("/_authed/permission")({
   },
   component: PermissionsAdminPage,
 });
+
+function AccountActions({ user, isSelf }: { user: UserSummary; isSelf: boolean }) {
+  const disable = useDisableUser();
+  const enable = useEnableUser();
+  const revokeMcp = useRevokeUserMcpGrants();
+  const label = user.email ?? user.id;
+
+  function confirmDisable() {
+    modals.openConfirmModal({
+      title: `Disable ${label}?`,
+      children: (
+        <Text size="sm">
+          They are signed out on their next request, cannot sign in again, and their AI tool connections are
+          revoked. You can enable the account again later.
+        </Text>
+      ),
+      labels: { confirm: "Disable", cancel: "Cancel" },
+      confirmProps: { color: "red" },
+      onConfirm: () => disable.mutate(user.id),
+    });
+  }
+
+  return (
+    <Menu position="bottom-end" withinPortal>
+      <Menu.Target>
+        <ActionIcon variant="subtle" aria-label={`Account actions for ${label}`}>
+          <IconDots size={16} />
+        </ActionIcon>
+      </Menu.Target>
+      <Menu.Dropdown>
+        <Menu.Item leftSection={<IconPlugConnectedX size={14} />} onClick={() => revokeMcp.mutate(user.id)}>
+          Revoke AI tool connections
+        </Menu.Item>
+        {!isSelf &&
+          (user.disabledAt ? (
+            <Menu.Item leftSection={<IconUserCheck size={14} />} onClick={() => enable.mutate(user.id)}>
+              Enable account
+            </Menu.Item>
+          ) : (
+            <Menu.Item color="red" leftSection={<IconUserOff size={14} />} onClick={confirmDisable}>
+              Disable account
+            </Menu.Item>
+          ))}
+      </Menu.Dropdown>
+    </Menu>
+  );
+}
 
 // The same control the Access matrix uses, so one fact always has one rendering.
 // Inert: it is a key, not a second set of toggles.
@@ -172,83 +241,102 @@ export function PermissionsAdminPage() {
                   </Tooltip>
                 </Table.Th>
               ))}
+              <Table.Th />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
             {filtered.length === 0 && (
               <Table.Tr>
-                <Table.Td colSpan={permissions.length + 2}>
+                <Table.Td colSpan={permissions.length + 3}>
                   <Text size="sm" c="dimmed">
                     No users match “{search}”.
                   </Text>
                 </Table.Td>
               </Table.Tr>
             )}
-            {filtered.map((user) => (
-              <Table.Tr key={user.id}>
-                <Table.Td>
-                  <Stack gap={2}>
-                    <Group gap={6}>
-                      <Text size="sm" fw={500}>
-                        {user.email}
-                      </Text>
-                      {user.id === me.data?.id && (
-                        <Badge size="xs" variant="outline">
-                          you
-                        </Badge>
-                      )}
-                    </Group>
-                    {user.name && (
-                      <Text size="xs" c="dimmed">
-                        {user.name}
-                      </Text>
-                    )}
-                  </Stack>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-                    {user.lastLoginAt
-                      ? new Intl.DateTimeFormat("en", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        }).format(new Date(user.lastLoginAt))
-                      : "Never"}
-                  </Text>
-                </Table.Td>
-                {permissions.map((permission) => {
-                  const ep = user.permissions.find((p) => p.permission === permission);
-                  const fromDirect = ep?.fromDirect ?? false;
-                  const fromGroups = (ep?.fromGroups ?? []).map((g) => ({
-                    groupId: String(g.groupId),
-                    name: g.name,
-                  }));
-
-                  return (
-                    <Table.Td key={permission} style={{ textAlign: "center" }}>
-                      <Stack gap={4} align="center">
-                        <EffectiveCell
-                          fromDirect={fromDirect}
-                          fromGroups={fromGroups}
-                          onToggle={(next) => void handleToggle(user, permission, next)}
-                          ariaLabel={`${PERMISSION_LABELS[permission].full} for ${user.email ?? user.id}`}
-                          pending={pendingPermission(user.id) === permission}
-                        />
-                        {fromGroups.length > 0 && (
-                          <Text
-                            size="xs"
-                            c="cyan"
-                            style={{ fontSize: 10, lineHeight: 1.2 }}
-                            title={`Inherited via ${fromGroups.map((g) => g.name).join(", ")}`}
-                          >
-                            {fromGroups.map((g) => g.name).join(", ")}
-                          </Text>
+            {filtered.map((user) => {
+              const accountDisabled = Boolean(user.disabledAt);
+              return (
+                <Table.Tr key={user.id}>
+                  <Table.Td>
+                    <Stack gap={2}>
+                      <Group gap={6}>
+                        <Text size="sm" fw={500} c={accountDisabled ? "dimmed" : undefined}>
+                          {user.email}
+                        </Text>
+                        {user.id === me.data?.id && (
+                          <Badge size="xs" variant="outline">
+                            you
+                          </Badge>
                         )}
-                      </Stack>
-                    </Table.Td>
-                  );
-                })}
-              </Table.Tr>
-            ))}
+                      </Group>
+                      {(user.name || user.disabledAt) && (
+                        <Text size="xs" c="dimmed">
+                          {user.name}
+                          {user.disabledAt && (
+                            <>
+                              {user.name && " · "}
+                              <Text span inherit fw={600}>
+                                Disabled
+                              </Text>{" "}
+                              {DISABLED_DATE.format(new Date(user.disabledAt))}
+                            </>
+                          )}
+                        </Text>
+                      )}
+                    </Stack>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                      {user.lastLoginAt
+                        ? new Intl.DateTimeFormat("en", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          }).format(new Date(user.lastLoginAt))
+                        : "Never"}
+                    </Text>
+                  </Table.Td>
+                  {permissions.map((permission) => {
+                    const ep = user.permissions.find((p) => p.permission === permission);
+                    const fromDirect = ep?.fromDirect ?? false;
+                    const fromGroups = (ep?.fromGroups ?? []).map((g) => ({
+                      groupId: String(g.groupId),
+                      name: g.name,
+                    }));
+
+                    return (
+                      <Table.Td key={permission} style={{ textAlign: "center" }}>
+                        <Tooltip label={DISABLED_GRANTS_NOTE} withArrow disabled={!accountDisabled}>
+                          <Stack gap={4} align="center" style={accountDisabled ? { opacity: 0.6 } : undefined}>
+                            <EffectiveCell
+                              fromDirect={fromDirect}
+                              fromGroups={fromGroups}
+                              onToggle={(next) => void handleToggle(user, permission, next)}
+                              ariaLabel={`${PERMISSION_LABELS[permission].full} for ${user.email ?? user.id}${accountDisabled ? " (account disabled)" : ""}`}
+                              disabled={accountDisabled}
+                              pending={pendingPermission(user.id) === permission}
+                            />
+                            {fromGroups.length > 0 && (
+                              <Text
+                                size="xs"
+                                c="cyan"
+                                style={{ fontSize: 10, lineHeight: 1.2 }}
+                                title={`Inherited via ${fromGroups.map((g) => g.name).join(", ")}`}
+                              >
+                                {fromGroups.map((g) => g.name).join(", ")}
+                              </Text>
+                            )}
+                          </Stack>
+                        </Tooltip>
+                      </Table.Td>
+                    );
+                  })}
+                  <Table.Td>
+                    <AccountActions user={user} isSelf={user.id === me.data?.id} />
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
           </Table.Tbody>
         </Table>
       </Table.ScrollContainer>
