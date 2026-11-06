@@ -81,7 +81,7 @@ internal sealed class UpdateTools
     [Description("List update requests on databases you can see, newest first. Read-only.")]
     public static async Task<object> ListUpdateRequests(
         [Description("Optional database id (GUID) to filter by.")] string? databaseId,
-        [Description("Optional status filter: Pending, Approved, Rejected, Cancelled, or Executed.")] string? status,
+        [Description("Optional status filter: Pending, Approved, Executing, Rejected, Cancelled, or Executed.")] string? status,
         IUpdateRequestService updates, ICurrentUserAccessor currentUser, CancellationToken ct)
     {
         var user = await currentUser.GetAsync(ct) ?? throw new InvalidOperationException("No authenticated user.");
@@ -98,7 +98,7 @@ internal sealed class UpdateTools
         {
             if (!Enum.TryParse<UpdateRequestStatus>(status, ignoreCase: true, out var parsed))
             {
-                throw new ArgumentException("status must be one of: Pending, Approved, Rejected, Cancelled, Executed.");
+                throw new ArgumentException("status must be one of: Pending, Approved, Executing, Rejected, Cancelled, Executed.");
             }
             filterStatus = parsed;
         }

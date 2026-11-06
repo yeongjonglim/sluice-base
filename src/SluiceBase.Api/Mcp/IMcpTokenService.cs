@@ -88,9 +88,8 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
         // Single-use: mark consumed. The Consume() mutation and the new token rows are flushed
         // together by the single SaveChangesAsync inside IssueTokenPairAsync (one unit of work).
         authCode.Consume();
-        var tokens = await IssueTokenPairAsync(
+        return await TryIssueTokenPairAsync(
             authCode.UserId, clientId, McpRedirectUriPolicy.IsLoopback(authCode.RedirectUri), ct);
-        return tokens;
     }
 
     public async Task<IssuedTokens?> RefreshAsync(string clientId, string refreshToken, CancellationToken ct)
@@ -128,8 +127,7 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
 
         // Rotate: revoke old refresh token and issue a fresh pair
         token.Revoke();
-        var tokens = await IssueTokenPairAsync(token.UserId, clientId, token.IsLoopbackGrant, ct);
-        return tokens;
+        return await TryIssueTokenPairAsync(token.UserId, clientId, token.IsLoopbackGrant, ct);
     }
 
     public async Task<UserId?> ValidateAccessTokenAsync(string accessToken, CancellationToken ct)
@@ -161,7 +159,16 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
         }
 
         token.Touch(now);
-        await db.SaveChangesAsync(ct);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Revoked between the read and the save.
+            return null;
+        }
+
         return token.UserId;
     }
 
@@ -186,6 +193,20 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
             .Select(t => (bool?)t.IsLoopbackGrant)
             .FirstOrDefaultAsync(ct);
         return isLoopback is null ? null : new LiveGrant(isLoopback.Value);
+    }
+
+    // Saves the consumed code or rotated refresh token together with the new pair. A concurrency conflict means
+    // another request redeemed the same code or refresh token first, so this one gets nothing.
+    private async Task<IssuedTokens?> TryIssueTokenPairAsync(UserId userId, string clientId, bool isLoopbackGrant, CancellationToken ct)
+    {
+        try
+        {
+            return await IssueTokenPairAsync(userId, clientId, isLoopbackGrant, ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return null;
+        }
     }
 
     private async Task<IssuedTokens> IssueTokenPairAsync(UserId userId, string clientId, bool isLoopbackGrant, CancellationToken ct)

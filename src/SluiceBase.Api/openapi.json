@@ -4340,6 +4340,7 @@
         "enum": [
           "Pending",
           "Approved",
+          "Executing",
           "Rejected",
           "Cancelled",
           "Executed"

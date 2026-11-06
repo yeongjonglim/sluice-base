@@ -57,6 +57,7 @@ export const Route = createFileRoute("/_authed/update/$id")({
 const STATUS_COLOR: Record<string, string> = {
   Pending: "blue",
   Approved: "green",
+  Executing: "yellow",
   Rejected: "red",
   Cancelled: "gray",
   Executed: "teal",

@@ -204,13 +204,16 @@ internal sealed class UpdateRequestService(
         try
         {
             request.Cancel(new Actioned(user.Id, timeProvider.GetUtcNow()), note);
+            await db.SaveChangesAsync(ct);
         }
         catch (InvalidOperationException ex)
         {
             return new CancelUpdateResult(CancelUpdateOutcome.Conflict, null, ex.Message);
         }
-
-        await db.SaveChangesAsync(ct);
+        catch (DbUpdateConcurrencyException)
+        {
+            return new CancelUpdateResult(CancelUpdateOutcome.Conflict, null, UpdateEndpoints.ConcurrentChangeMessage);
+        }
 
         var cancelled = await UpdateEndpoints.LoadDetail(db, id, ct);
         return new CancelUpdateResult(CancelUpdateOutcome.Ok, UpdateEndpoints.ToDetail(cancelled!), null);

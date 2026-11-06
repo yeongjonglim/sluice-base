@@ -137,16 +137,22 @@ internal static class UpdateEndpoints
         try
         {
             request.Approve(new Actioned(user.Id, timeProvider.GetUtcNow()), req.Note);
+            await db.SaveChangesAsync(ct);
         }
         catch (InvalidOperationException ex)
         {
             return TypedResults.Conflict(ex.Message);
         }
-
-        await db.SaveChangesAsync(ct);
+        catch (DbUpdateConcurrencyException)
+        {
+            return TypedResults.Conflict(ConcurrentChangeMessage);
+        }
 
         return TypedResults.Ok(ToDetail((await LoadDetail(db, id, ct))!));
     }
+
+    internal const string ConcurrentChangeMessage =
+        "The request was changed by someone else while this action was in progress. Reload it and try again.";
 
     // ── reject ───────────────────────────────────────────────────────────────
 
@@ -182,13 +188,16 @@ internal static class UpdateEndpoints
         try
         {
             request.Reject(new Actioned(user.Id, timeProvider.GetUtcNow()), req.Note);
+            await db.SaveChangesAsync(ct);
         }
         catch (InvalidOperationException ex)
         {
             return TypedResults.Conflict(ex.Message);
         }
-
-        await db.SaveChangesAsync(ct);
+        catch (DbUpdateConcurrencyException)
+        {
+            return TypedResults.Conflict(ConcurrentChangeMessage);
+        }
 
         return TypedResults.Ok(ToDetail((await LoadDetail(db, id, ct))!));
     }
@@ -276,6 +285,22 @@ internal static class UpdateEndpoints
             return TypedResults.Forbid();
         }
 
+        // The claim is saved before the SQL runs, so a second execute (or a cancel) racing this one fails here
+        // instead of running the SQL again.
+        try
+        {
+            request.BeginExecution(new Actioned(user.Id, timeProvider.GetUtcNow()));
+            await db.SaveChangesAsync(ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return TypedResults.Conflict(ex.Message);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return TypedResults.Conflict(ConcurrentChangeMessage);
+        }
+
         var startedAt = timeProvider.GetUtcNow();
 
         bool success;
@@ -321,7 +346,8 @@ internal static class UpdateEndpoints
             return TypedResults.Conflict(ex.Message);
         }
 
-        await db.SaveChangesAsync(ct);
+        // The SQL has run, so the outcome is recorded even if the caller has gone away.
+        await db.SaveChangesAsync(CancellationToken.None);
 
         return TypedResults.Ok(ToDetail((await LoadDetail(db, id, ct))!));
     }

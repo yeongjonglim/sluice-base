@@ -125,6 +125,56 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
         Assert.Null(second);
     }
 
+    // Both contexts read the code before either saves, which is the interleaving a concurrent replay produces.
+    [Fact]
+    public async Task RedeemAuthCode_ConsumedConcurrently_SecondSaveConflicts()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var userId = await SeedUserAsync(db, ct);
+        var code = await CreateService(db).IssueAuthCodeAsync(
+            ClientId, userId, "https://example.com/callback", TokenHasher.ComputePkceS256Challenge("v"), ct);
+        var hash = TokenHasher.Hash(code);
+
+        await using var first = CreateContext();
+        await using var second = CreateContext();
+        var a = await first.McpAuthCodes.SingleAsync(c => c.CodeHash == hash, ct);
+        var b = await second.McpAuthCodes.SingleAsync(c => c.CodeHash == hash, ct);
+        a.Consume();
+        b.Consume();
+
+        await first.SaveChangesAsync(ct);
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => second.SaveChangesAsync(ct));
+    }
+
+    [Fact]
+    public async Task RedeemAndRefresh_ConcurrentAttempts_OnlyOneSucceeds()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var userId = await SeedUserAsync(db, ct);
+        const string redirectUri = "https://example.com/callback";
+        const string codeVerifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+        var code = await CreateService(db).IssueAuthCodeAsync(
+            ClientId, userId, redirectUri, TokenHasher.ComputePkceS256Challenge(codeVerifier), ct);
+
+        var redeemed = await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ =>
+        {
+            await using var ctx = CreateContext();
+            return await CreateService(ctx).RedeemAuthCodeAsync(ClientId, code, redirectUri, codeVerifier, ct);
+        }));
+        var tokens = Assert.Single(redeemed, t => t is not null)!;
+
+        var refreshed = await Task.WhenAll(Enumerable.Range(0, 8).Select(async _ =>
+        {
+            await using var ctx = CreateContext();
+            return await CreateService(ctx).RefreshAsync(ClientId, tokens.RefreshToken, ct);
+        }));
+        Assert.Single(refreshed, t => t is not null);
+    }
+
     [Fact]
     public async Task Refresh_RotatesToken_OldRefreshBecomesInvalid()
     {
