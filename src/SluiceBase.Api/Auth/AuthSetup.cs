@@ -4,10 +4,15 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using ModelContextProtocol.AspNetCore.Authentication;
 using SluiceBase.Api.Data;
+using SluiceBase.Api.Extensions;
 using SluiceBase.Api.Mcp;
+using SluiceBase.Api.Pages;
+using SluiceBase.Core.Branding;
 using SluiceBase.Core.Permissions;
 
 namespace SluiceBase.Api.Auth;
@@ -16,6 +21,9 @@ internal static class AuthSetup
 {
     private const string CookieName = "sb.auth";
     private const string DisabledAccountMessage = "This account is disabled. Ask an administrator to enable it.";
+    private const string DisabledSignInKey = "sb:disabled-sign-in";
+
+    private sealed record DisabledSignIn(string? Email, string? IdToken);
 
     public static IHostApplicationBuilder AddSluiceBaseAuth(
         this IHostApplicationBuilder builder)
@@ -146,6 +154,8 @@ internal static class AuthSetup
 
                     if (user.IsDisabled)
                     {
+                        ctx.HttpContext.Items[DisabledSignInKey] = new DisabledSignIn(
+                            email, ctx.TokenEndpointResponse?.IdToken ?? ctx.ProtocolMessage?.IdToken);
                         ctx.Fail(DisabledAccountMessage);
                         return;
                     }
@@ -157,15 +167,50 @@ internal static class AuthSetup
                     ctx.Principal.AddIdentity(claimsIdentity);
                 };
 
+                // A sign-out the app didn't start (the disabled-account page ends the IdP session directly) comes
+                // back without state, which leaves the handler nowhere to send the browser but a blank page.
+                options.Events.OnSignedOutCallbackRedirect = ctx =>
+                {
+                    if (string.IsNullOrEmpty(ctx.Properties?.RedirectUri))
+                    {
+                        ctx.Response.Redirect(options.SignedOutRedirectUri);
+                        ctx.HandleResponse();
+                    }
+
+                    return Task.CompletedTask;
+                };
+
                 // Without this a disabled user would get the framework's error page for the failed sign-in.
                 options.Events.OnRemoteFailure = async ctx =>
                 {
-                    if (ctx.Failure?.Message == DisabledAccountMessage)
+                    if (ctx.Failure?.Message != DisabledAccountMessage)
                     {
-                        ctx.HandleResponse();
-                        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-                        await ctx.Response.WriteAsync(DisabledAccountMessage);
+                        return;
                     }
+
+                    ctx.HandleResponse();
+                    var signIn = ctx.HttpContext.Items[DisabledSignInKey] as DisabledSignIn;
+
+                    // Ending the IdP session is what lets the person pick another account: otherwise the IdP signs
+                    // the same disabled account straight back in. After it, the IdP returns to the signed-out
+                    // callback, which lands on "/" and so on a fresh sign-in.
+                    string? signOutUrl = null;
+                    var configuration = options.Configuration ?? (options.ConfigurationManager is { } manager
+                        ? await manager.GetConfigurationAsync(ctx.HttpContext.RequestAborted)
+                        : null);
+                    if (signIn?.IdToken is { } idToken && configuration?.EndSessionEndpoint is { Length: > 0 } endSession)
+                    {
+                        signOutUrl = QueryHelpers.AddQueryString(endSession, new Dictionary<string, string?>
+                        {
+                            ["id_token_hint"] = idToken,
+                            ["client_id"] = options.ClientId,
+                            ["post_logout_redirect_uri"] = ctx.Request.BaseUrl() + options.SignedOutCallbackPath,
+                        });
+                    }
+
+                    var branding = ctx.HttpContext.RequestServices.GetRequiredService<IOptions<BrandingOptions>>().Value;
+                    await DisabledAccountPage.Render(ctx.HttpContext, signIn?.Email, "/login", signOutUrl, branding)
+                        .ExecuteAsync(ctx.HttpContext);
                 };
             })
             .AddScheme<AuthenticationSchemeOptions, McpBearerAuthenticationHandler>(
