@@ -40,6 +40,11 @@ const PERMISSION_LABELS: Record<string, { short: string; scope: string; full: st
   "permission:manage": { short: "Permissions", scope: "admin", full: "Manage permissions" },
 };
 
+const DISABLED_DATE = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
+
+// A disabled account keeps its grants, so they would look live without this.
+const DISABLED_GRANTS_NOTE = "Account disabled: grants are kept and apply again when it's enabled.";
+
 type UserSummary = paths["/api/admin/user"]["get"]["responses"][200]["content"]["application/json"]["users"][0];
 
 export const Route = createFileRoute("/_authed/permission")({
@@ -249,79 +254,89 @@ export function PermissionsAdminPage() {
                 </Table.Td>
               </Table.Tr>
             )}
-            {filtered.map((user) => (
-              <Table.Tr key={user.id}>
-                <Table.Td>
-                  <Stack gap={2}>
-                    <Group gap={6}>
-                      <Text size="sm" fw={500}>
-                        {user.email}
-                      </Text>
-                      {user.id === me.data?.id && (
-                        <Badge size="xs" variant="outline">
-                          you
-                        </Badge>
-                      )}
-                      {user.disabledAt && (
-                        <Badge size="xs" color="red" variant="light">
-                          disabled
-                        </Badge>
-                      )}
-                    </Group>
-                    {user.name && (
-                      <Text size="xs" c="dimmed">
-                        {user.name}
-                      </Text>
-                    )}
-                  </Stack>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
-                    {user.lastLoginAt
-                      ? new Intl.DateTimeFormat("en", {
-                          dateStyle: "medium",
-                          timeStyle: "short",
-                        }).format(new Date(user.lastLoginAt))
-                      : "Never"}
-                  </Text>
-                </Table.Td>
-                {permissions.map((permission) => {
-                  const ep = user.permissions.find((p) => p.permission === permission);
-                  const fromDirect = ep?.fromDirect ?? false;
-                  const fromGroups = (ep?.fromGroups ?? []).map((g) => ({
-                    groupId: String(g.groupId),
-                    name: g.name,
-                  }));
-
-                  return (
-                    <Table.Td key={permission} style={{ textAlign: "center" }}>
-                      <Stack gap={4} align="center">
-                        <EffectiveCell
-                          fromDirect={fromDirect}
-                          fromGroups={fromGroups}
-                          onToggle={(next) => void handleToggle(user, permission, next)}
-                          ariaLabel={`${PERMISSION_LABELS[permission].full} for ${user.email ?? user.id}`}
-                          pending={pendingPermission(user.id) === permission}
-                        />
-                        {fromGroups.length > 0 && (
-                          <Text
-                            size="xs"
-                            c="cyan"
-                            style={{ fontSize: 10, lineHeight: 1.2 }}
-                            title={`Inherited via ${fromGroups.map((g) => g.name).join(", ")}`}
-                          >
-                            {fromGroups.map((g) => g.name).join(", ")}
-                          </Text>
+            {filtered.map((user) => {
+              const accountDisabled = Boolean(user.disabledAt);
+              return (
+                <Table.Tr key={user.id}>
+                  <Table.Td>
+                    <Stack gap={2}>
+                      <Group gap={6}>
+                        <Text size="sm" fw={500} c={accountDisabled ? "dimmed" : undefined}>
+                          {user.email}
+                        </Text>
+                        {user.id === me.data?.id && (
+                          <Badge size="xs" variant="outline">
+                            you
+                          </Badge>
                         )}
-                      </Stack>
-                    </Table.Td>
-                  );
-                })}
-                <Table.Td>
-                  <AccountActions user={user} isSelf={user.id === me.data?.id} />
-                </Table.Td>
-              </Table.Tr>
-            ))}
+                      </Group>
+                      {(user.name || user.disabledAt) && (
+                        <Text size="xs" c="dimmed">
+                          {user.name}
+                          {user.disabledAt && (
+                            <>
+                              {user.name && " · "}
+                              <Text span inherit fw={600}>
+                                Disabled
+                              </Text>{" "}
+                              {DISABLED_DATE.format(new Date(user.disabledAt))}
+                            </>
+                          )}
+                        </Text>
+                      )}
+                    </Stack>
+                  </Table.Td>
+                  <Table.Td>
+                    <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
+                      {user.lastLoginAt
+                        ? new Intl.DateTimeFormat("en", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          }).format(new Date(user.lastLoginAt))
+                        : "Never"}
+                    </Text>
+                  </Table.Td>
+                  {permissions.map((permission) => {
+                    const ep = user.permissions.find((p) => p.permission === permission);
+                    const fromDirect = ep?.fromDirect ?? false;
+                    const fromGroups = (ep?.fromGroups ?? []).map((g) => ({
+                      groupId: String(g.groupId),
+                      name: g.name,
+                    }));
+
+                    return (
+                      <Table.Td key={permission} style={{ textAlign: "center" }}>
+                        <Tooltip label={DISABLED_GRANTS_NOTE} withArrow disabled={!accountDisabled}>
+                          <Stack gap={4} align="center" style={accountDisabled ? { opacity: 0.6 } : undefined}>
+                            <EffectiveCell
+                              fromDirect={fromDirect}
+                              fromGroups={fromGroups}
+                              onToggle={(next) => void handleToggle(user, permission, next)}
+                              ariaLabel={`${PERMISSION_LABELS[permission].full} for ${user.email ?? user.id}${accountDisabled ? " (account disabled)" : ""}`}
+                              disabled={accountDisabled}
+                              pending={pendingPermission(user.id) === permission}
+                            />
+                            {fromGroups.length > 0 && (
+                              <Text
+                                size="xs"
+                                c="cyan"
+                                style={{ fontSize: 10, lineHeight: 1.2 }}
+                                title={`Inherited via ${fromGroups.map((g) => g.name).join(", ")}`}
+                              >
+                                {fromGroups.map((g) => g.name).join(", ")}
+                              </Text>
+                            )}
+                          </Stack>
+                        </Tooltip>
+                      </Table.Td>
+                    );
+                  })}
+                  <Table.Td>
+                    <AccountActions user={user} isSelf={user.id === me.data?.id} />
+                  </Table.Td>
+                </Table.Tr>
+              );
+            })}
           </Table.Tbody>
         </Table>
       </Table.ScrollContainer>

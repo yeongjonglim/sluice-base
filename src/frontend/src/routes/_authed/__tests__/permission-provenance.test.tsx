@@ -128,10 +128,18 @@ describe("PermissionsAdminPage provenance", () => {
     expect(grantFn).toHaveBeenCalledWith({ userId: "user-1", permission: "server:manage" });
   });
 
-  it("marks a disabled user and offers to enable them", async () => {
+  it("shows a disabled user's row as inactive and offers to enable them", async () => {
     render(React.createElement(PermissionsAdminPage), { wrapper: Wrapper });
     const bobRow = rowFor("bob@example.com");
-    expect(within(bobRow).getByText("disabled")).toBeInTheDocument();
+    expect(within(bobRow).getByText("Disabled")).toBeInTheDocument();
+    expect(within(bobRow).getByText(/Jun 2, 2026/)).toBeInTheDocument();
+    // Grants are kept while the account is off, so they show but can't be changed.
+    const grant = within(bobRow).getByRole("checkbox", {
+      name: "Manage permissions for bob@example.com (account disabled)",
+    });
+    expect(grant).toBeDisabled();
+    // An active user's grants stay editable.
+    expect(within(rowFor("alice@example.com")).getByLabelText("Manage permissions for alice@example.com")).toBeEnabled();
     await userEvent.click(within(bobRow).getByLabelText(/account actions for bob@example.com/i));
     await userEvent.click(await screen.findByText("Enable account"));
     expect(mockEnable).toHaveBeenCalledWith("user-2");
