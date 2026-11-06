@@ -64,7 +64,7 @@ var api = builder.AddProject<Projects.SluiceBase_Api>("api")
     .WithEnvironment("Mcp__Clients__0__Name", "SluiceBase dev client")
     .WithEnvironment("Mcp__Clients__0__RedirectUris__0", "http://127.0.0.1:43123/callback");
 
-builder.AddYarp("gateway")
+var gateway = builder.AddYarp("gateway")
     .WithHostHttpsPort(5443)
     .WithReference(api)
     .WithReference(web)
@@ -98,6 +98,25 @@ builder.AddYarp("gateway")
         var viteCluster = cfg.AddCluster(web.GetEndpoint("http"));
         cfg.AddRoute("/{**rest}", viteCluster).WithOrder(int.MaxValue);
     });
+
+// Integration tests run the AppHost too; they turn this off so CI doesn't fetch and start Inspector.
+if (builder.ExecutionContext.IsRunMode && !string.Equals(builder.Configuration["McpInspector:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+{
+    // Inspects the server through the gateway, where the OIDC sign-in, its cookies and the OAuth issuer live.
+    // Inspector's proxy runs on Node, which does not read the OS trust store, so it is told to trust the dev cert.
+    // The toolkit's default (0.17.2) crashes its proxy on recent Node, and v1 is deprecated. v2 signs in from its
+    // own backend; SluiceBase has no dynamic client registration, so enable CIMD under Client settings first.
+    var inspector = builder.AddMcpInspector("mcp-inspector", options => options.InspectorVersion = "2.13.0")
+        .WithDeveloperCertificateTrust(trust: true);
+
+    // YARP adds the gateway's https endpoint in a BeforeStart handler registered by AddYarp; handlers run in
+    // registration order, so it exists when this one runs. Registering the server earlier would pick the http endpoint.
+    builder.Eventing.Subscribe<BeforeStartEvent>((_, _) =>
+    {
+        inspector.WithMcpServer(gateway);
+        return Task.CompletedTask;
+    });
+}
 
 metadataDb.WithCommand(
     name: "seed-servers",

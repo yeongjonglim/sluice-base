@@ -23,7 +23,8 @@ public sealed class SluiceBaseStackFactory : IAsyncLifetime
 
         var appHost = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>(
         [
-            "DcpPublisher:RandomizePorts=false" // To get fixed port for login redirect
+            "DcpPublisher:RandomizePorts=false", // To get fixed port for login redirect
+            "McpInspector:Enabled=false",
         ]);
         appHost.MakeTransient();
         appHost.Services.ConfigureHttpClientDefaults(clientBuilder =>
