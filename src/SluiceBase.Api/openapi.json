@@ -440,6 +440,64 @@
         }
       }
     },
+    "/mcp/oauth/revoke": {
+      "post": {
+        "tags": [
+          "SluiceBase.Api"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/me/mcp-grant": {
+      "get": {
+        "tags": [
+          "McpGrantEndpoints"
+        ],
+        "operationId": "ListMyMcpGrants",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListMcpGrantsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/me/mcp-grant/{grantId}": {
+      "delete": {
+        "tags": [
+          "McpGrantEndpoints"
+        ],
+        "operationId": "RevokeMyMcpGrant",
+        "parameters": [
+          {
+            "name": "grantId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "No Content"
+          },
+          "404": {
+            "description": "Not Found"
+          }
+        }
+      }
+    },
     "/api/admin/user": {
       "get": {
         "tags": [
@@ -3021,6 +3079,20 @@
           }
         }
       },
+      "ListMcpGrantsResponse": {
+        "required": [
+          "grants"
+        ],
+        "type": "object",
+        "properties": {
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/McpGrantResponse"
+            }
+          }
+        }
+      },
       "ListServersResponse": {
         "required": [
           "servers"
@@ -3110,6 +3182,47 @@
               "null",
               "string"
             ]
+          }
+        }
+      },
+      "McpGrantId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "McpGrantResponse": {
+        "required": [
+          "id",
+          "clientId",
+          "isLoopback",
+          "signedInAt",
+          "lastUsedAt",
+          "expiresAt"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/McpGrantId"
+          },
+          "clientId": {
+            "type": "string"
+          },
+          "isLoopback": {
+            "type": "boolean"
+          },
+          "signedInAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastUsedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -4521,6 +4634,9 @@
     },
     {
       "name": "QueryEndpoints"
+    },
+    {
+      "name": "McpGrantEndpoints"
     },
     {
       "name": "PermissionEndpoints"

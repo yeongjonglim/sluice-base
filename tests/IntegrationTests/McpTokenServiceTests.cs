@@ -126,6 +126,108 @@ public sealed class McpTokenServiceTests : IAsyncLifetime
     }
 
     // Both contexts read the code before either saves, which is the interleaving a concurrent replay produces.
+    private const string Verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk";
+
+    private static async Task<IssuedTokens> SignInAsync(McpTokenService svc, UserId userId, CancellationToken ct)
+    {
+        var code = await svc.IssueAuthCodeAsync(
+            ClientId, userId, "https://example.com/callback", TokenHasher.ComputePkceS256Challenge(Verifier), ct);
+        return (await svc.RedeemAuthCodeAsync(ClientId, code, "https://example.com/callback", Verifier, ct))!;
+    }
+
+    [Fact]
+    public async Task Refresh_ReusingRotatedToken_RevokesTheWholeGrant()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var svc = CreateService(db);
+        var userId = await SeedUserAsync(db, ct);
+        var first = await SignInAsync(svc, userId, ct);
+        var second = (await svc.RefreshAsync(ClientId, first.RefreshToken, ct))!;
+        var other = await SignInAsync(svc, userId, ct);
+
+        await svc.RevokeGrantIfRefreshTokenReusedAsync(ClientId, first.RefreshToken, ct);
+        db.ChangeTracker.Clear();
+
+        Assert.Null(await svc.ValidateAccessTokenAsync(second.AccessToken, ct));
+        Assert.Null(await svc.FindLiveRefreshTokenAsync(ClientId, second.RefreshToken, ct));
+        // A separate sign-in by the same user is a different grant and keeps working.
+        Assert.Equal(userId, await svc.ValidateAccessTokenAsync(other.AccessToken, ct));
+    }
+
+    [Fact]
+    public async Task Refresh_CannotExtendGrantPastItsAbsoluteLifetime()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var userId = await SeedUserAsync(db, ct);
+        var signedInAt = DateTimeOffset.UtcNow;
+        var tokens = await SignInAsync(CreateService(db, new FrozenTimeProvider(signedInAt)), userId, ct);
+
+        // A client refreshing every 29 days stays signed in until the grant ends, but the tokens issued near
+        // the end stop at the grant's end rather than a full refresh lifetime later.
+        var refreshed = tokens;
+        foreach (var day in new[] { 29, 58, 87 })
+        {
+            refreshed = await CreateService(db, new FrozenTimeProvider(signedInAt.AddDays(day)))
+                .RefreshAsync(ClientId, refreshed.RefreshToken, ct);
+            Assert.NotNull(refreshed);
+        }
+        var refreshRow = await db.McpTokens.AsNoTracking()
+            .SingleAsync(t => t.TokenHash == TokenHasher.Hash(refreshed.RefreshToken), ct);
+        Assert.Equal(refreshRow.GrantExpiresAt, refreshRow.ExpiresAt);
+
+        var afterEnd = CreateService(db, new FrozenTimeProvider(signedInAt.AddDays(91)));
+        Assert.Null(await afterEnd.RefreshAsync(ClientId, refreshed.RefreshToken, ct));
+    }
+
+    [Fact]
+    public async Task RevokeToken_RefreshTokenEndsGrant_WrongClientDoesNothing()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var svc = CreateService(db);
+        var userId = await SeedUserAsync(db, ct);
+        var tokens = await SignInAsync(svc, userId, ct);
+
+        await svc.RevokeTokenAsync("other-client", tokens.RefreshToken, ct);
+        db.ChangeTracker.Clear();
+        Assert.Equal(userId, await svc.ValidateAccessTokenAsync(tokens.AccessToken, ct));
+
+        await svc.RevokeTokenAsync(ClientId, tokens.RefreshToken, ct);
+        db.ChangeTracker.Clear();
+        Assert.Null(await svc.ValidateAccessTokenAsync(tokens.AccessToken, ct));
+        Assert.Null(await svc.FindLiveRefreshTokenAsync(ClientId, tokens.RefreshToken, ct));
+    }
+
+    [Fact]
+    public async Task ListAndRevokeGrants_PerUser()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var db = CreateContext();
+        await MigrateAsync(db);
+        var svc = CreateService(db);
+        var userId = await SeedUserAsync(db, ct);
+        var kept = await SignInAsync(svc, userId, ct);
+        var revoked = await SignInAsync(svc, userId, ct);
+        await svc.RefreshAsync(ClientId, revoked.RefreshToken, ct);
+
+        var grants = await svc.ListGrantsAsync(userId, ct);
+        Assert.Equal(2, grants.Count);
+
+        var revokedGrantId = (await db.McpTokens.AsNoTracking()
+            .SingleAsync(t => t.TokenHash == TokenHasher.Hash(revoked.AccessToken), ct)).GrantId;
+        Assert.False(await svc.RevokeGrantAsync(UserId.From(Guid.NewGuid()), revokedGrantId, ct));
+        Assert.True(await svc.RevokeGrantAsync(userId, revokedGrantId, ct));
+        db.ChangeTracker.Clear();
+
+        Assert.Single(await svc.ListGrantsAsync(userId, ct));
+        Assert.Equal(userId, await svc.ValidateAccessTokenAsync(kept.AccessToken, ct));
+    }
+
     [Fact]
     public async Task RedeemAuthCode_ConsumedConcurrently_SecondSaveConflicts()
     {

@@ -67,6 +67,7 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasColumnName("code_hash");
 
                     b.Property<bool>("Consumed")
+                        .IsConcurrencyToken()
                         .HasColumnType("boolean")
                         .HasColumnName("consumed");
 
@@ -115,6 +116,14 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("expires_at");
 
+                    b.Property<DateTimeOffset>("GrantExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("grant_expires_at");
+
+                    b.Property<Guid>("GrantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("grant_id");
+
                     b.Property<bool>("IsLoopbackGrant")
                         .HasColumnType("boolean")
                         .HasColumnName("is_loopback_grant");
@@ -124,6 +133,7 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasColumnName("last_used_at");
 
                     b.Property<bool>("Revoked")
+                        .IsConcurrencyToken()
                         .HasColumnType("boolean")
                         .HasColumnName("revoked");
 
@@ -148,6 +158,9 @@ namespace SluiceBase.Api.Data.Migrations
                     b.HasIndex("TokenHash")
                         .IsUnique()
                         .HasDatabaseName("ix_mcp_token_token_hash");
+
+                    b.HasIndex("UserId", "GrantId")
+                        .HasDatabaseName("ix_mcp_token_user_id_grant_id");
 
                     b.HasIndex("UserId", "Type")
                         .HasDatabaseName("ix_mcp_token_user_id_type");
@@ -784,6 +797,7 @@ namespace SluiceBase.Api.Data.Migrations
                         .HasColumnName("sql_text");
 
                     b.Property<string>("Status")
+                        .IsConcurrencyToken()
                         .IsRequired()
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")

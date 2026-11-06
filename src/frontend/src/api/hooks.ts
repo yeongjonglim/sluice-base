@@ -128,6 +128,41 @@ export function useRevokePermission() {
   });
 }
 
+// ── MCP grants (the signed-in user's own) ─────────────────────────────────
+
+export type McpGrant =
+  paths["/api/me/mcp-grant"]["get"]["responses"][200]["content"]["application/json"]["grants"][number];
+
+export function useMyMcpGrants(enabled: boolean) {
+  return useQuery({
+    queryKey: ["me", "mcp-grant"] as const,
+    queryFn: () =>
+      apiRequest<
+        void,
+        paths["/api/me/mcp-grant"]["get"]["responses"][200]["content"]["application/json"]
+      >("/api/me/mcp-grant"),
+    enabled,
+  });
+}
+
+export function useRevokeMyMcpGrant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (grantId: string) => apiRequest(`/api/me/mcp-grant/${grantId}`, { method: "DELETE" }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["me", "mcp-grant"] });
+      notifications.show({ title: "Connection revoked", message: "", color: "teal" });
+    },
+    onError: (error) => {
+      notifications.show({
+        title: "Revoke failed",
+        message: error instanceof ApiError ? formatApiError(error) : error.message,
+        color: "red",
+      });
+    },
+  });
+}
+
 function formatApiError(error: ApiError): string {
   const body = error.body as Record<string, unknown> | null;
   if (body && typeof body === "object" && "errors" in body) {

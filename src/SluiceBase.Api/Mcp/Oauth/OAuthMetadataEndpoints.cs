@@ -20,6 +20,8 @@ internal static class OAuthMetadataEndpoints
                 ["issuer"] = baseUrl,
                 ["authorization_endpoint"] = $"{baseUrl}/mcp/oauth/authorize",
                 ["token_endpoint"] = $"{baseUrl}/mcp/oauth/token",
+                ["revocation_endpoint"] = $"{baseUrl}/mcp/oauth/revoke",
+                ["revocation_endpoint_auth_methods_supported"] = TokenEndpointAuthMethods,
                 ["response_types_supported"] = ResponseTypes,
                 ["grant_types_supported"] = GrantTypes,
                 ["code_challenge_methods_supported"] = CodeChallengeMethods,

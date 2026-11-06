@@ -18,6 +18,7 @@ import {
   IconLayoutSidebarLeftExpand,
   IconLogout,
   IconMoon,
+  IconPlugConnected,
   IconServer,
   IconShieldLock,
   IconSitemap,
@@ -31,6 +32,7 @@ import { useMe } from "@/api/hooks.ts";
 import { AuthProvider } from "@/auth/AuthProvider.tsx";
 import { useHasPermission } from "@/auth/permission.ts";
 import { ConnectMcpTrigger } from "@/components/mcp/ConnectMcpTrigger";
+import { McpConnectionsModal } from "@/components/mcp/McpConnectionsModal";
 import { UserMenuHeader } from "@/components/UserMenuHeader";
 import { useBranding } from "@/theme/BrandingContext";
 
@@ -52,7 +54,8 @@ function AuthedLayout() {
   const canApproveUpdates = useHasPermission("update:approve");
   const canExecuteUpdates = useHasPermission("update:execute");
   const canSeeUpdates = canSubmitUpdates || canApproveUpdates || canExecuteUpdates;
-  const { appName, logoUrl } = useBranding();
+  const { appName, logoUrl, mcpEnabled } = useBranding();
+  const [connectionsOpened, { open: openConnections, close: closeConnections }] = useDisclosure(false);
 
   if (!me.data) {
     return null;
@@ -120,6 +123,11 @@ function AuthedLayout() {
                       <Menu.Divider />
                     </>
                   )}
+                  {mcpEnabled && (
+                    <Menu.Item leftSection={<IconPlugConnected size={14} />} onClick={openConnections}>
+                      MCP connections
+                    </Menu.Item>
+                  )}
                   <Menu.Item component="a" href="/logout" leftSection={<IconLogout size={14} />}>
                     Log out
                   </Menu.Item>
@@ -128,6 +136,7 @@ function AuthedLayout() {
             </Group>
           </Group>
         </AppShell.Header>
+        <McpConnectionsModal opened={connectionsOpened} onClose={closeConnections} />
 
         <AppShell.Navbar p="xs">
           {/* <NavLink*/}

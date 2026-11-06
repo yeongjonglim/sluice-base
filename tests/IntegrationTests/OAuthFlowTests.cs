@@ -491,4 +491,56 @@ public sealed class OAuthFlowTests(SluiceBaseStackFactory factory)
 
         Assert.DoesNotContain("/never-fetched-loopback.json", factory.CimdStub.RequestedPaths);
     }
+
+    [Fact]
+    public async Task Revoke_RefreshToken_EndsTheGrant_AndReuseIsRejected()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        const string redirectUri = "http://127.0.0.1:51235/callback";
+
+        using var session = await LoginHelper.SignInAsync("alice", "dev", ct);
+        var authorizeResponse = await session.Client.GetAsync(
+            AuthorizeUrl(LoopbackClientId, redirectUri, "revoke-state", S256Challenge(Verifier)), ct);
+        var code = HttpUtility.ParseQueryString(authorizeResponse.Headers.Location!.Query)["code"]!;
+
+        using var tokenClient = ApiClient();
+        var tokens = await (await tokenClient.PostAsync(
+                "/mcp/oauth/token", CodeExchange(LoopbackClientId, code, redirectUri), ct))
+            .Content.ReadFromJsonAsync<JsonElement>(ct);
+        var refreshToken = tokens.GetProperty("refresh_token").GetString()!;
+
+        var revokeResponse = await tokenClient.PostAsync("/mcp/oauth/revoke", new FormUrlEncodedContent(
+            new Dictionary<string, string>
+            {
+                ["client_id"] = LoopbackClientId,
+                ["token"] = refreshToken,
+                ["token_type_hint"] = "refresh_token",
+            }), ct);
+        Assert.Equal(HttpStatusCode.OK, revokeResponse.StatusCode);
+
+        var refreshResponse = await tokenClient.PostAsync("/mcp/oauth/token", new FormUrlEncodedContent(
+            new Dictionary<string, string>
+            {
+                ["grant_type"] = "refresh_token",
+                ["client_id"] = LoopbackClientId,
+                ["refresh_token"] = refreshToken,
+            }), ct);
+        Assert.Equal(HttpStatusCode.BadRequest, refreshResponse.StatusCode);
+        Assert.Equal("invalid_grant", await ErrorAsync(refreshResponse, ct));
+
+        using var mcpRequest = new HttpRequestMessage(HttpMethod.Post, "/mcp");
+        mcpRequest.Headers.Authorization = new("Bearer", tokens.GetProperty("access_token").GetString());
+        mcpRequest.Content = JsonContent.Create(new { jsonrpc = "2.0", id = 1, method = "ping" });
+        Assert.Equal(HttpStatusCode.Unauthorized, (await tokenClient.SendAsync(mcpRequest, ct)).StatusCode);
+    }
+
+    [Fact]
+    public async Task Revoke_UnknownToken_Returns200()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        using var client = ApiClient();
+        var response = await client.PostAsync("/mcp/oauth/revoke", new FormUrlEncodedContent(
+            new Dictionary<string, string> { ["client_id"] = LoopbackClientId, ["token"] = "not-a-token" }), ct);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
 }

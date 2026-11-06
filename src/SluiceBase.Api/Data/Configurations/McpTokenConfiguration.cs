@@ -18,6 +18,7 @@ internal sealed class McpTokenConfiguration : IEntityTypeConfiguration<McpToken>
         builder.Property(t => t.Revoked).IsConcurrencyToken();
         builder.HasIndex(t => t.TokenHash).IsUnique();
         builder.HasIndex(t => new { t.UserId, t.Type });
+        builder.HasIndex(t => new { t.UserId, t.GrantId });
 
         builder.HasOne<User>().WithMany()
             .HasForeignKey(x => x.UserId)

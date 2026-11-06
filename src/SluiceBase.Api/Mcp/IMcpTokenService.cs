@@ -13,6 +13,14 @@ internal sealed record IssuedTokens(string AccessToken, string RefreshToken, int
 
 internal sealed record LiveGrant(bool IsLoopback);
 
+internal sealed record McpGrantSummary(
+    McpGrantId Id,
+    string ClientId,
+    bool IsLoopback,
+    DateTimeOffset SignedInAt,
+    DateTimeOffset? LastUsedAt,
+    DateTimeOffset ExpiresAt);
+
 internal interface IMcpTokenService
 {
     Task<string> IssueAuthCodeAsync(string clientId, UserId userId, string redirectUri, string codeChallenge, CancellationToken ct);
@@ -21,6 +29,16 @@ internal interface IMcpTokenService
     Task<UserId?> ValidateAccessTokenAsync(string accessToken, CancellationToken ct);
     Task<LiveGrant?> FindLiveAuthCodeAsync(string clientId, string code, CancellationToken ct);
     Task<LiveGrant?> FindLiveRefreshTokenAsync(string clientId, string refreshToken, CancellationToken ct);
+
+    // Called when a refresh token is not live. A rotated refresh token presented again means it leaked, so the
+    // whole grant is revoked (RFC 9700 §4.14.2).
+    Task RevokeGrantIfRefreshTokenReusedAsync(string clientId, string refreshToken, CancellationToken ct);
+
+    // RFC 7009: revoking a refresh token ends its grant; revoking an access token ends only that token.
+    Task RevokeTokenAsync(string clientId, string token, CancellationToken ct);
+
+    Task<IReadOnlyList<McpGrantSummary>> ListGrantsAsync(UserId userId, CancellationToken ct);
+    Task<bool> RevokeGrantAsync(UserId userId, McpGrantId grantId, CancellationToken ct);
 }
 
 internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOptions<McpOptions> options) : IMcpTokenService
@@ -89,7 +107,8 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
         // together by the single SaveChangesAsync inside IssueTokenPairAsync (one unit of work).
         authCode.Consume();
         return await TryIssueTokenPairAsync(
-            authCode.UserId, clientId, McpRedirectUriPolicy.IsLoopback(authCode.RedirectUri), ct);
+            authCode.UserId, clientId, McpRedirectUriPolicy.IsLoopback(authCode.RedirectUri),
+            McpGrantId.FromNewVersion7Guid(), now.AddDays(Options.MaxGrantDays), ct);
     }
 
     public async Task<IssuedTokens?> RefreshAsync(string clientId, string refreshToken, CancellationToken ct)
@@ -125,9 +144,15 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
             return null;
         }
 
+        if (token.GrantExpiresAt <= now)
+        {
+            return null;
+        }
+
         // Rotate: revoke old refresh token and issue a fresh pair
         token.Revoke();
-        return await TryIssueTokenPairAsync(token.UserId, clientId, token.IsLoopbackGrant, ct);
+        return await TryIssueTokenPairAsync(
+            token.UserId, clientId, token.IsLoopbackGrant, token.GrantId, token.GrantExpiresAt, ct);
     }
 
     public async Task<UserId?> ValidateAccessTokenAsync(string accessToken, CancellationToken ct)
@@ -189,19 +214,79 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
         var now = clock.GetUtcNow();
         var isLoopback = await db.McpTokens.AsNoTracking()
             .Where(t => t.TokenHash == hash && t.ClientId == clientId && t.Type == McpTokenType.Refresh
-                && !t.Revoked && t.ExpiresAt > now)
+                && !t.Revoked && t.ExpiresAt > now && t.GrantExpiresAt > now)
             .Select(t => (bool?)t.IsLoopbackGrant)
             .FirstOrDefaultAsync(ct);
         return isLoopback is null ? null : new LiveGrant(isLoopback.Value);
     }
 
+    public async Task RevokeGrantIfRefreshTokenReusedAsync(string clientId, string refreshToken, CancellationToken ct)
+    {
+        var hash = TokenHasher.Hash(refreshToken);
+        var reused = await db.McpTokens.AsNoTracking()
+            .Where(t => t.TokenHash == hash && t.ClientId == clientId && t.Type == McpTokenType.Refresh && t.Revoked)
+            .Select(t => new { t.UserId, t.GrantId })
+            .FirstOrDefaultAsync(ct);
+        if (reused is not null)
+        {
+            await RevokeWhereAsync(t => t.UserId == reused.UserId && t.GrantId == reused.GrantId, ct);
+        }
+    }
+
+    public async Task RevokeTokenAsync(string clientId, string token, CancellationToken ct)
+    {
+        var hash = TokenHasher.Hash(token);
+        var found = await db.McpTokens.AsNoTracking()
+            .Where(t => t.TokenHash == hash && t.ClientId == clientId)
+            .Select(t => new { t.Id, t.Type, t.UserId, t.GrantId })
+            .FirstOrDefaultAsync(ct);
+        if (found is null)
+        {
+            return;
+        }
+
+        if (found.Type == McpTokenType.Refresh)
+        {
+            await RevokeWhereAsync(t => t.UserId == found.UserId && t.GrantId == found.GrantId, ct);
+        }
+        else
+        {
+            await RevokeWhereAsync(t => t.Id == found.Id, ct);
+        }
+    }
+
+    public async Task<IReadOnlyList<McpGrantSummary>> ListGrantsAsync(UserId userId, CancellationToken ct)
+    {
+        var now = clock.GetUtcNow();
+        var grants = await db.McpTokens.AsNoTracking()
+            .Where(t => t.UserId == userId && !t.Revoked && t.ExpiresAt > now)
+            .GroupBy(t => new { t.GrantId, t.ClientId, t.IsLoopbackGrant })
+            .Select(g => new McpGrantSummary(
+                g.Key.GrantId,
+                g.Key.ClientId,
+                g.Key.IsLoopbackGrant,
+                g.Min(t => t.CreatedAt),
+                g.Max(t => t.LastUsedAt),
+                g.Max(t => t.ExpiresAt)))
+            .ToListAsync(ct);
+        return [.. grants.OrderByDescending(g => g.LastUsedAt ?? g.SignedInAt)];
+    }
+
+    public async Task<bool> RevokeGrantAsync(UserId userId, McpGrantId grantId, CancellationToken ct) =>
+        await RevokeWhereAsync(t => t.UserId == userId && t.GrantId == grantId, ct) > 0;
+
+    private Task<int> RevokeWhereAsync(System.Linq.Expressions.Expression<Func<McpToken, bool>> predicate, CancellationToken ct) =>
+        db.McpTokens.Where(predicate).Where(t => !t.Revoked)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Revoked, true), ct);
+
     // Saves the consumed code or rotated refresh token together with the new pair. A concurrency conflict means
     // another request redeemed the same code or refresh token first, so this one gets nothing.
-    private async Task<IssuedTokens?> TryIssueTokenPairAsync(UserId userId, string clientId, bool isLoopbackGrant, CancellationToken ct)
+    private async Task<IssuedTokens?> TryIssueTokenPairAsync(UserId userId, string clientId, bool isLoopbackGrant,
+        McpGrantId grantId, DateTimeOffset grantExpiresAt, CancellationToken ct)
     {
         try
         {
-            return await IssueTokenPairAsync(userId, clientId, isLoopbackGrant, ct);
+            return await IssueTokenPairAsync(userId, clientId, isLoopbackGrant, grantId, grantExpiresAt, ct);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -209,7 +294,8 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
         }
     }
 
-    private async Task<IssuedTokens> IssueTokenPairAsync(UserId userId, string clientId, bool isLoopbackGrant, CancellationToken ct)
+    private async Task<IssuedTokens> IssueTokenPairAsync(UserId userId, string clientId, bool isLoopbackGrant,
+        McpGrantId grantId, DateTimeOffset grantExpiresAt, CancellationToken ct)
     {
         var now = clock.GetUtcNow();
 
@@ -222,6 +308,8 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
             userId,
             clientId,
             isLoopbackGrant,
+            grantId,
+            grantExpiresAt,
             now,
             now.AddMinutes(Options.AccessTokenMinutes));
 
@@ -231,6 +319,8 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
             userId,
             clientId,
             isLoopbackGrant,
+            grantId,
+            grantExpiresAt,
             now,
             now.AddDays(Options.RefreshTokenDays));
 
@@ -238,6 +328,6 @@ internal sealed class McpTokenService(AppDbContext db, TimeProvider clock, IOpti
         db.McpTokens.Add(refreshToken);
         await db.SaveChangesAsync(ct);
 
-        return new IssuedTokens(rawAccess, rawRefresh, Options.AccessTokenMinutes * 60);
+        return new IssuedTokens(rawAccess, rawRefresh, (int)(accessToken.ExpiresAt - now).TotalSeconds);
     }
 }
