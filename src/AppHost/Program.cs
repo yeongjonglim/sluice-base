@@ -99,8 +99,9 @@ var gateway = builder.AddYarp("gateway")
         cfg.AddRoute("/{**rest}", viteCluster).WithOrder(int.MaxValue);
     });
 
-// Integration tests run the AppHost too; they turn this off so CI doesn't fetch and start Inspector.
-if (builder.ExecutionContext.IsRunMode && !string.Equals(builder.Configuration["McpInspector:Enabled"], "false", StringComparison.OrdinalIgnoreCase))
+// Opt-in (McpInspector:Enabled=true): it downloads and runs a Node app, which neither everyday runs nor the
+// integration tests need.
+if (builder.ExecutionContext.IsRunMode && string.Equals(builder.Configuration["McpInspector:Enabled"], "true", StringComparison.OrdinalIgnoreCase))
 {
     // Inspects the server through the gateway, where the OIDC sign-in, its cookies and the OAuth issuer live.
     // Inspector's proxy runs on Node, which does not read the OS trust store, so it is told to trust the dev cert.
