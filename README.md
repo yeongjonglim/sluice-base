@@ -264,13 +264,7 @@ The MCP endpoint is served through the gateway at **`https://localhost:5443/mcp`
 
 4. Connect a client:
 
-   **MCP Inspector** (quickest way to drive the OAuth flow and call tools):
-
-   ```bash
-   NODE_TLS_REJECT_UNAUTHORIZED=0 npx @modelcontextprotocol/inspector
-   ```
-
-   Set Transport to **Streamable HTTP** and URL to `https://localhost:5443/mcp`. The web Inspector needs a client ID, so under **Client Settings → Client ID Metadata Document** paste any metadata URL, such as MCPJam's `https://www.mcpjam.com/.well-known/oauth/client-metadata.json`, enable **Use Client ID Metadata Document**, and connect. Its callback is on localhost, so SluiceBase uses the URL only as the client ID and never fetches it. (`NODE_TLS_REJECT_UNAUTHORIZED=0` is only needed to accept the local dev certificate.)
+   **MCP Inspector** (quickest way to drive the OAuth flow and check tool schemas): the AppHost runs it as the `mcp-inspector` resource, pointed at the gateway and trusting the dev certificate. Open it from the Aspire dashboard, then under **Client settings → OAuth Client ID Metadata Document** enable **Use Client ID Metadata Document** and paste any metadata URL, such as MCPJam's `https://www.mcpjam.com/.well-known/oauth/client-metadata.json`, and switch on the `gateway` server. Its callback is on localhost, so SluiceBase uses the URL only as the client ID and never fetches it. **Connection Info** shows the negotiated protocol, capabilities and OAuth details, and each tool shows schema portability warnings. To run without it, start the AppHost with `dotnet run --project src/AppHost -- McpInspector:Enabled=false`.
 
    To use the dev configured client instead, run the Inspector's CLI or TUI, which can pin the callback: `--client-id sluicebase-dev --callback-url http://127.0.0.1:43123/callback`.
 
@@ -280,7 +274,13 @@ The MCP endpoint is served through the gateway at **`https://localhost:5443/mcp`
    claude mcp add --transport http sluicebase https://localhost:5443/mcp
    ```
 
-   Then run `/mcp`, select **sluicebase → Authenticate**, and sign in via the Keycloak page.
+   Then run `/mcp`, select **sluicebase → Authenticate**, and sign in via the Keycloak page. Claude Code runs on Node, which doesn't use the macOS keychain, so trusting the dev certificate isn't enough: export it and start Claude Code with `NODE_EXTRA_CA_CERTS` set, or sign-in fails with "unable to verify the first certificate":
+
+   ```bash
+   echo | openssl s_client -connect localhost:5443 -servername localhost 2>/dev/null \
+     | openssl x509 -out ~/.aspnet/https/localhost.pem
+   NODE_EXTRA_CA_CERTS=~/.aspnet/https/localhost.pem claude
+   ```
 
 5. Smoke-test the OAuth discovery without a client (no auth required):
 
