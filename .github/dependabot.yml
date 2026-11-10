@@ -28,6 +28,11 @@ updates:
       opentelemetry:
         patterns:
           - "OpenTelemetry.*"
+      # ModelContextProtocol.AspNetCore requires an exact ModelContextProtocol version, so
+      # bumping either package alone fails restore with NU1605 in IntegrationTests.
+      mcp:
+        patterns:
+          - "ModelContextProtocol*"
       testing:
         patterns:
           - "xunit.*"
