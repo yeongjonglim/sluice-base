@@ -1,8 +1,16 @@
-/* Cells are read-only but interactive: a click opens the cell's full value.
-   They are programmatically focusable so focus returns to the cell when the
-   value panel closes — without this, the browser paints its default blue ring
-   inside a teal interface. */
+/* Cells are read-only but interactive: a click opens the full value of a cell
+   the grid truncates. They are programmatically focusable so focus returns to
+   the cell when the value panel closes — without this, the browser paints its
+   default blue ring inside a teal interface. */
 .cell:focus-visible {
   outline: 2px solid var(--mantine-primary-color-filled);
   outline-offset: -2px;
+}
+
+/* The cell whose value is open: marked so the panel visibly belongs to it, and
+   positioned so the panel's anchor can cover it. */
+.cell[data-inspected] {
+  position: relative;
+  background-color: var(--mantine-primary-color-light);
+  box-shadow: inset 0 0 0 1px var(--mantine-primary-color-filled);
 }

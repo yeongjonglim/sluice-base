@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, CloseButton, Flex, Group, Highlight, Table, Text, TextInput } from "@mantine/core";
 import { IconDownload, IconSearch, IconTextWrap } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -8,6 +8,7 @@ import classes from "@/components/query/ResultTable.module.css";
 import { useColumnWidths } from "@/components/query/useColumnWidths";
 import { exportToCsv } from "@/utils/csv.ts";
 import { filterRows } from "@/utils/filterRows";
+import { isJsonDocument } from "@/utils/jsonValue";
 
 // Only ~viewport-worth of rows are ever in the DOM, so switching to a tab with a
 // huge result set — and scrolling it — stays fast regardless of row count. The
@@ -32,6 +33,15 @@ const WRAP: CSSProperties = {
   whiteSpace: "pre-wrap",
   overflowWrap: "anywhere",
 };
+
+// The value panel is for what the grid can't show: text cut off at the column
+// edge, line breaks that one-line cells flatten, and JSON (which gets a tree).
+// A value that already reads in full stays plain, selectable text.
+function needsValuePanel(cell: HTMLTableCellElement, value: string, wrapped: boolean) {
+  if (isJsonDocument(value)) return true;
+  if (wrapped) return false;
+  return cell.scrollWidth > cell.clientWidth || value.includes("\n");
+}
 
 function ColumnResizeHandle({
   label,
@@ -94,12 +104,42 @@ export function ResultTable({
 
   // The cell that opened the popover, so focus can go back to it on close.
   const cellRef = useRef<HTMLTableCellElement | null>(null);
-  function closeInspector() {
+  function closeInspector({ returnFocus = true } = {}) {
     setInspected(null);
     // preventScroll: the cell may have scrolled just out of view; returning focus
     // must not yank the grid back to it.
-    cellRef.current?.focus({ preventScroll: true });
+    if (returnFocus) cellRef.current?.focus({ preventScroll: true });
   }
+
+  // Escape closes the panel wherever focus is (clicking the grid moves focus out
+  // of the panel), and a press anywhere outside the panel and the grid's cells
+  // closes it. Presses on cells are left to the cell's click handler, which
+  // toggles the open cell and moves the panel to another in one step.
+  const isInspecting = inspected !== null;
+  useEffect(() => {
+    if (!isInspecting) return;
+    function onPointerDown(event: Event) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("[data-cell-value-panel]")) return;
+      if (scrollRef.current?.contains(target) && target.closest(`.${classes.cell}`)) return;
+      // Focus is going wherever the user pressed, so don't pull it back to the cell.
+      setInspected(null);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setInspected(null);
+      cellRef.current?.focus({ preventScroll: true });
+    }
+    document.addEventListener("mousedown", onPointerDown, true);
+    document.addEventListener("touchstart", onPointerDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown, true);
+      document.removeEventListener("touchstart", onPointerDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isInspecting]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const virtualizer = useVirtualizer({
@@ -244,35 +284,40 @@ export function ResultTable({
                       <Table.Td
                         key={j}
                         className={classes.cell}
-                        style={{ ...cellStyle, cursor: cell === null ? undefined : "cell" }}
+                        style={cellStyle}
+                        data-inspected={open || undefined}
                         // Always programmatically focusable so focus can return to the
                         // cell after its panel closes (tabIndex -1 keeps cells out of
                         // the tab order; only the panel and toolbar are tab stops).
                         tabIndex={-1}
-                        onClick={
-                          cell === null
-                            ? undefined
-                            : (event) => {
-                                // A drag-select inside a cell ends in a click too;
-                                // don't open the value over the text the user just
-                                // selected.
-                                if (window.getSelection()?.toString()) return;
-                                cellRef.current = event.currentTarget;
-                                setInspected({ row: vi.index, col: j });
-                              }
-                        }
+                        onClick={(event) => {
+                          // A drag-select (or double-click word select) inside a
+                          // cell ends in a click too; don't open the value over the
+                          // text the user just selected.
+                          if (window.getSelection()?.toString()) {
+                            if (inspected) closeInspector({ returnFocus: false });
+                            return;
+                          }
+                          if (open) {
+                            closeInspector();
+                            return;
+                          }
+                          if (cell === null || !needsValuePanel(event.currentTarget, cell, wrap)) {
+                            if (inspected) closeInspector({ returnFocus: false });
+                            return;
+                          }
+                          cellRef.current = event.currentTarget;
+                          setInspected({ row: vi.index, col: j });
+                        }}
                       >
-                        {open && cell !== null ? (
+                        {content}
+                        {open && cell !== null && (
                           <CellValuePopover
                             column={columns[j]}
                             rowNumber={vi.index + 1}
                             value={cell}
                             onClose={closeInspector}
-                          >
-                            {content}
-                          </CellValuePopover>
-                        ) : (
-                          content
+                          />
                         )}
                       </Table.Td>
                     );

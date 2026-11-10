@@ -3,6 +3,7 @@ import {
   Badge,
   Box,
   Button,
+  CloseButton,
   CopyButton,
   Group,
   Popover,
@@ -12,7 +13,6 @@ import {
 } from "@mantine/core";
 import { IconCheck, IconChevronsDown, IconChevronsUp, IconCopy } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import classes from "@/components/query/CellValuePopover.module.css";
 import { JsonTree } from "@/components/query/JsonTree";
 import { readJsonValue } from "@/utils/jsonValue";
@@ -39,13 +39,11 @@ export function CellValuePopover({
   rowNumber,
   value,
   onClose,
-  children,
 }: {
   column: string;
   rowNumber: number;
   value: string;
   onClose: () => void;
-  children: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const json = useMemo(() => readJsonValue(value), [value]);
@@ -88,11 +86,14 @@ export function CellValuePopover({
   }
 
   return (
+    // Dismissal (Escape, clicks elsewhere, re-clicking the cell) is owned by the
+    // grid: Mantine's click-outside would treat a click on the anchoring cell as
+    // "outside" and close-then-reopen it, and its Escape only fires while focus
+    // is inside the panel.
     <Popover
       opened
-      onChange={(opened) => {
-        if (!opened) onClose();
-      }}
+      closeOnClickOutside={false}
+      closeOnEscape={false}
       position="bottom-start"
       offset={4}
       withArrow
@@ -103,7 +104,10 @@ export function CellValuePopover({
       withRoles={false}
     >
       <Popover.Target>
-        <span style={{ display: "block" }}>{children}</span>
+        {/* Covers the cell without wrapping its content, so the cell keeps its
+            ellipsis and its text is not remounted (which would drop a
+            double-click word selection). */}
+        <span aria-hidden className={classes.anchor} />
       </Popover.Target>
       <Popover.Dropdown
         ref={panelRef}
@@ -117,6 +121,7 @@ export function CellValuePopover({
         role="dialog"
         aria-modal={false}
         aria-label={`${column} value, row ${rowNumber}`}
+        data-cell-value-panel
         // The dropdown is a React child of the cell that opened it, so clicks in
         // the panel would bubble to the cell's click handler (re-focusing the
         // cell and pulling focus out of the panel). Keep them inside.
@@ -128,7 +133,7 @@ export function CellValuePopover({
               {column}
             </Text>
             {json !== null && (
-              <Badge size="xs" variant="default" radius="sm" fw={500}>
+              <Badge size="sm" variant="default" radius="sm" fw={500}>
                 JSON
               </Badge>
             )}
@@ -146,13 +151,14 @@ export function CellValuePopover({
               </Tooltip>
             )}
           </Group>
-          <Text
-            size="xs"
-            c="dimmed"
-            style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}
-          >
-            row {rowNumber} · {value.length.toLocaleString()} chars
-          </Text>
+          <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+            <Text size="xs" c="dimmed" style={{ fontVariantNumeric: "tabular-nums" }}>
+              row {rowNumber} · {value.length.toLocaleString()} chars
+            </Text>
+            <Tooltip label="Close (Esc)" withArrow>
+              <CloseButton size="xs" aria-label="Close" onClick={() => onClose()} />
+            </Tooltip>
+          </Group>
         </Group>
         <Box
           className={classes.scroll}
