@@ -20,7 +20,6 @@
     <PackageReference Include="Aspire.Hosting.Yarp" Version="13.6.4" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.Keycloak.Extensions" Version="13.6.1-preview.1.261026-0455" />
     <PackageReference Include="CommunityToolkit.Aspire.Hosting.McpInspector" Version="13.6.1" />
-    <PackageReference Include="ModelContextProtocol" Version="2.4.0" />
   </ItemGroup>
 
   <ItemGroup>
