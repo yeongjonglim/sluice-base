@@ -3,6 +3,7 @@ import { Button, CloseButton, Flex, Group, Highlight, Table, Text, TextInput } f
 import { IconDownload, IconSearch, IconTextWrap } from "@tabler/icons-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
+import type { PanelSide } from "@/components/query/CellValuePopover";
 import { CellValuePopover } from "@/components/query/CellValuePopover";
 import classes from "@/components/query/ResultTable.module.css";
 import { useColumnWidths } from "@/components/query/useColumnWidths";
@@ -41,6 +42,16 @@ function needsValuePanel(cell: HTMLTableCellElement, value: string, wrapped: boo
   if (isJsonDocument(value)) return true;
   if (wrapped) return false;
   return cell.scrollWidth > cell.clientWidth || value.includes("\n");
+}
+
+// The panel opens below its cell and shrinks to the room there; it only goes
+// above when the cell is so low that the value would get a sliver, since above
+// is the editor and toolbars the user is working with.
+const MIN_PANEL_ROOM = 200;
+function panelSide(cell: HTMLTableCellElement): PanelSide {
+  const rect = cell.getBoundingClientRect();
+  const below = window.innerHeight - rect.bottom;
+  return below >= MIN_PANEL_ROOM || below >= rect.top ? "bottom" : "top";
 }
 
 function ColumnResizeHandle({
@@ -94,11 +105,16 @@ export function ResultTable({
   // Which cell's full value is open. Kept as indices, so a fresh result (same
   // columns, different rows) would leave the popover pointing at the wrong row —
   // close it when the result data changes, mirroring the column-widths reset.
-  const [inspected, setInspected] = useState<{ row: number; col: number } | null>(null);
+  // The indices point into the filtered rows, so a filter change closes it too.
+  const [inspected, setInspected] = useState<{
+    row: number;
+    col: number;
+    side: PanelSide;
+  } | null>(null);
   const [wrap, setWrap] = useState(false);
-  const rowsRef = useRef(rows);
-  if (rowsRef.current !== rows) {
-    rowsRef.current = rows;
+  const filteredRef = useRef(filtered);
+  if (filteredRef.current !== filtered) {
+    filteredRef.current = filtered;
     if (inspected) setInspected(null);
   }
 
@@ -127,9 +143,19 @@ export function ResultTable({
       setInspected(null);
     }
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
+      // An Escape another control used (closing the editor's autocomplete, a
+      // menu) is not meant for the panel.
+      if (event.key !== "Escape" || event.defaultPrevented) return;
       setInspected(null);
-      cellRef.current?.focus({ preventScroll: true });
+      // Only take focus back from the panel or the grid; Escape while typing in
+      // the filter or the editor should leave the caret where it is.
+      const active = document.activeElement;
+      const focusWasOurs =
+        active === null ||
+        active === document.body ||
+        active.closest("[data-cell-value-panel]") !== null ||
+        scrollRef.current?.contains(active) === true;
+      if (focusWasOurs) cellRef.current?.focus({ preventScroll: true });
     }
     document.addEventListener("mousedown", onPointerDown, true);
     document.addEventListener("touchstart", onPointerDown, true);
@@ -307,7 +333,7 @@ export function ResultTable({
                             return;
                           }
                           cellRef.current = event.currentTarget;
-                          setInspected({ row: vi.index, col: j });
+                          setInspected({ row: vi.index, col: j, side: panelSide(event.currentTarget) });
                         }}
                       >
                         {content}
@@ -316,6 +342,7 @@ export function ResultTable({
                             column={columns[j]}
                             rowNumber={vi.index + 1}
                             value={cell}
+                            side={inspected.side}
                             onClose={closeInspector}
                           />
                         )}

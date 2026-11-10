@@ -101,7 +101,53 @@ describe("ResultTable value inspector", () => {
     fireEvent.keyDown(filter, { key: "Escape" });
 
     await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+    // Escape while typing elsewhere closes the panel but leaves the caret alone.
+    expect(filter).toHaveFocus();
+  });
+
+  it("returns focus to the cell when Escape is pressed on the grid", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    fireEvent.click(cellOf(value));
+    await screen.findByRole("dialog", { hidden: true });
+
+    const other = cellOf("1");
+    other.focus();
+    fireEvent.keyDown(other, { key: "Escape" });
+
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
     expect(cellOf(value)).toHaveFocus();
+  });
+
+  it("ignores an Escape another control already handled", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    fireEvent.click(cellOf(value));
+    await screen.findByRole("dialog", { hidden: true });
+
+    const filter = screen.getByRole("textbox", { name: "Filter rows" });
+    filter.addEventListener("keydown", (event) => event.preventDefault());
+    fireEvent.keyDown(filter, { key: "Escape" });
+
+    expect(queryDialog()).toBeInTheDocument();
+  });
+
+  it("closes when the filter changes which rows are shown", async () => {
+    stubTruncation();
+    const first = `ODD-1 ${CUT_OFF}`;
+    renderTable(["note"], [[first], [`EVEN-2 ${CUT_OFF}`]]);
+    fireEvent.click(cellOf(first));
+    await screen.findByRole("dialog", { name: "note value, row 1", hidden: true });
+
+    // The panel holds a position in the filtered rows; left open, row 1 would
+    // now be a different value.
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter rows" }), {
+      target: { value: "EVEN" },
+    });
+
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
   });
 
   it("does not open for a value that fits its cell", () => {
