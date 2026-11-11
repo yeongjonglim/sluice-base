@@ -15,7 +15,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS api-build
 WORKDIR /src
 
 # Copy project files first for restore layer caching
-COPY Directory.Build.props .
+COPY Directory.Build.props Directory.Packages.props ./
 COPY .editorconfig .
 COPY src/SluiceBase.Api/SluiceBase.Api.csproj src/SluiceBase.Api/
 COPY src/SluiceBase.Core/SluiceBase.Core.csproj src/SluiceBase.Core/
