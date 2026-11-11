@@ -22,6 +22,8 @@ const MAX_VALUE_HEIGHT = "min(360px, 45vh)";
 const VIEWPORT_PADDING = 8;
 
 export type PanelSide = "bottom" | "top";
+/** Vertical band of the cell, in px from its top, that the panel anchors to. */
+export type PanelAnchor = { top: number; height: number };
 
 /**
  * A cell's full value in a popover, for values the grid has to truncate.
@@ -43,12 +45,14 @@ export function CellValuePopover({
   rowNumber,
   value,
   side,
+  anchor,
   onClose,
 }: {
   column: string;
   rowNumber: number;
   value: string;
   side: PanelSide;
+  anchor?: PanelAnchor;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -125,7 +129,11 @@ export function CellValuePopover({
         {/* Covers the cell without wrapping its content, so the cell keeps its
             ellipsis and its text is not remounted (which would drop a
             double-click word selection). */}
-        <span aria-hidden className={classes.anchor} />
+        <span
+          aria-hidden
+          className={classes.anchor}
+          style={anchor && { top: anchor.top, bottom: "auto", height: anchor.height }}
+        />
       </Popover.Target>
       <Popover.Dropdown
         ref={panelRef}

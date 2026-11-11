@@ -7,6 +7,12 @@
   outline-offset: -2px;
 }
 
+/* Only cells that would open a panel take the pointer; cells that already read
+   in full keep the text cursor, since they are plain selectable text. */
+.cell[data-openable] {
+  cursor: pointer;
+}
+
 /* The cell whose value is open: marked so the panel visibly belongs to it, and
    positioned so the panel's anchor can cover it. */
 .cell[data-inspected] {
