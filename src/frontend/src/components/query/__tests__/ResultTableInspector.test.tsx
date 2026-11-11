@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MantineProvider } from "@mantine/core";
 import { ResultTable } from "@/components/query/ResultTable";
@@ -22,6 +22,36 @@ vi.mock("@tanstack/react-virtual", () => ({
   }),
 }));
 
+// jsdom has no layout either, so every cell measures 0×0 and reads as fitting.
+// Cells whose text holds this marker report overflow, like a long value would.
+const CUT_OFF = "[cut off]";
+function stubTruncation() {
+  vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    return this.tagName === "TD" && this.textContent.includes(CUT_OFF) ? 500 : 100;
+  });
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(100);
+}
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+function cellOf(text: string) {
+  return screen.getByText(text).closest("td") as HTMLTableCellElement;
+}
+
+function gridOf(cell: HTMLElement) {
+  let el = cell.parentElement;
+  while (el && el.style.overflow !== "auto") el = el.parentElement;
+  return el as HTMLElement;
+}
+
+function queryDialog() {
+  return screen.queryByRole("dialog", { hidden: true });
+}
+
 function renderTable(columns: Array<string>, rows: Array<Array<string | null>>) {
   return render(
     <MantineProvider env="test">
@@ -38,8 +68,9 @@ function renderTable(columns: Array<string>, rows: Array<Array<string | null>>) 
 
 describe("ResultTable value inspector", () => {
   it("shows the whole value of a clicked cell, which the grid may truncate", async () => {
+    stubTruncation();
     // trimEnd so the exact-text query matches the rendered cell text
-    const note = "The full note. ".repeat(30).trim();
+    const note = `The full note. ${CUT_OFF} `.repeat(30).trim();
     renderTable(["id", "note"], [["1", note]]);
 
     fireEvent.click(screen.getByText(note));
@@ -53,16 +84,240 @@ describe("ResultTable value inspector", () => {
   });
 
   it("closes the value panel on Escape", async () => {
-    renderTable(["id", "note"], [["1", "a long note"]]);
+    stubTruncation();
+    renderTable(["id", "note"], [["1", `a long note ${CUT_OFF}`]]);
 
-    fireEvent.click(screen.getByText("a long note"));
+    fireEvent.click(screen.getByText(`a long note ${CUT_OFF}`));
     const dialog = await screen.findByRole("dialog", { hidden: true });
 
     fireEvent.keyDown(dialog, { key: "Escape" });
 
-    await waitFor(() => {
-      expect(screen.queryByRole("dialog", { hidden: true })).not.toBeInTheDocument();
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+  });
+
+  it("closes on Escape even after focus has left the panel", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    fireEvent.click(screen.getByText(value));
+    await screen.findByRole("dialog", { hidden: true });
+
+    const filter = screen.getByRole("textbox", { name: "Filter rows" });
+    filter.focus();
+    fireEvent.keyDown(filter, { key: "Escape" });
+
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+    // Escape while typing elsewhere closes the panel but leaves the caret alone.
+    expect(filter).toHaveFocus();
+  });
+
+  it("returns focus to the cell when Escape is pressed on the grid", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    fireEvent.click(cellOf(value));
+    await screen.findByRole("dialog", { hidden: true });
+
+    const other = cellOf("1");
+    other.focus();
+    fireEvent.keyDown(other, { key: "Escape" });
+
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+    expect(cellOf(value)).toHaveFocus();
+  });
+
+  it("ignores an Escape another control already handled", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    fireEvent.click(cellOf(value));
+    await screen.findByRole("dialog", { hidden: true });
+
+    const filter = screen.getByRole("textbox", { name: "Filter rows" });
+    filter.addEventListener("keydown", (event) => event.preventDefault());
+    fireEvent.keyDown(filter, { key: "Escape" });
+
+    expect(queryDialog()).toBeInTheDocument();
+  });
+
+  it("closes when the filter changes which rows are shown", async () => {
+    stubTruncation();
+    const first = `ODD-1 ${CUT_OFF}`;
+    renderTable(["note"], [[first], [`EVEN-2 ${CUT_OFF}`]]);
+    fireEvent.click(cellOf(first));
+    await screen.findByRole("dialog", { name: "note value, row 1", hidden: true });
+
+    // The panel holds a position in the filtered rows; left open, row 1 would
+    // now be a different value.
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter rows" }), {
+      target: { value: "EVEN" },
     });
+
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+  });
+
+  it("does not open for a value that fits its cell", () => {
+    stubTruncation();
+    renderTable(["id", "name"], [["1", "Ada"]]);
+
+    fireEvent.click(screen.getByText("Ada"));
+
+    expect(queryDialog()).not.toBeInTheDocument();
+  });
+
+  it("opens for a value whose line breaks the one-line cell flattens", async () => {
+    stubTruncation();
+    renderTable(["id", "address"], [["1", "1 Main St\nSpringfield"]]);
+
+    fireEvent.click(
+      screen.getByText((_, element) => element?.tagName === "TD" && element.textContent.includes("Main St")),
+    );
+
+    expect(await screen.findByRole("dialog", { hidden: true })).toBeInTheDocument();
+  });
+
+  it("closes when the open cell is clicked again", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    const cell = cellOf(value);
+
+    fireEvent.click(cell);
+    await screen.findByRole("dialog", { hidden: true });
+    expect(cell).toHaveAttribute("data-inspected");
+
+    fireEvent.pointerDown(cell);
+    fireEvent.click(cell);
+
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+    expect(cell).not.toHaveAttribute("data-inspected");
+    expect(cell).toHaveFocus();
+  });
+
+  it("moves the panel to another clicked cell in one step", async () => {
+    stubTruncation();
+    const first = `first ${CUT_OFF}`;
+    const second = `second ${CUT_OFF}`;
+    renderTable(["note"], [[first], [second]]);
+
+    fireEvent.click(screen.getByText(first));
+    await screen.findByRole("dialog", { name: "note value, row 1", hidden: true });
+
+    fireEvent.pointerDown(cellOf(second));
+    fireEvent.click(cellOf(second));
+
+    const dialogs = await screen.findAllByRole("dialog", { hidden: true });
+    expect(dialogs).toHaveLength(1);
+    expect(dialogs[0]).toHaveAttribute("aria-label", "note value, row 2");
+  });
+
+  it("closes when anything outside the panel and the cells is pressed", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    fireEvent.click(screen.getByText(value));
+    const dialog = await screen.findByRole("dialog", { hidden: true });
+
+    fireEvent.pointerDown(within(dialog).getByText(value));
+    expect(queryDialog()).toBeInTheDocument();
+
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Wrap" }));
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+  });
+
+  it("closes when a cell without a panel is clicked", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value], ["2", null]]);
+    fireEvent.click(screen.getByText(value));
+    await screen.findByRole("dialog", { hidden: true });
+
+    fireEvent.pointerDown(screen.getByText("NULL"));
+    fireEvent.click(screen.getByText("NULL"));
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByText(value));
+    await screen.findByRole("dialog", { hidden: true });
+    fireEvent.pointerDown(screen.getByText("1"));
+    fireEvent.click(screen.getByText("1"));
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+  });
+
+  it("marks only cells that would open as clickable on hover", () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note", "meta"], [["1", value, '{"a":1}'], ["2", null, "plain"]]);
+
+    for (const text of [value, '{"a":1}', "1", "NULL", "plain"]) fireEvent.pointerEnter(cellOf(text));
+
+    expect(cellOf(value)).toHaveAttribute("data-openable");
+    expect(cellOf('{"a":1}')).toHaveAttribute("data-openable");
+    expect(cellOf("1")).not.toHaveAttribute("data-openable");
+    expect(cellOf("NULL")).not.toHaveAttribute("data-openable");
+    expect(cellOf("plain")).not.toHaveAttribute("data-openable");
+  });
+
+  it("closes when a column resize starts", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    fireEvent.click(screen.getByText(value));
+    await screen.findByRole("dialog", { hidden: true });
+
+    // The handle preventDefaults its pointerdown, so no mousedown follows.
+    fireEvent.pointerDown(screen.getByLabelText("Resize note column"), { clientX: 0 });
+
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+  });
+
+  it("closes on grid scroll, returning focus only if it was in the panel or grid", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    const grid = gridOf(cellOf(value));
+
+    fireEvent.click(cellOf(value));
+    const dialog = await screen.findByRole("dialog", { hidden: true });
+    await waitFor(() => expect(dialog).toHaveFocus());
+    fireEvent.scroll(grid);
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+    expect(cellOf(value)).toHaveFocus();
+
+    fireEvent.click(cellOf(value));
+    await screen.findByRole("dialog", { hidden: true });
+    const filter = screen.getByRole("textbox", { name: "Filter rows" });
+    filter.focus();
+    fireEvent.scroll(grid);
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+    expect(filter).toHaveFocus();
+  });
+
+  it("anchors to the visible part of a cell taller than the grid", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    const cell = cellOf(value);
+    vi.spyOn(cell, "getBoundingClientRect").mockReturnValue(new DOMRect(0, -200, 300, 1700));
+    vi.spyOn(gridOf(cell), "getBoundingClientRect").mockReturnValue(new DOMRect(0, 100, 800, 500));
+
+    fireEvent.click(cell);
+    await screen.findByRole("dialog", { hidden: true });
+
+    const anchor = cell.querySelector("span[aria-hidden]");
+    expect(anchor).toHaveStyle({ top: "300px", height: "500px" });
+  });
+
+  it("closes from the panel's close button and returns focus to the cell", async () => {
+    stubTruncation();
+    const value = `a long note ${CUT_OFF}`;
+    renderTable(["id", "note"], [["1", value]]);
+    fireEvent.click(screen.getByText(value));
+    const dialog = await screen.findByRole("dialog", { hidden: true });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
+
+    await waitFor(() => expect(queryDialog()).not.toBeInTheDocument());
+    expect(cellOf(value)).toHaveFocus();
   });
 
   it("formats compact JSON and lets the value be viewed raw", async () => {

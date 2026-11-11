@@ -3,6 +3,7 @@ import {
   Badge,
   Box,
   Button,
+  CloseButton,
   CopyButton,
   Group,
   Popover,
@@ -12,12 +13,17 @@ import {
 } from "@mantine/core";
 import { IconCheck, IconChevronsDown, IconChevronsUp, IconCopy } from "@tabler/icons-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
 import classes from "@/components/query/CellValuePopover.module.css";
 import { JsonTree } from "@/components/query/JsonTree";
 import { readJsonValue } from "@/utils/jsonValue";
 
 const MAX_VALUE_HEIGHT = "min(360px, 45vh)";
+// Gap kept between the panel and the viewport edge when it shrinks to fit.
+const VIEWPORT_PADDING = 8;
+
+export type PanelSide = "bottom" | "top";
+/** Vertical band of the cell, in px from its top, that the panel anchors to. */
+export type PanelAnchor = { top: number; height: number };
 
 /**
  * A cell's full value in a popover, for values the grid has to truncate.
@@ -38,14 +44,16 @@ export function CellValuePopover({
   column,
   rowNumber,
   value,
+  side,
+  anchor,
   onClose,
-  children,
 }: {
   column: string;
   rowNumber: number;
   value: string;
+  side: PanelSide;
+  anchor?: PanelAnchor;
   onClose: () => void;
-  children: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const json = useMemo(() => readJsonValue(value), [value]);
@@ -88,12 +96,27 @@ export function CellValuePopover({
   }
 
   return (
+    // Dismissal (Escape, clicks elsewhere, re-clicking the cell) is owned by the
+    // grid: Mantine's click-outside would treat a click on the anchoring cell as
+    // "outside" and close-then-reopen it, and its Escape only fires while focus
+    // is inside the panel.
     <Popover
       opened
-      onChange={(opened) => {
-        if (!opened) onClose();
+      closeOnClickOutside={false}
+      closeOnEscape={false}
+      position={side === "bottom" ? "bottom-start" : "top-start"}
+      // The grid picks the side (see ResultTable); instead of flipping when the
+      // full height doesn't fit, the panel shrinks and its value box scrolls.
+      middlewares={{
+        flip: false,
+        shift: true,
+        size: {
+          padding: VIEWPORT_PADDING,
+          apply({ availableHeight, elements }) {
+            elements.floating.style.maxHeight = `${Math.max(availableHeight, 0)}px`;
+          },
+        },
       }}
-      position="bottom-start"
       offset={4}
       withArrow
       arrowSize={7}
@@ -103,7 +126,14 @@ export function CellValuePopover({
       withRoles={false}
     >
       <Popover.Target>
-        <span style={{ display: "block" }}>{children}</span>
+        {/* Covers the cell without wrapping its content, so the cell keeps its
+            ellipsis and its text is not remounted (which would drop a
+            double-click word selection). */}
+        <span
+          aria-hidden
+          className={classes.anchor}
+          style={anchor && { top: anchor.top, bottom: "auto", height: anchor.height }}
+        />
       </Popover.Target>
       <Popover.Dropdown
         ref={panelRef}
@@ -112,23 +142,28 @@ export function CellValuePopover({
         maw="min(560px, calc(100vw - 16px))"
         // JSON reads better in a fixed frame: formatted and raw forms have very
         // different line lengths, and an auto-sized panel would jump when toggled.
-        style={json !== null ? { width: "min(480px, calc(100vw - 16px))" } : undefined}
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          ...(json !== null && { width: "min(480px, calc(100vw - 16px))" }),
+        }}
         tabIndex={-1}
         role="dialog"
         aria-modal={false}
         aria-label={`${column} value, row ${rowNumber}`}
+        data-cell-value-panel
         // The dropdown is a React child of the cell that opened it, so clicks in
         // the panel would bubble to the cell's click handler (re-focusing the
         // cell and pulling focus out of the panel). Keep them inside.
         onClick={(event) => event.stopPropagation()}
       >
-        <Group justify="space-between" gap="sm" wrap="nowrap" mb={6}>
+        <Group justify="space-between" gap="sm" wrap="nowrap" mb={6} style={{ flexShrink: 0 }}>
           <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
             <Text size="xs" fw={600} truncate>
               {column}
             </Text>
             {json !== null && (
-              <Badge size="xs" variant="default" radius="sm" fw={500}>
+              <Badge size="md" variant="default" radius="sm" fw={500}>
                 JSON
               </Badge>
             )}
@@ -146,13 +181,14 @@ export function CellValuePopover({
               </Tooltip>
             )}
           </Group>
-          <Text
-            size="xs"
-            c="dimmed"
-            style={{ flexShrink: 0, fontVariantNumeric: "tabular-nums" }}
-          >
-            row {rowNumber} · {value.length.toLocaleString()} chars
-          </Text>
+          <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+            <Text size="xs" c="dimmed" style={{ fontVariantNumeric: "tabular-nums" }}>
+              row {rowNumber} · {value.length.toLocaleString()} chars
+            </Text>
+            <Tooltip label="Close (Esc)" withArrow>
+              <CloseButton size="xs" aria-label="Close" onClick={() => onClose()} />
+            </Tooltip>
+          </Group>
         </Group>
         <Box
           className={classes.scroll}
@@ -161,6 +197,7 @@ export function CellValuePopover({
           aria-label={`Full ${column} value`}
           style={{
             maxHeight: MAX_VALUE_HEIGHT,
+            minHeight: 0,
             overflow: "auto",
             overscrollBehavior: "contain",
           }}
@@ -188,6 +225,7 @@ export function CellValuePopover({
           mt={8}
           gap="xs"
           wrap="nowrap"
+          style={{ flexShrink: 0 }}
         >
           {canToggleView && (
             <SegmentedControl

@@ -86,19 +86,25 @@ export function serializeJsonTree(node: JsonNode, indent: string, depth = 0): st
   return `[\n${body}\n${pad}]`;
 }
 
+/** Whether the text is a well-formed JSON object or array. */
+export function isJsonDocument(raw: string): boolean {
+  const source = raw.trim();
+  if (!source.startsWith("{") && !source.startsWith("[")) return false;
+  try {
+    JSON.parse(source);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Returns the tree and its display text, or null when the cell is not a JSON
  * object/array. Malformed JSON falls back to plain text.
  */
 export function readJsonValue(raw: string): JsonValue | null {
+  if (!isJsonDocument(raw)) return null;
   const source = raw.trim();
-  if (!source.startsWith("{") && !source.startsWith("[")) return null;
-
-  try {
-    JSON.parse(source);
-  } catch {
-    return null;
-  }
 
   const indent = detectIndent(source);
   const collapsibleIds: Array<number> = [];
