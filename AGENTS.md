@@ -8,6 +8,7 @@
 
 ## C# / .NET
 
+- NuGet versions live in `Directory.Packages.props` (Central Package Management); `PackageReference` items carry no `Version`. Microsoft/.NET and Aspire packages float on the latest patch (`10.0.*`, `13.6.*`); third-party packages stay exact. Shared test packages are in `tests/Directory.Build.props`.
 - Suppress experimental API warnings with inline `#pragma warning disable` in the .cs file, not `<NoWarn>` in csproj.
 - Never manually edit EF Core migration files. Suppress analyzer warnings via the `[**/Migrations/**.{cs,vb}]` section in `.editorconfig`.
 - On an unmerged branch, regenerate the branch's own migration for further schema changes instead of stacking new ones. CI fails on `dotnet ef migrations has-pending-model-changes`.
