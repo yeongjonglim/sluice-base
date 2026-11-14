@@ -28,7 +28,7 @@
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.*" />
     <PackageVersion Include="Microsoft.Extensions.ServiceDiscovery" Version="10.11.*" />
     <PackageVersion Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.11.*" />
-    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.*" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.*" />
     <!-- Pin Microsoft.OpenApi to the latest v2: Microsoft.AspNetCore.OpenApi 10.0.9 pulls in
          2.0.0 transitively, which carries advisory GHSA-v5pm-xwqc-g5wc (fixed later in the 2.x
          line). Stay on v2 — .NET 10's OpenAPI stack targets Microsoft.OpenApi v2; v3 is a
@@ -55,6 +55,6 @@
     <PackageVersion Include="Testcontainers.PostgreSql" Version="4.16.0" />
     <PackageVersion Include="Vogen" Version="8.0.7" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
-    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
   </ItemGroup>
 </Project>
