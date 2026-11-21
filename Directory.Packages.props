@@ -7,12 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup Label="Aspire">
-    <PackageVersion Include="Aspire.Hosting.JavaScript" Version="13.6.*" />
+    <PackageVersion Include="Aspire.Hosting.JavaScript" Version="17.0.*" />
     <!-- Aspire.Hosting.Keycloak only ships previews, so the float must admit prereleases. -->
     <PackageVersion Include="Aspire.Hosting.Keycloak" Version="13.6.*-*" />
-    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="13.6.*" />
-    <PackageVersion Include="Aspire.Hosting.Testing" Version="13.6.*" />
-    <PackageVersion Include="Aspire.Hosting.Yarp" Version="13.6.*" />
+    <PackageVersion Include="Aspire.Hosting.PostgreSQL" Version="17.0.*" />
+    <PackageVersion Include="Aspire.Hosting.Testing" Version="17.0.*" />
+    <PackageVersion Include="Aspire.Hosting.Yarp" Version="17.0.*" />
     <PackageVersion Include="Aspire.Npgsql.EntityFrameworkCore.PostgreSQL" Version="13.6.*" />
   </ItemGroup>
 
@@ -39,7 +39,7 @@
 
   <ItemGroup Label="Third party">
     <PackageVersion Include="CommunityToolkit.Aspire.Hosting.Keycloak.Extensions" Version="13.6.1-preview.1.261026-0455" />
-    <PackageVersion Include="CommunityToolkit.Aspire.Hosting.McpInspector" Version="13.6.1" />
+    <PackageVersion Include="CommunityToolkit.Aspire.Hosting.McpInspector" Version="17.0.0" />
     <PackageVersion Include="EFCore.NamingConventions" Version="10.0.1" />
     <!-- ModelContextProtocol.AspNetCore requires an exact ModelContextProtocol version; keep both in lockstep. -->
     <PackageVersion Include="ModelContextProtocol" Version="2.4.0" />
